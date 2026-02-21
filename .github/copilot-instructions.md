@@ -39,3 +39,14 @@ Smart delivery-route optimization for a Kerala cargo three-wheeler business.
 - Code must be well-documented and use mainstream tech (Python, PostgreSQL, Docker)
 - When writing code: prefer clarity over cleverness, add docstrings, use type hints
 - When creating files: follow the layout in the design document's file structure section
+
+## Dev Environment
+
+- **OS:** Ubuntu 24.04 LTS on WSL2 (Windows host)
+- **Python:** 3.12, venv at `.venv/` — activate with `source .venv/bin/activate`
+- **Node.js:** v24 (for dashboard/PWA tooling later)
+- **Docker:** v29 + Compose v5 — run `sudo service docker start` if daemon not running
+- **Hardware:** 32 cores, 30 GB RAM, ~950 GB disk — more than enough
+- **Requirements:** `pip install -r requirements.txt` to restore packages
+- **Env vars:** Copy `.env.example` → `.env` and fill in API keys
+- **WSL note:** Docker daemon must be started manually: `sudo service docker start`

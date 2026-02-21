@@ -1,0 +1,29 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+
+# Data files (too large for git)
+data/kerala.osm.pbf
+data/geocode_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# Docker volumes
+postgres_data/
+osrm_data/
