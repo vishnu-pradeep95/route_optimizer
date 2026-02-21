@@ -1,9 +1,6 @@
 ---
 name: Session Journal
-description: >
-  Save and restore working context between Copilot sessions. Appends compact
-  structured entries to plan/session-journal.md so the main architect agent
-  can resume where you left off.
+description: "Save and restore working context between Copilot sessions. Appends compact structured entries to plan/session-journal.md so the main architect agent can resume where you left off."
 tools:
   ['read', 'edit', 'search', 'todo']
 user-invokable: true

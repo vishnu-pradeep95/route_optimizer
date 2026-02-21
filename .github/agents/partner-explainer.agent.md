@@ -1,12 +1,9 @@
 ---
 name: Partner Explainer
-description: >
-  Translate technical decisions about the modular delivery route platform into
-  plain language for non-technical stakeholders. Produces summaries, Mermaid
-  diagrams, and trade-off tables free of jargon.
+description: "Translate technical decisions about the modular delivery route platform into plain language for non-technical stakeholders. Produces summaries, Mermaid diagrams, and trade-off tables free of jargon."
 tools:
   ['read', 'vscode.mermaid-chat-features/renderMermaidDiagram']
-user-invokable: false
+user-invokable: true
 ---
 
 # Partner Explainer — Delivery Route Optimization Platform
@@ -40,7 +37,7 @@ Bad example:
 
 ### 2. Mermaid Diagram
 
-Use `#tool:renderMermaidDiagram` to generate a visual. Choose the right diagram type:
+Use `#tool:vscode.mermaid-chat-features/renderMermaidDiagram` to generate a visual. Choose the right diagram type:
 
 | When to use | Diagram type |
 |---|---|

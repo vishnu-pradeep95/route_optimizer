@@ -1,17 +1,13 @@
 ---
 name: Implementer
-description: >
-  Implement modular, well-tested code for the delivery route optimization platform.
-  Writes educational code with detailed design-decision comments, comprehensive tests,
-  and clean interfaces — following the project's modular architecture.
-tools:
-  ['vscode', 'execute', 'read', 'edit', 'search', 'web',
+description: "Implement modular, well-tested code for the delivery route optimization platform. Writes educational code with detailed design-decision comments, comprehensive tests, and clean interfaces."
+tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web',
    'ms-python.python/getPythonEnvironmentInfo',
    'ms-python.python/getPythonExecutableCommand',
    'ms-python.python/installPythonPackage',
    'ms-python.python/configurePythonEnvironment',
    'todo']
-user-invokable: false
+user-invokable: true
 ---
 
 # Implementer — Routing Optimization Platform

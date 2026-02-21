@@ -1,12 +1,8 @@
 ---
 name: Code Reviewer
-description: >
-  Review code for modular architecture compliance, educational comment quality,
-  test coverage, safety constraints, and design-doc alignment. Enforces the
-  project's interface-first, test-driven, learning-focused standards.
-tools:
-  ['read', 'search', 'vscode']
-user-invokable: false
+description: "Review code for modular architecture compliance, educational comment quality, test coverage, safety constraints, and design-doc alignment. Enforces the project's interface-first, test-driven, learning-focused standards."
+tools: ['read', 'search', 'vscode']
+user-invokable: true
 ---
 
 # Code Reviewer — Routing Optimization Platform

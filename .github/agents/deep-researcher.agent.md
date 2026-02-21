@@ -1,12 +1,8 @@
 ---
 name: Deep Researcher
-description: >
-  Research technical topics for the modular delivery route optimization platform.
-  Evaluates options for modularity and interface compatibility. Returns actionable
-  summaries with copy-paste-ready config snippets.
-tools:
-  ['read', 'search', 'web']
-user-invokable: false
+description: "Research technical topics for the modular delivery route optimization platform. Evaluates options for modularity and interface compatibility. Returns actionable summaries with copy-paste-ready config snippets."
+tools: ['read', 'search', 'web']
+user-invokable: true
 ---
 
 # Deep Researcher — Routing Optimization Platform
