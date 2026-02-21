@@ -5,8 +5,9 @@
 
 ## Project
 
-Smart delivery-route optimization for a Kerala cargo three-wheeler business.
-40–50 deliveries/day, 5 km radius, Piaggio Ape Xtra LDX fleet.
+Modular delivery-route optimization platform. First deployment: Kerala cargo
+three-wheeler business (40–50 deliveries/day, 5 km radius, Piaggio Ape Xtra LDX).
+Architecture is designed to be **reusable across any delivery business**.
 
 ## Key Files
 
@@ -33,12 +34,31 @@ Smart delivery-route optimization for a Kerala cargo three-wheeler business.
 5. **Offline-capable driver interface** — patchy Kerala mobile data
 6. **Data privacy** — PII stays in source spreadsheet, optimizer uses only coordinates + weights
 
+## Architecture Principles
+
+1. **Modular & reusable** — every component (optimizer, geocoder, routing engine adapter,
+   data import) is a standalone module with a clean interface. The Kerala delivery app is
+   the *first consumer*, not the only one. Other delivery businesses should be able to
+   reuse core modules with different configs.
+2. **Educational code** — this is a learning project. Every significant code block gets
+   a comment explaining *why* it's written that way, not just *what* it does. Include
+   links to docs/articles where a design decision came from.
+3. **Test-driven confidence** — every module has unit tests. Every integration point has
+   integration tests. Tests serve as living documentation and a safety net for future
+   contributors. Target: `pytest` runs green before every commit.
+4. **Interface-first design** — define abstract interfaces (Python ABCs or Protocols)
+   before implementations. This allows swapping OSRM for Valhalla, or VROOM for OR-Tools,
+   without changing calling code.
+
 ## Developer Context
 
-- Solo developer building the system; others may contribute later via git
+- Solo developer building the system; others will contribute via git
 - Code must be well-documented and use mainstream tech (Python, PostgreSQL, Docker)
 - When writing code: prefer clarity over cleverness, add docstrings, use type hints
+- Every function gets a docstring. Every non-trivial block gets an inline comment
+  explaining the *design decision* (why), not just the mechanics (what).
 - When creating files: follow the layout in the design document's file structure section
+- New dev setup: follow `SETUP.md`
 
 ## Dev Environment
 
@@ -50,3 +70,5 @@ Smart delivery-route optimization for a Kerala cargo three-wheeler business.
 - **Requirements:** `pip install -r requirements.txt` to restore packages
 - **Env vars:** Copy `.env.example` → `.env` and fill in API keys
 - **WSL note:** Docker daemon must be started manually: `sudo service docker start`
+- **Testing:** `pytest` from project root. Tests live alongside code in `tests/` mirrors.
+- **New developer?** Follow `SETUP.md` for complete environment setup.

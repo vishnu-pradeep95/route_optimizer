@@ -1,0 +1,261 @@
+# Development Environment Setup
+
+> Follow these steps on a fresh Ubuntu machine (or WSL2 on Windows) to get a
+> working development environment for the Routing Optimization project.
+> Estimated time: 15–20 minutes.
+
+---
+
+## Prerequisites
+
+- **OS:** Ubuntu 22.04+ (tested on 24.04 LTS under WSL2)
+- **RAM:** 4 GB minimum, 8+ GB recommended
+- **Disk:** 5 GB free minimum
+- **Permissions:** `sudo` access for installing packages
+
+If on Windows, you should already have WSL2 enabled with an Ubuntu distro.
+
+---
+
+## Step 1: System Packages
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  git \
+  curl \
+  python3 \
+  python3-pip \
+  python3-venv \
+  python3-dev \
+  build-essential \
+  ca-certificates \
+  gnupg
+```
+
+Verify:
+```bash
+python3 --version   # Should show 3.12+
+git --version        # Should show 2.x
+```
+
+---
+
+## Step 2: Clone the Repository
+
+```bash
+git clone <REPO_URL> routing_opt
+cd routing_opt
+```
+
+Or if you already have it:
+```bash
+cd routing_opt
+git pull origin main
+```
+
+---
+
+## Step 3: Python Virtual Environment
+
+```bash
+# Create the virtual environment
+python3 -m venv .venv
+
+# Activate it (you'll need to do this every time you open a new terminal)
+source .venv/bin/activate
+
+# Install all Python dependencies
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Verify:
+```bash
+python -c "import fastapi, httpx, psycopg, shapely; print('All packages OK')"
+```
+
+> **Tip:** If you're using VS Code, it will auto-detect `.venv/` and activate it
+> in new terminals. Look for `(.venv)` in your terminal prompt.
+
+---
+
+## Step 4: Docker + Docker Compose
+
+Docker runs our database (PostgreSQL + PostGIS), routing engine (OSRM), and
+optimizer (VROOM) — all containerized so you don't install them natively.
+
+### Install Docker
+
+```bash
+# Add Docker's official GPG key
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+  sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+# Add the Docker apt repository
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Install Docker Engine + Compose plugin
+sudo apt-get update
+sudo apt-get install -y \
+  docker-ce \
+  docker-ce-cli \
+  containerd.io \
+  docker-buildx-plugin \
+  docker-compose-plugin
+```
+
+### Allow running Docker without sudo
+
+```bash
+sudo usermod -aG docker $USER
+# IMPORTANT: log out and back in (or run: newgrp docker) for this to take effect
+```
+
+### Start Docker (WSL2 only — Docker doesn't auto-start on WSL)
+
+```bash
+sudo service docker start
+```
+
+> **WSL users:** You need to run this every time you restart WSL.
+> Add it to your `~/.bashrc` if you want it automatic:
+> ```bash
+> echo 'sudo service docker start 2>/dev/null' >> ~/.bashrc
+> ```
+
+### Verify Docker
+
+```bash
+docker --version           # Should show 29.x
+docker compose version     # Should show 5.x
+docker run --rm hello-world  # Should print "Hello from Docker!"
+```
+
+---
+
+## Step 5: Node.js (for Dashboard / PWA — needed later)
+
+```bash
+# Using NodeSource for latest LTS
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+Verify:
+```bash
+node --version    # Should show v22.x or v24.x
+npm --version     # Should show 10.x+
+```
+
+> Node.js is only needed for Phase 2+ (dashboard and PWA). You can skip this
+> step if you're only working on the Python backend.
+
+---
+
+## Step 6: Environment Variables
+
+```bash
+# Copy the template
+cp .env.example .env
+
+# Edit with your values
+nano .env   # or: code .env
+```
+
+**What to fill in:**
+
+| Variable | Where to Get It | Required? |
+|---|---|---|
+| `GOOGLE_MAPS_API_KEY` | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → enable "Geocoding API" | Phase 0+ |
+| `POSTGRES_PASSWORD` | Choose any strong password | Phase 0+ |
+| Other values | Defaults work for local development | — |
+
+---
+
+## Step 7: VS Code Setup (Recommended)
+
+If you're using VS Code (recommended):
+
+1. Open the project: `code .` from the project root
+2. VS Code will auto-detect `.venv/` Python environment
+3. Install recommended extensions when prompted (or manually):
+   - **Python** (ms-python.python)
+   - **Docker** (ms-azuretools.vscode-docker)
+   - **GitLens** (eamodio.gitlens)
+
+---
+
+## Step 8: Verify Everything Works
+
+Run this quick check script:
+
+```bash
+source .venv/bin/activate
+
+echo "=== Python ==="
+python --version
+python -c "import fastapi; print(f'FastAPI {fastapi.__version__}')"
+
+echo "=== Docker ==="
+docker --version
+docker compose version
+
+echo "=== Node ==="
+node --version 2>/dev/null || echo "Node.js not installed (optional for now)"
+
+echo "=== Git ==="
+git --version
+git log --oneline -3
+
+echo "=== All good! ==="
+```
+
+You should see version numbers for Python, Docker, and Git with no errors.
+
+---
+
+## Quick Reference
+
+| What | Command |
+|---|---|
+| Activate Python venv | `source .venv/bin/activate` |
+| Install a new Python package | `pip install <package> && pip freeze > requirements.txt` |
+| Start Docker (WSL) | `sudo service docker start` |
+| Start all services | `docker compose up -d` (once docker-compose.yml exists) |
+| Stop all services | `docker compose down` |
+| Run backend server | `uvicorn backend.app.main:app --reload` |
+| Run tests | `pytest` (once tests exist) |
+
+---
+
+## Troubleshooting
+
+### Docker permission denied
+```
+Got permission denied while trying to connect to the Docker daemon socket
+```
+**Fix:** Run `sudo usermod -aG docker $USER` then log out and back in.
+
+### Docker daemon not running (WSL)
+```
+Cannot connect to the Docker daemon at unix:///var/run/docker.sock
+```
+**Fix:** Run `sudo service docker start`.
+
+### Python package import errors
+```
+ModuleNotFoundError: No module named 'fastapi'
+```
+**Fix:** Make sure venv is activated: `source .venv/bin/activate`, then `pip install -r requirements.txt`.
+
+### Port already in use
+```
+OSError: [Errno 98] Address already in use
+```
+**Fix:** Find and kill the process: `lsof -i :8000` then `kill <PID>`.
