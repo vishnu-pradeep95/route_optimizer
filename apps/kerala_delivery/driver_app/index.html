@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a73e8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>LPG Delivery Route</title>
+    <link rel="manifest" href="manifest.json">
+    <!-- Leaflet CSS — lightweight open-source map library (no API key needed) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        /* ============================================================
+           Mobile-first design for three-wheeler drivers.
+           Big touch targets, high contrast, readable in sunlight.
+           No countdown timers — Kerala MVD compliance.
+           ============================================================ */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            overflow-x: hidden;
+        }
+
+        /* Top bar with driver info */
+        .header {
+            background: #1a73e8;
+            color: white;
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        .header h1 { font-size: 18px; font-weight: 600; }
+        .header .stats {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        /* Tab buttons: Map / List */
+        .tabs {
+            display: flex;
+            background: white;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            background: white;
+            color: #666;
+            transition: all 0.2s;
+        }
+        .tab.active {
+            color: #1a73e8;
+            border-bottom: 3px solid #1a73e8;
+        }
+
+        /* Map container */
+        #map {
+            width: 100%;
+            height: 50vh;
+            display: none;
+        }
+        #map.visible { display: block; }
+
+        /* Stop list */
+        .stop-list { display: none; padding: 8px; }
+        .stop-list.visible { display: block; }
+
+        .stop-card {
+            background: white;
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+        .stop-card.delivered { opacity: 0.5; background: #e8f5e9; }
+        .stop-card.failed { opacity: 0.6; background: #fbe9e7; }
+
+        .stop-number {
+            background: #1a73e8;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .stop-card.delivered .stop-number { background: #4caf50; }
+        .stop-card.failed .stop-number { background: #f44336; }
+
+        .stop-info { flex: 1; }
+        .stop-address {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            line-height: 1.3;
+        }
+        .stop-meta {
+            font-size: 13px;
+            color: #666;
+        }
+        .stop-notes {
+            font-size: 12px;
+            color: #1a73e8;
+            margin-top: 4px;
+            font-style: italic;
+        }
+
+        /* Action buttons — big touch targets for drivers */
+        .stop-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            min-height: 44px; /* Apple HIG minimum touch target */
+        }
+        .btn-deliver { background: #4caf50; color: white; flex: 1; }
+        .btn-fail { background: #f44336; color: white; }
+        .btn-navigate {
+            background: #1a73e8;
+            color: white;
+            flex: 1;
+        }
+
+        /* Upload section (shown when no route loaded) */
+        .upload-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 60vh;
+            padding: 24px;
+            text-align: center;
+        }
+        .upload-section h2 { font-size: 20px; margin-bottom: 8px; }
+        .upload-section p { color: #666; margin-bottom: 24px; }
+        .upload-btn {
+            background: #1a73e8;
+            color: white;
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+        }
+        #file-input { display: none; }
+
+        /* Vehicle selector */
+        .vehicle-selector {
+            padding: 16px;
+            display: none;
+        }
+        .vehicle-selector.visible { display: block; }
+        .vehicle-selector h2 { font-size: 18px; margin-bottom: 12px; }
+        .vehicle-btn {
+            display: block;
+            width: 100%;
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            text-align: left;
+            font-size: 15px;
+            cursor: pointer;
+        }
+        .vehicle-btn:hover { border-color: #1a73e8; }
+        .vehicle-btn .v-name { font-weight: 600; }
+        .vehicle-btn .v-stats { color: #666; font-size: 13px; }
+
+        /* Loading state */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 16px;
+        }
+
+        /* Summary bar at bottom */
+        .summary-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            padding: 12px 16px;
+            border-top: 1px solid #e0e0e0;
+            display: none;
+            justify-content: space-around;
+            font-size: 13px;
+            z-index: 1000;
+        }
+        .summary-bar.visible { display: flex; }
+        .summary-item { text-align: center; }
+        .summary-item .value { font-size: 20px; font-weight: 700; color: #1a73e8; }
+        .summary-item .label { color: #666; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div>
+        <h1 id="header-title">LPG Delivery Route</h1>
+        <div class="stats" id="header-stats"></div>
+    </div>
+</div>
+
+<!-- Upload section (initial state) -->
+<div id="upload-section" class="upload-section">
+    <h2>Upload Today's Deliveries</h2>
+    <p>Upload the CDCMS export (CSV or Excel) to generate optimized routes</p>
+    <button class="upload-btn" onclick="document.getElementById('file-input').click()">
+        📄 Upload Delivery List
+    </button>
+    <input type="file" id="file-input" accept=".csv,.xlsx,.xls" onchange="handleFileUpload(this)">
+    <div id="upload-status" style="margin-top: 16px; color: #666;"></div>
+</div>
+
+<!-- Vehicle selector (after upload) -->
+<div id="vehicle-selector" class="vehicle-selector">
+    <h2>Select Your Vehicle</h2>
+    <div id="vehicle-list"></div>
+</div>
+
+<!-- Route view (after vehicle selection) -->
+<div id="route-view" style="display: none;">
+    <div class="tabs">
+        <button class="tab active" onclick="showTab('list')">📋 Delivery List</button>
+        <button class="tab" onclick="showTab('map')">🗺️ Map View</button>
+    </div>
+    <div id="map"></div>
+    <div id="stop-list" class="stop-list visible"></div>
+</div>
+
+<!-- Summary bar -->
+<div id="summary-bar" class="summary-bar">
+    <div class="summary-item">
+        <div class="value" id="summary-done">0</div>
+        <div class="label">Done</div>
+    </div>
+    <div class="summary-item">
+        <div class="value" id="summary-remaining">0</div>
+        <div class="label">Remaining</div>
+    </div>
+    <div class="summary-item">
+        <div class="value" id="summary-distance">0</div>
+        <div class="label">km total</div>
+    </div>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+const API_BASE = window.location.origin;
+let currentRoute = null;
+let map = null;
+let markers = [];
+
+// ============================================================
+// Service Worker Registration
+// ============================================================
+// Register the service worker so the app shell loads offline.
+// Must be done early so subsequent page loads are controlled by the SW.
+// See: https://web.dev/articles/service-worker-lifecycle
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('[App] SW registered, scope:', reg.scope))
+        .catch(err => console.warn('[App] SW registration failed:', err));
+}
+
+// ============================================================
+// Offline Status Indicator
+// ============================================================
+// Show/hide a banner when connectivity changes so the driver knows
+// their status updates are being queued, not lost.
+window.addEventListener('online', () => {
+    document.getElementById('offline-banner')?.remove();
+    // Replay any queued status updates that accumulated while offline
+    replayOfflineQueue();
+});
+
+window.addEventListener('offline', () => {
+    if (!document.getElementById('offline-banner')) {
+        const banner = document.createElement('div');
+        banner.id = 'offline-banner';
+        banner.style.cssText = 'position:fixed;top:48px;left:0;right:0;background:#ff9800;color:white;text-align:center;padding:6px;font-size:13px;font-weight:600;z-index:1001;';
+        banner.textContent = '📡 Offline — updates will sync when connected';
+        document.body.prepend(banner);
+    }
+});
+
+// ============================================================
+// localStorage helpers for offline support
+// ============================================================
+// Why localStorage instead of IndexedDB?
+// Route data is small (< 100 KB for 50 stops) and localStorage is
+// simpler to use. IndexedDB would be overkill for this data size.
+// All route data and the offline queue live in localStorage.
+
+const STORAGE_KEYS = {
+    ROUTE_DATA: 'lpg_current_route',
+    ROUTES_LIST: 'lpg_routes_list',
+    VEHICLE_ID: 'lpg_current_vehicle',
+    OFFLINE_QUEUE: 'lpg_offline_queue',
+};
+
+function saveToStorage(key, data) {
+    try {
+        localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {
+        // localStorage full — very unlikely for our data size
+        console.warn('[Storage] Failed to save:', key, e);
+    }
+}
+
+function loadFromStorage(key) {
+    try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+        console.warn('[Storage] Failed to load:', key, e);
+        return null;
+    }
+}
+
+// ============================================================
+// Offline Queue for Status Updates
+// ============================================================
+// When a driver marks a delivery as delivered/failed while offline,
+// the update is queued in localStorage. When connectivity returns,
+// the queue is replayed in order.
+
+function queueOfflineUpdate(vehicleId, orderId, status) {
+    const queue = loadFromStorage(STORAGE_KEYS.OFFLINE_QUEUE) || [];
+    queue.push({
+        vehicleId,
+        orderId,
+        status,
+        timestamp: new Date().toISOString(),
+    });
+    saveToStorage(STORAGE_KEYS.OFFLINE_QUEUE, queue);
+}
+
+async function replayOfflineQueue() {
+    const queue = loadFromStorage(STORAGE_KEYS.OFFLINE_QUEUE) || [];
+    if (queue.length === 0) return;
+
+    console.log(`[Offline] Replaying ${queue.length} queued updates`);
+    const remaining = [];
+
+    for (const item of queue) {
+        try {
+            const resp = await fetch(
+                `${API_BASE}/api/routes/${item.vehicleId}/stops/${item.orderId}/status`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: item.status }),
+                }
+            );
+            if (!resp.ok) remaining.push(item); // Keep failed items for retry
+        } catch {
+            remaining.push(item); // Network still down, keep in queue
+            break; // Stop trying — we're still offline
+        }
+    }
+
+    saveToStorage(STORAGE_KEYS.OFFLINE_QUEUE, remaining);
+    if (remaining.length === 0) {
+        console.log('[Offline] All queued updates replayed successfully');
+    }
+}
+
+// ============================================================
+// App Initialization — restore cached state on load
+// ============================================================
+// On page load, check if we have cached route data from a previous session.
+// This lets the driver refresh the page or lose connectivity and still see
+// their route. The data was saved when they first loaded the route.
+window.addEventListener('DOMContentLoaded', () => {
+    // Show offline banner if currently offline
+    if (!navigator.onLine) {
+        window.dispatchEvent(new Event('offline'));
+    }
+
+    const cachedVehicleId = loadFromStorage(STORAGE_KEYS.VEHICLE_ID);
+    const cachedRoute = loadFromStorage(STORAGE_KEYS.ROUTE_DATA);
+
+    if (cachedRoute && cachedVehicleId) {
+        // Restore previously loaded route
+        currentRoute = cachedRoute;
+        document.getElementById('upload-section').style.display = 'none';
+        document.getElementById('route-view').style.display = 'block';
+        document.getElementById('summary-bar').classList.add('visible');
+        document.getElementById('header-title').textContent = currentRoute.driver_name;
+        document.getElementById('header-stats').textContent =
+            `${currentRoute.total_stops} stops · ${currentRoute.total_distance_km} km`;
+        renderStopList();
+        updateSummary();
+    }
+
+    // Replay any offline queued updates
+    if (navigator.onLine) {
+        replayOfflineQueue();
+    }
+});
+
+// ============================================================
+// File Upload → Optimize → Show Vehicle Selector
+// ============================================================
+async function handleFileUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const status = document.getElementById('upload-status');
+    status.textContent = 'Uploading and optimizing routes...';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const resp = await fetch(`${API_BASE}/api/upload-orders`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json();
+            throw new Error(err.detail || 'Upload failed');
+        }
+
+        const summary = await resp.json();
+        status.textContent = `✅ ${summary.orders_assigned} orders assigned to ${summary.vehicles_used} vehicles (${summary.optimization_time_ms.toFixed(0)}ms)`;
+
+        // Fetch all routes and show vehicle selector
+        const routesResp = await fetch(`${API_BASE}/api/routes`);
+        const routesData = await routesResp.json();
+
+        // Cache routes list for offline access
+        saveToStorage(STORAGE_KEYS.ROUTES_LIST, routesData.routes);
+
+        showVehicleSelector(routesData.routes);
+
+    } catch (err) {
+        status.textContent = `❌ Error: ${err.message}`;
+    }
+}
+
+// ============================================================
+// Vehicle Selector
+// ============================================================
+function showVehicleSelector(routes) {
+    document.getElementById('upload-section').style.display = 'none';
+    const selector = document.getElementById('vehicle-selector');
+    selector.classList.add('visible');
+
+    const list = document.getElementById('vehicle-list');
+    list.innerHTML = routes.map(r => `
+        <button class="vehicle-btn" onclick="loadRoute('${r.vehicle_id}')">
+            <div class="v-name">🚛 ${r.driver_name} (${r.vehicle_id})</div>
+            <div class="v-stats">
+                ${r.total_stops} stops · ${r.total_distance_km} km · ~${Math.round(r.total_duration_minutes)} min · ${r.total_weight_kg} kg
+            </div>
+        </button>
+    `).join('');
+}
+
+// ============================================================
+// Load a specific driver's route
+// ============================================================
+async function loadRoute(vehicleId) {
+    document.getElementById('vehicle-selector').classList.remove('visible');
+    document.getElementById('route-view').style.display = 'block';
+    document.getElementById('summary-bar').classList.add('visible');
+
+    try {
+        const resp = await fetch(`${API_BASE}/api/routes/${vehicleId}`);
+        currentRoute = await resp.json();
+    } catch {
+        // Network failed — try loading from localStorage cache
+        const cached = loadFromStorage(STORAGE_KEYS.ROUTE_DATA);
+        if (cached && cached.vehicle_id === vehicleId) {
+            currentRoute = cached;
+        } else {
+            alert('Cannot load route — no network and no cached data.');
+            return;
+        }
+    }
+
+    // Cache route data in localStorage for offline access.
+    // This is the key offline mechanism: once the driver loads their route
+    // while online, it's available even if they lose signal.
+    saveToStorage(STORAGE_KEYS.ROUTE_DATA, currentRoute);
+    saveToStorage(STORAGE_KEYS.VEHICLE_ID, vehicleId);
+
+    document.getElementById('header-title').textContent = currentRoute.driver_name;
+    document.getElementById('header-stats').textContent =
+        `${currentRoute.total_stops} stops · ${currentRoute.total_distance_km} km`;
+
+    renderStopList();
+    updateSummary();
+}
+
+// ============================================================
+// Render the delivery stop list
+// ============================================================
+function renderStopList() {
+    const container = document.getElementById('stop-list');
+    container.innerHTML = currentRoute.stops.map(stop => `
+        <div class="stop-card ${stop.status}" id="stop-${stop.order_id}">
+            <div class="stop-number">${stop.sequence}</div>
+            <div class="stop-info">
+                <div class="stop-address">${stop.address || 'Address pending'}</div>
+                <div class="stop-meta">
+                    ${stop.quantity} cylinder${stop.quantity > 1 ? 's' : ''} · ${stop.weight_kg} kg
+                    ${stop.distance_from_prev_km > 0 ? ` · ${stop.distance_from_prev_km} km away` : ''}
+                </div>
+                ${stop.notes ? `<div class="stop-notes">📝 ${stop.notes}</div>` : ''}
+                ${stop.status === 'pending' ? `
+                <div class="stop-actions">
+                    <button class="btn btn-navigate" onclick="navigateTo(${stop.latitude}, ${stop.longitude})">
+                        🧭 Navigate
+                    </button>
+                    <button class="btn btn-deliver" onclick="markDelivered('${currentRoute.vehicle_id}', '${stop.order_id}')">
+                        ✅ Delivered
+                    </button>
+                    <button class="btn btn-fail" onclick="markFailed('${currentRoute.vehicle_id}', '${stop.order_id}')">
+                        ✗
+                    </button>
+                </div>
+                ` : `<div style="margin-top:6px; font-weight:600; color:${stop.status === 'delivered' ? '#4caf50' : '#f44336'}">
+                    ${stop.status === 'delivered' ? '✅ Delivered' : '❌ Failed'}
+                </div>`}
+            </div>
+        </div>
+    `).join('');
+}
+
+// ============================================================
+// Map view
+// ============================================================
+function initMap() {
+    if (map) return;
+    map = L.map('map');
+
+    // OpenStreetMap tiles — free, no API key needed
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+    }).addTo(map);
+}
+
+function showRouteOnMap() {
+    if (!currentRoute || !currentRoute.stops.length) return;
+    initMap();
+
+    // Clear previous markers
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+
+    const coords = [];
+
+    // Add stop markers
+    currentRoute.stops.forEach(stop => {
+        const latlng = [stop.latitude, stop.longitude];
+        coords.push(latlng);
+
+        const color = stop.status === 'delivered' ? '#4caf50'
+            : stop.status === 'failed' ? '#f44336' : '#1a73e8';
+
+        const icon = L.divIcon({
+            className: '',
+            html: `<div style="background:${color};color:white;width:28px;height:28px;
+                border-radius:50%;display:flex;align-items:center;justify-content:center;
+                font-weight:700;font-size:13px;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3)">
+                ${stop.sequence}</div>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+        });
+
+        const marker = L.marker(latlng, { icon }).addTo(map);
+        marker.bindPopup(`<b>Stop ${stop.sequence}</b><br>${stop.address}<br>${stop.quantity} cyl · ${stop.weight_kg} kg`);
+        markers.push(marker);
+    });
+
+    // Draw route line
+    if (coords.length > 1) {
+        const line = L.polyline(coords, { color: '#1a73e8', weight: 3, opacity: 0.7 });
+        markers.push(line);
+        line.addTo(map);
+    }
+
+    // Fit map to show all stops
+    if (coords.length > 0) {
+        map.fitBounds(coords, { padding: [30, 30] });
+    }
+}
+
+// ============================================================
+// Tab switching
+// ============================================================
+function showTab(tab) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('map').classList.remove('visible');
+    document.getElementById('stop-list').classList.remove('visible');
+
+    if (tab === 'map') {
+        document.getElementById('map').classList.add('visible');
+        document.querySelectorAll('.tab')[1].classList.add('active');
+        // Initialize map on first view
+        setTimeout(() => {
+            showRouteOnMap();
+            map?.invalidateSize();
+        }, 100);
+    } else {
+        document.getElementById('stop-list').classList.add('visible');
+        document.querySelectorAll('.tab')[0].classList.add('active');
+    }
+}
+
+// ============================================================
+// Navigation — open Google Maps directions
+// ============================================================
+function navigateTo(lat, lon) {
+    // Opens Google Maps navigation in a new tab/app
+    // This works on Android and iOS, launching the Maps app if installed
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`, '_blank');
+}
+
+// ============================================================
+// Status updates (with offline queue support)
+// ============================================================
+async function markDelivered(vehicleId, orderId) {
+    await updateStatus(vehicleId, orderId, 'delivered');
+}
+
+async function markFailed(vehicleId, orderId) {
+    if (confirm('Mark this delivery as failed?')) {
+        await updateStatus(vehicleId, orderId, 'failed');
+    }
+}
+
+async function updateStatus(vehicleId, orderId, status) {
+    // Always update local state immediately — optimistic UI.
+    // The driver sees the change instantly, even if the network call
+    // is pending or queued for later.
+    const stop = currentRoute.stops.find(s => s.order_id === orderId);
+    if (stop) stop.status = status;
+
+    // Persist to localStorage so the updated status survives page refresh
+    saveToStorage(STORAGE_KEYS.ROUTE_DATA, currentRoute);
+
+    renderStopList();
+    updateSummary();
+
+    // Send to server — the API expects a JSON body with { status: "..." }
+    // See: apps/kerala_delivery/api/main.py StatusUpdate model
+    try {
+        const resp = await fetch(
+            `${API_BASE}/api/routes/${vehicleId}/stops/${orderId}/status`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status }),
+            }
+        );
+
+        if (!resp.ok) throw new Error('Server rejected update');
+
+    } catch {
+        // Network failed — queue for replay when connectivity returns.
+        // The local state is already updated, so the driver isn't blocked.
+        queueOfflineUpdate(vehicleId, orderId, status);
+        console.log(`[Offline] Queued status update: ${orderId} → ${status}`);
+    }
+}
+
+function updateSummary() {
+    if (!currentRoute) return;
+    const done = currentRoute.stops.filter(s => s.status === 'delivered').length;
+    const remaining = currentRoute.stops.filter(s => s.status === 'pending').length;
+
+    document.getElementById('summary-done').textContent = done;
+    document.getElementById('summary-remaining').textContent = remaining;
+    document.getElementById('summary-distance').textContent = currentRoute.total_distance_km;
+}
+</script>
+</body>
+</html>

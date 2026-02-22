@@ -1,0 +1,17 @@
+{
+    "name": "LPG Delivery Route",
+    "short_name": "LPG Route",
+    "description": "Optimized delivery routes for LPG gas cylinder delivery",
+    "start_url": "/driver/",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#f5f5f5",
+    "theme_color": "#1a73e8",
+    "icons": [
+        {
+            "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🚛</text></svg>",
+            "sizes": "any",
+            "type": "image/svg+xml"
+        }
+    ]
+}
