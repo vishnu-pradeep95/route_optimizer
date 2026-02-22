@@ -141,20 +141,25 @@ The schema includes six core tables: `orders` (20 columns), `vehicles` (11), `dr
 - **API Gateway:** Single entry point for both driver app and web dashboard, handles auth (JWT tokens)
 
 **Optimization Layer:**
-- **OSRM** (self-hosted, Docker): Computes distance/time matrices from Kerala OSM data. Download `kerala.osm.pbf` (~130–168 MB), pre-process with `osrm-extract` and `osrm-contract`, run `osrm-routed` on port 5000[^37][^38]
+- **OSRM** (self-hosted, Docker): Computes distance/time matrices from Kerala OSM data. Download `kerala.osm.pbf` (~130–168 MB), pre-process with `osrm-extract`, `osrm-partition`, and `osrm-customize` (MLD algorithm — faster preprocessing than Contraction Hierarchies and supports custom speed profiles without full rebuild), run `osrm-routed` on port 5000[^37][^38]
 - **VROOM** (self-hosted, Docker): Receives jobs (deliveries) and vehicles definition, queries OSRM for the cost matrix, returns optimized routes in JSON[^7]
+
+> **VROOM implementation notes (learned during Phase 1):**
+> - Request MUST include `"options": {"g": true}` — without this flag, VROOM omits all distance fields from the response.
+> - Step-level `distance` and `duration` values are **cumulative** from route start, not incremental per-leg. Subtract the previous step's values to get per-stop metrics.
+> - Use Docker tag `v1.14.0-rc.2` — `latest` tag doesn't exist for the `vroomvrp/vroom-docker` image.
 
 **Database: PostgreSQL 15+ with PostGIS 3.x**
 - Handles all relational data + geospatial queries[^36][^39]
 - Spatial indexes (GiST) for fast proximity queries
 - Consider TimescaleDB extension for high-volume telemetry data
 
-**Driver Android App (Kotlin):**
-- Offline-first architecture: Room DB as source of truth, network as sync channel[^29][^30]
-- Map display using Mapbox SDK (free tier) or MapLibre (open-source) with pre-cached tiles for the 5 km service area
-- Stop list with one-tap status updates
-- Background GPS tracking via ForegroundService
-- WorkManager for reliable background sync[^29]
+**Driver App (PWA — Progressive Web App):**
+- Responsive web app drivers open in Chrome — simplest approach for solo dev with no native mobile experience
+- Service worker for offline caching of routes and static assets
+- Stop list with delivery status updates (pending → en_route → delivered/failed)
+- No countdown timers — Kerala MVD compliance baked in from the start
+- **Future consideration:** If PWA limitations (background GPS, offline maps) become blocking in Phase 2+, evaluate Fleetbase Navigator or React Native before going native Kotlin
 
 **Operations Web Dashboard (React + Leaflet/MapLibre GL):**
 - Daily route overview on map
@@ -178,6 +183,8 @@ OSRM self-hosting for Kerala specifically requires modest resources: the pre-pro
 ![](images/image_2.png)
 
 ### Phase 0: Baseline & Data Collection (Weeks 1–4)
+> **Status: COMPLETE** — Core models, data import, geocoding, OSRM routing, VROOM optimization, FastAPI backend, driver PWA, Docker Compose, sample data, and 65 unit tests all implemented. OSRM running with Kerala data (MLD algorithm).
+
 **Goals:** Understand current process, establish data foundation.
 
 **Tasks:**
@@ -191,6 +198,8 @@ OSRM self-hosting for Kerala specifically requires modest resources: the pre-pro
 
 **Success criteria:** A clean, geocoded address database and a working OSRM instance returning travel times for Kerala roads.
 ### Phase 1: Single-Vehicle Prototype (Weeks 5–12)
+> **Status: CORE CRITERIA MET** — OSRM + VROOM integration tested end-to-end (9 integration tests). Route comparison shows 68.1% distance reduction vs naive baseline (target was ≥15%). 74 total tests passing. Remaining: calibrate speed profile with real GPS data, shadow rollout with actual drivers.
+
 **Goals:** Prove optimization works for one vehicle, one day's deliveries.
 
 **Tasks:**
@@ -336,7 +345,7 @@ These process improvements amplify the routing system's effectiveness:
 | **Routing engine** | OSRM (self-hosted) | Fastest queries, Kerala OSM data fits easily, Docker setup [^12][^37] |
 | **Database** | PostgreSQL 15 + PostGIS 3.x | Spatial queries, mature, open-source, good for telemetry [^36][^39] |
 | **Backend API** | Python FastAPI | Async, fast, great for a small team, OR-Tools compatible |
-| **Driver app** | Kotlin Android (offline-first) | Room DB + WorkManager + MapLibre [^30] |
+| **Driver app** | PWA (Progressive Web App) | Simplest for solo dev, no app store, offline-capable via service worker |
 | **Ops dashboard** | React + MapLibre GL JS | Real-time map, lightweight |
 | **Geocoding** | Google Maps API (cached) | Best reliability for Indian addresses initially [^27] |
 | **Deployment** | Docker Compose on cloud VPS | Simple, affordable ($30–60/month) |

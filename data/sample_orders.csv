@@ -1,0 +1,31 @@
+order_id,address,customer_id,cylinder_type,quantity,priority,notes,latitude,longitude
+ORD-001,"Kalamassery, HMT Colony, Near Bus Stop, Kochi",CUST-001,domestic,2,2,Ring bell twice,10.0553,76.3221
+ORD-002,"Edappally Junction, Opposite Lulu Mall, Kochi",CUST-002,domestic,1,2,,9.9816,76.2996
+ORD-003,"Palarivattom, Bypass Road, Near Oberon Mall",CUST-003,domestic,1,1,Urgent - elderly customer,9.9944,76.3064
+ORD-004,"Kakkanad, Infopark Road, Civil Station",CUST-004,domestic,2,2,Leave at gate,10.0159,76.3541
+ORD-005,"Aluva, Periyar Nagar, Main Road",CUST-005,domestic,1,2,,10.1004,76.3569
+ORD-006,"Thrikkakara, CUSAT Road, North Gate",CUST-006,domestic,1,3,,10.0386,76.3285
+ORD-007,"Vyttila Junction, Mobility Hub Area",CUST-007,commercial,1,2,Restaurant delivery,9.9674,76.3203
+ORD-008,"Kaloor, Stadium Road, Near KSRTC Bus Stand",CUST-008,domestic,2,2,,9.9937,76.2910
+ORD-009,"Marine Drive, Shanmugham Road, Kochi",CUST-009,domestic,1,2,Call before delivery,9.9777,76.2764
+ORD-010,"Ernakulam South, TD Road, Near Railway Station",CUST-010,domestic,1,2,,9.9682,76.2890
+ORD-011,"MG Road, Ravipuram, Near High Court",CUST-011,domestic,2,1,VIP customer,9.9716,76.2846
+ORD-012,"Panampilly Nagar, Chakkaraparambu Junction",CUST-012,domestic,1,2,,9.9580,76.3023
+ORD-013,"Kadavanthra, SA Road, Near CSI Church",CUST-013,domestic,1,2,,9.9665,76.2983
+ORD-014,"Elamkulam, Metro Station Road",CUST-014,domestic,2,2,,9.9627,76.3065
+ORD-015,"Thammanam, Ponnurunni Road, Near Temple",CUST-015,domestic,1,2,Side gate only,9.9769,76.3186
+ORD-016,"Thevara, SH Road, Near Ferry",CUST-016,domestic,1,3,,9.9530,76.2985
+ORD-017,"Tripunithura, Hill Palace Road",CUST-017,domestic,2,2,,9.9499,76.3488
+ORD-018,"Maradu, NH Bypass, Near Pipeline Junction",CUST-018,domestic,1,2,,9.9441,76.3179
+ORD-019,"Chottanikkara, Temple Road",CUST-019,domestic,1,2,,9.9747,76.3937
+ORD-020,"Kumbalam, NH 66, Near Bridge",CUST-020,commercial,2,2,Hotel delivery,9.9219,76.3190
+ORD-021,"Petta, Fort Kochi, Near Santa Cruz Basilica",CUST-021,domestic,1,2,Narrow lane - park on main road,9.9639,76.2434
+ORD-022,"Mattancherry, Bazaar Road, Jew Town",CUST-022,domestic,1,2,,9.9577,76.2576
+ORD-023,"Palluruthy, Thoppumpady Bridge Road",CUST-023,domestic,2,2,,9.9410,76.2626
+ORD-024,"Willingdon Island, Bristow Road",CUST-024,domestic,1,3,,9.9583,76.2710
+ORD-025,"Konthuruthy, Near St. George Church",CUST-025,domestic,1,2,,9.9462,76.2843
+ORD-026,"Thrippunithura, Near Poornathrayesa Temple",CUST-026,domestic,2,2,Morning preferred,9.9451,76.3438
+ORD-027,"Vazhakkala, Seaport-Airport Road",CUST-027,domestic,1,2,,10.0194,76.3469
+ORD-028,"Kalamassery, FACT Road, Near Medical College",CUST-028,domestic,1,1,Hospital staff quarters,10.0468,76.3138
+ORD-029,"Cheranalloor, Panchayat Road",CUST-029,domestic,2,2,,10.0097,76.3151
+ORD-030,"Companypadi, Government Hospital Road",CUST-030,domestic,1,2,,10.0663,76.3168

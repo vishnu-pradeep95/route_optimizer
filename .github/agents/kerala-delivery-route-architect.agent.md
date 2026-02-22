@@ -38,7 +38,7 @@ handoffs:
 
   - label: "💾 Save Session"
     agent: Session Journal
-    prompt: 'Read our conversation and append a compact journal entry to plan/session-journal.md. Follow the exact format defined in your instructions. Include all decisions made, files changed, and open questions. Max 15 lines.'
+    prompt: 'Read our conversation and append a compact journal entry to plan/session-journal.md. Follow the exact format defined in your instructions. Include all decisions made, files changed, and open questions.'
     send: true
 ---
 

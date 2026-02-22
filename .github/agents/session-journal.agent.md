@@ -34,7 +34,7 @@ Append it to `plan/session-journal.md` following this exact format:
 ```
 
 **Rules for SAVE:**
-- Max 15 lines per entry. Force yourself to compress.
+- Try to keep entrioes limited to ensure journal remains concise.
 - Be specific: name files changed, commands run, tools configured.
 - Use `DECIDED:` / `OPEN:` / `BLOCKED:` prefixes — they're grep-searchable.
 - Never duplicate information already in previous entries — reference them instead.
