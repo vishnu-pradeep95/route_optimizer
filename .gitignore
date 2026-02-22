@@ -33,3 +33,7 @@ osrm_data/
 
 # VROOM runtime logs
 infra/vroom-conf/access.log
+
+# Node.js (dashboard frontend)
+node_modules/
+apps/kerala_delivery/dashboard/dist/

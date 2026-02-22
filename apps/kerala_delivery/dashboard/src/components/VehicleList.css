@@ -1,0 +1,160 @@
+/* VehicleList — Sidebar panel for vehicle selection and stats.
+ *
+ * Why a fixed-width sidebar instead of a responsive collapsible panel:
+ * This is an ops dashboard used on desktop monitors. Fixed width
+ * gives consistent layout and avoids complex toggle UI.
+ */
+
+.vehicle-list {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #ffffff;
+  border-right: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.vehicle-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.vehicle-list-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.clear-selection {
+  background: none;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.clear-selection:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.vehicle-list-items {
+  flex: 1;
+  overflow-y: auto;
+  /* Custom scrollbar for a cleaner look */
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.vehicle-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.vehicle-item:hover {
+  background: #f8fafc;
+}
+
+.vehicle-item.selected {
+  background: #eff6ff;
+  border-left: 3px solid #3b82f6;
+  padding-left: 13px; /* Compensate for border */
+}
+
+.vehicle-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vehicle-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.vehicle-id {
+  font-weight: 600;
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.speed-alert-badge {
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: auto;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.vehicle-driver {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+  padding-left: 18px; /* Align with text after dot */
+}
+
+.vehicle-stats {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  padding-left: 18px;
+}
+
+.vehicle-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #475569;
+}
+
+.stat-icon {
+  font-size: 12px;
+}
+
+.vehicle-eta {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 6px;
+  padding-left: 18px;
+  font-style: italic;
+}
+
+.vehicle-progress {
+  height: 3px;
+  background: #e2e8f0;
+  border-radius: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.vehicle-progress-bar {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.vehicle-list-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
