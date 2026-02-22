@@ -140,3 +140,45 @@ class TestCsvImporter:
             assert orders[0].weight_kg == 14.2
         finally:
             os.unlink(csv)
+
+    def test_coordinate_bounds_rejects_out_of_range(self):
+        """Coordinates outside configured bounds should be treated as ungeocoded.
+
+        This ensures the CsvImporter's coordinate_bounds parameter works.
+        A Mumbai food delivery app could pass (18.8, 19.3, 72.7, 73.0) for
+        Mumbai-only bounds. Order is still imported but location=None.
+        """
+        csv = self._create_csv(
+            "order_id,address,customer_id,weight_kg,latitude,longitude\n"
+            # Point in Kerala — within India bounds
+            "ORD-001,Kochi,CUST-001,14.2,9.9716,76.2846\n"
+            # Point in Antarctica — outside India bounds
+            "ORD-002,South Pole,CUST-002,14.2,-85.0,0.0\n"
+        )
+        try:
+            importer = CsvImporter(coordinate_bounds=(6.0, 37.0, 68.0, 97.5))
+            orders = importer.import_orders(csv)
+            assert len(orders) == 2
+            # First order within India → geocoded
+            assert orders[0].is_geocoded
+            assert orders[0].location.latitude == 9.9716
+            # Second order outside India → NOT geocoded (needs geocoding)
+            assert not orders[1].is_geocoded
+        finally:
+            os.unlink(csv)
+
+    def test_no_bounds_accepts_all_valid_coordinates(self):
+        """Without coordinate_bounds, any valid WGS84 coordinate is accepted."""
+        csv = self._create_csv(
+            "order_id,address,customer_id,weight_kg,latitude,longitude\n"
+            "ORD-001,London,CUST-001,14.2,51.5074,-0.1278\n"
+        )
+        try:
+            # No bounds — core module is business-agnostic
+            importer = CsvImporter()
+            orders = importer.import_orders(csv)
+            assert len(orders) == 1
+            assert orders[0].is_geocoded
+            assert orders[0].location.latitude == 51.5074
+        finally:
+            os.unlink(csv)

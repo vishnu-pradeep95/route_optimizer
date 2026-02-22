@@ -124,11 +124,12 @@ class VroomAdapter:
                     "end": depot_coords,  # Return to depot after deliveries
                     # VROOM capacity is an array — we use [weight_kg, item_count]
                     # This lets us enforce both weight AND item count limits.
-                    # int() truncates fractional kg (e.g. 446.5 → 446). This is
-                    # intentional: VROOM requires integer capacities, and
-                    # rounding down is safer than rounding up for weight limits.
+                    # round() instead of int() to avoid cumulative underestimation:
+                    # int(446.7) = 446, losing 0.7 kg. Over a full load this can
+                    # accumulate to ~1.4% underestimate. round() keeps it within 0.5 kg.
+                    # VROOM requires integer capacities — float would be rejected.
                     "capacity": [
-                        int(vehicle.max_weight_kg),
+                        round(vehicle.max_weight_kg),
                         vehicle.max_items,
                     ],
                     "description": vehicle.vehicle_id,
@@ -139,20 +140,37 @@ class VroomAdapter:
         vroom_jobs = []
         for idx, order in enumerate(orders):
             loc = order.location  # Already validated as not None
-            vroom_jobs.append(
-                {
-                    "id": idx,
-                    "location": [loc.longitude, loc.latitude],
-                    # delivery = amount consumed from vehicle capacity at this stop
-                    "delivery": [int(order.weight_kg), order.quantity],
-                    # service time in seconds (time spent at the stop)
-                    "service": order.service_time_minutes * 60,
-                    "description": order.order_id,
-                    # Priority: VROOM uses higher = more important (0-100)
-                    # Our model: 1=high, 2=normal, 3=low → invert
-                    "priority": max(0, 100 - (order.priority * 30)),
-                }
-            )
+            job: dict = {
+                "id": idx,
+                "location": [loc.longitude, loc.latitude],
+                # delivery = amount consumed from vehicle capacity at this stop
+                "delivery": [round(order.weight_kg), order.quantity],
+                # service time in seconds (time spent at the stop)
+                "service": order.service_time_minutes * 60,
+                "description": order.order_id,
+                # Priority: VROOM uses higher = more important (0-100)
+                # Our model: 1=high, 2=normal, 3=low → invert
+                "priority": max(0, 100 - (order.priority * 30)),
+            }
+
+            # Phase 2: add time windows for VRPTW
+            # VROOM time windows are [start, end] in seconds since midnight.
+            # If an order has delivery_window_start and delivery_window_end,
+            # we convert them to seconds and tell VROOM to respect the window.
+            # Orders without time windows are unconstrained (pure CVRP).
+            # See: https://github.com/VROOM-Project/vroom/blob/master/docs/API.md
+            if order.delivery_window_start and order.delivery_window_end:
+                tw_start = (
+                    order.delivery_window_start.hour * 3600
+                    + order.delivery_window_start.minute * 60
+                )
+                tw_end = (
+                    order.delivery_window_end.hour * 3600
+                    + order.delivery_window_end.minute * 60
+                )
+                job["time_windows"] = [[tw_start, tw_end]]
+
+            vroom_jobs.append(job)
 
         # Why options.g = true?
         # VROOM only returns distance fields (route-level and step-level) when

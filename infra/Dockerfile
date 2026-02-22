@@ -10,8 +10,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY core/ core/
 COPY apps/ apps/
 
-# Serve the driver PWA as static files at /driver/
-# The FastAPI app mounts this directory
+# SECURITY: Run as non-root user.
+# By default, Docker containers run as root. If an attacker exploits a vulnerability
+# in the application, they get root access to the container (and potentially the host
+# via container escapes). Running as a non-root user limits blast radius.
+# See: https://docs.docker.com/engine/security/#linux-kernel-capabilities
+RUN addgroup --system --gid 1001 appgroup && \
+    adduser --system --uid 1001 --ingroup appgroup appuser
+USER appuser
 
 EXPOSE 8000
 

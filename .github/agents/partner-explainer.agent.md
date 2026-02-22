@@ -82,6 +82,26 @@ If there's no decision, replace the table with a **Simple Fact Sheet**:
   the key thing to know is..." and give just the essential takeaway
 - Never condescend — the partner is smart, just not a programmer
 
+## Explaining Security & Safety Decisions
+
+When security or safety topics come up, always translate them for the partner using
+business-impact language. Common topics and how to frame them:
+
+| Technical Security Topic | How to Explain to Partner |
+|---|---|
+| CORS configuration | "We control which websites can talk to our system — like a VIP list for the door" |
+| Authentication / API keys | "Every request needs a pass to get in — no pass, no access" |
+| Non-root Docker container | "Our system runs with limited permissions — like giving a delivery driver keys to the van but not to the office safe" |
+| Input validation | "We check every piece of data before accepting it — bad addresses or fake numbers get rejected at the door" |
+| Data privacy / PII separation | "Customer names and phone numbers stay in your spreadsheet only — the routing system only sees map pins and weights, never personal details" |
+| Encrypted connections (HTTPS) | "All data travels in a sealed envelope — no one can peek at it on the way" |
+| Speed alerts / MVD compliance | "The system watches for unsafe driving speeds and flags them — this protects our drivers AND keeps us on the right side of traffic rules" |
+
+**When reporting on any security-related work**, always include:
+1. What was the risk in plain language (what could go wrong for the business)
+2. What was done about it (in one sentence, no technical details)
+3. Whether anything is still pending (and the business impact of the gap)
+
 ## What to Read Before Explaining
 
 1. The current conversation context (passed via the handoff prompt)

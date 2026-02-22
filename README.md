@@ -36,16 +36,21 @@ pytest tests/ -v
 ## How It Works
 
 ```
-CSV Upload → Geocoding → Route Optimization → Driver PWA
-     │            │              │                  │
- CDCMS export  Google Maps   VROOM + OSRM      Mobile-friendly
- (30 orders)   API (cached)  (milliseconds)    offline-capable
+CSV Upload → Geocoding → Route Optimization → Database → Driver PWA
+     │            │              │                │            │
+ CDCMS export  Google Maps   VROOM + OSRM    PostgreSQL   Mobile-friendly
+ (30 orders)   API (cached)  (milliseconds)  + PostGIS    offline-capable
+                                                │
+                                           GPS Telemetry
+                                           + Delivery Status
 ```
 
 1. **Upload** a CSV of today's delivery orders (from HPCL CDCMS system or manual entry)
-2. **Geocode** addresses to GPS coordinates (Google Maps API, results cached in local file store)
-3. **Optimize** routes using VROOM (Capacitated Vehicle Routing Problem solver) with OSRM travel times
-4. **Serve** optimized routes to drivers via a Progressive Web App (PWA) they open in Chrome
+2. **Geocode** addresses to GPS coordinates (Google Maps API, results cached in PostGIS geocode_cache table)
+3. **Optimize** routes using VROOM (CVRP with Time Windows) with OSRM travel times
+4. **Persist** optimization results, routes, and stops to PostgreSQL + PostGIS
+5. **Serve** optimized routes to drivers via a Progressive Web App (PWA) they open in Chrome
+6. **Track** GPS telemetry and delivery status updates in real time
 
 ---
 
@@ -69,6 +74,11 @@ routing_opt/
 │   ├── geocoding/                 ← Geocoding adapters
 │   │   ├── interfaces.py          ← Geocoder protocol
 │   │   └── google_adapter.py      ← Google Maps + SHA256 file cache
+│   ├── database/                  ← PostgreSQL + PostGIS persistence
+│   │   ├── __init__.py            ← Package docs + architecture overview
+│   │   ├── connection.py          ← Async engine, session factory (asyncpg)
+│   │   ├── models.py              ← SQLAlchemy ORM models (orders, routes, telemetry)
+│   │   └── repository.py          ← Data access layer (async CRUD operations)
 │   └── data_import/               ← Data ingestion
 │       ├── interfaces.py          ← DataImporter protocol
 │       └── csv_importer.py        ← CSV/Excel CDCMS import
@@ -79,14 +89,18 @@ routing_opt/
 │       ├── api/main.py            ← FastAPI backend (upload, optimize, serve)
 │       └── driver_app/            ← PWA (index.html, sw.js, manifest.json)
 │
-├── tests/                         ← Mirrors source structure (58 tests)
+├── tests/                         ← Mirrors source structure (109 tests)
 │   ├── conftest.py                ← Shared fixtures (Kerala coordinates)
 │   ├── core/                      ← Unit tests for all core modules
-│   └── apps/                      ← API endpoint tests
+│   │   └── database/              ← 35 DB tests (models, repository, connection)
+│   ├── apps/                      ← API endpoint tests
+│   └── integration/               ← End-to-end pipeline tests
 │
 ├── infra/
-│   └── Dockerfile                 ← API container image
-├── docker-compose.yml             ← OSRM + VROOM + API stack
+│   ├── Dockerfile                 ← API container image
+│   ├── postgres/init.sql          ← PostGIS schema + extensions + seed data
+│   └── vroom-conf/                ← VROOM service configuration
+├── docker-compose.yml             ← PostgreSQL + OSRM + VROOM + API stack
 ├── data/
 │   └── sample_orders.csv          ← 30 example orders around Kochi
 │
@@ -122,10 +136,13 @@ Base URL: `http://localhost:8000`
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/health` | Health check — returns `{"status": "ok", "version": ...}` |
-| `POST` | `/api/upload-orders` | Upload CSV → geocode → optimize → return assignment |
+| `POST` | `/api/upload-orders` | Upload CSV → geocode → optimize → persist → return assignment |
 | `GET` | `/api/routes` | List all routes (summary per vehicle) |
 | `GET` | `/api/routes/{vehicle_id}` | Full route detail for a specific driver |
 | `POST` | `/api/routes/{vehicle_id}/stops/{order_id}/status` | Update delivery status (`delivered` / `failed` / `pending`) |
+| `GET` | `/api/runs` | List recent optimization runs (newest first) |
+| `GET` | `/api/runs/{run_id}/routes` | All routes for a specific optimization run |
+| `POST` | `/api/telemetry` | Receive GPS telemetry pings from driver app |
 | `GET` | `/driver/` | Serves the driver PWA |
 
 ### Upload CSV Format
@@ -191,12 +208,15 @@ These are enforced by the system and cannot be bypassed:
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
+| **Database** | PostgreSQL 16 + PostGIS 3.5 | Persistent storage, spatial queries |
+| **ORM** | SQLAlchemy 2.0 + asyncpg | Async database access, model mapping |
 | **Routing engine** | OSRM (Docker, port 5000) | Travel time & distance matrices |
-| **Optimizer** | VROOM (Docker, port 3000) | Vehicle routing problem solver (CVRP) |
+| **Optimizer** | VROOM (Docker, port 3000) | Vehicle routing problem solver (CVRP + Time Windows) |
 | **Backend** | Python 3.12 + FastAPI | API server, orchestration |
-| **Data models** | Pydantic v2 | Validation, serialization |
-| **Geocoding** | Google Maps API (cached) | Address → GPS coordinates |
+| **Data models** | Pydantic v2 + SQLAlchemy ORM | Validation, serialization, persistence |
+| **Geocoding** | Google Maps API (PostGIS cache) | Address → GPS coordinates |
 | **Driver app** | PWA (HTML/JS/Service Worker) | Mobile-friendly, offline-capable |
+| **Migrations** | Alembic | Database schema versioning |
 | **Infrastructure** | Docker Compose | Single-command deployment |
 
 ---
@@ -208,15 +228,17 @@ source .venv/bin/activate
 pytest tests/ -v
 ```
 
-**58 tests** covering:
+**109 tests** covering:
 - Core models (location, order, vehicle, route validation)
 - OSRM adapter (travel time, distance matrix, safety multiplier)
 - VROOM adapter (route optimization, priority, unassigned handling)
-- Google geocoder (API calls, caching, error handling)
+- Google geocoder (API calls, caching, geocode cache hits)
 - CSV importer (standard/custom columns, coordinate passthrough, error recovery)
-- API endpoints (health, routes, status updates, upload pipeline, monsoon multiplier)
+- Database layer (35 tests: ORM models, repository CRUD, connection lifecycle, telemetry)
+- API endpoints (health, routes, status updates, upload pipeline, optimization runs, telemetry)
+- Integration (end-to-end CSV → geocode → optimize → persist pipeline)
 
-All external services (OSRM, VROOM, Google Maps) are mocked in tests — no Docker required to run the test suite.
+All external services (OSRM, VROOM, Google Maps, PostgreSQL) are mocked in tests — no Docker required to run the test suite.
 
 ---
 
@@ -238,6 +260,7 @@ docker compose down
 
 | Service | Container | Port | Health Check |
 |---------|-----------|------|-------------|
+| PostgreSQL + PostGIS | `routing-db` | 5432 | `pg_isready -U routeopt` |
 | OSRM | `osrm-kerala` | 5000 | `curl http://localhost:5000/health` |
 | VROOM | `vroom-solver` | 3000 | — |
 | API | `lpg-api` | 8000 | `curl http://localhost:8000/health` |
@@ -255,8 +278,10 @@ Copy `.env.example` → `.env` and configure:
 | `GOOGLE_MAPS_API_KEY` | Yes (for geocoding) | Google Cloud API key with Geocoding API enabled |
 | `OSRM_URL` | No | Defaults to `http://localhost:5000` |
 | `VROOM_URL` | No | Defaults to `http://localhost:3000` |
-| `POSTGRES_USER` | No | For Phase 2+ database |
-| `POSTGRES_PASSWORD` | No | For Phase 2+ database |
+| `POSTGRES_USER` | No | Defaults to `routeopt` |
+| `POSTGRES_PASSWORD` | **Yes** | Database password — set any strong value |
+| `POSTGRES_DB` | No | Defaults to `routeopt` |
+| `DATABASE_URL` | No | Auto-built from above; override for remote DB |
 
 ---
 
@@ -265,8 +290,8 @@ Copy `.env.example` → `.env` and configure:
 | Phase | Status | Description |
 |-------|--------|-------------|
 | **0: Baseline** | ✅ Complete | Core modules, data models, tests, API, driver PWA, Docker setup |
-| **1: Single-Vehicle** | 🔜 Next | Test with real OSRM data, calibrate speed profiles, shadow mode |
-| **2: Multi-Vehicle + Dashboard** | Planned | GPS tracking, ops dashboard, time windows |
+| **1: Single-Vehicle** | ✅ Complete | Real OSRM Kerala data, speed profiles, 68% route improvement validated |
+| **2: Multi-Vehicle + DB** | 🔧 In Progress | PostgreSQL + PostGIS, time windows, GPS telemetry, optimization history |
 | **3: Production** | Planned | Cloud deploy, monitoring, automated daily use |
 | **4: Advanced** | Planned | ML travel-time models, dynamic re-routing, notifications |
 

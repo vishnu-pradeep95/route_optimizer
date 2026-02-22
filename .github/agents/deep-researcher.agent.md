@@ -91,3 +91,34 @@ When researching common topics, start with these:
 - **Estimate setup time** — the solo developer needs to budget their time
 - **Evaluate modularity** — can this tool be wrapped behind a clean Protocol interface?
 - **Check test support** — does this tool provide test fixtures, mock servers, or sample data?
+
+## Security Evaluation (Required for Every Tool/Service)
+
+When researching any external service, library, or infrastructure option, always evaluate:
+
+| Check | Question to Answer |
+|---|---|
+| **Auth model** | Does this service require API keys? How are they stored/rotated? |
+| **Data exposure** | Does this send customer data (addresses, coordinates) to third parties? |
+| **Network security** | Can this run within our Docker network, or does it need public internet? |
+| **Supply chain** | Is this a well-maintained library? Check last commit date, CVE history. |
+| **Secrets handling** | Where do API keys / passwords go? Env vars only — never in config files committed to git. |
+| **Container security** | Does the Docker image run as root? Can we use a non-root variant? |
+| **CORS / headers** | If it's a web service, does it set proper security headers? |
+
+Include a **Security Notes** section in every research output.
+
+## Optimization Evaluation (Required for Infrastructure)
+
+When researching infrastructure, routing, or data-processing tools:
+
+| Check | Question to Answer |
+|---|---|
+| **Memory footprint** | How much RAM does this need? Our VPS has 4–8 GB total. |
+| **Query/solve speed** | Can it return results within our SLA (< 5 seconds for optimization)? |
+| **Caching potential** | Can results be cached? What's the cache invalidation strategy? |
+| **Batch vs real-time** | Is this better suited for batch processing or real-time queries? |
+| **Cold start time** | How long does this take to initialize? Matters for Docker restarts. |
+| **Connection pooling** | Does it support connection pooling? Important for DB and HTTP clients. |
+
+Include an **Optimization Notes** section in every research output.

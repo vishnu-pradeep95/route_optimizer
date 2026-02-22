@@ -120,3 +120,21 @@ DEFAULT_SHIFT_END = "22:00"
 # but we'll need direct access in Phase 2 for pre-optimization analysis.
 OSRM_URL = os.environ.get("OSRM_URL", "http://localhost:5000")
 VROOM_URL = os.environ.get("VROOM_URL", "http://localhost:3000")
+
+# =============================================================================
+# GPS TELEMETRY
+# =============================================================================
+# GPS accuracy threshold: pings with accuracy worse than this are discarded.
+# GPS drift in dense Kerala neighborhoods can put drivers on the wrong street.
+# Start at 50m (conservative). Once you have real-world accuracy data from
+# drivers' phones, tune down to 30m for tighter tracking.
+# See: plan/kerala_delivery_route_system_design.md, Section 10 (GPS drift risk)
+GPS_ACCURACY_THRESHOLD_M = 50.0
+
+# =============================================================================
+# COORDINATE BOUNDS (India-wide sanity check)
+# =============================================================================
+# Used by CsvImporter to discard obviously wrong coordinates.
+# (lat_min, lat_max, lon_min, lon_max) — covers all of India.
+# Lives here (not in core/) because bounds are region-specific.
+INDIA_COORDINATE_BOUNDS = (6.0, 37.0, 68.0, 97.5)

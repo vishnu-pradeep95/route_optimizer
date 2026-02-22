@@ -11,12 +11,15 @@ free requests — more than enough for this scale.
 
 import hashlib
 import json
+import logging
 from pathlib import Path
 
 import httpx
 
 from core.geocoding.interfaces import GeocodingResult
 from core.models.location import Location
+
+logger = logging.getLogger(__name__)
 
 
 class GoogleGeocoder:
@@ -180,15 +183,35 @@ class GoogleGeocoder:
         return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 
     def _load_cache(self) -> dict[str, dict]:
-        """Load the geocode cache from disk."""
+        """Load the geocode cache from disk.
+
+        Resilient to corruption: if the file exists but can't be parsed
+        (e.g., process crashed mid-write), we start fresh. The atomic
+        _save_cache() minimizes this risk, but belt-and-suspenders.
+        """
         if self.cache_path.exists():
             try:
-                return json.loads(self.cache_path.read_text())
-            except (json.JSONDecodeError, OSError):
+                data = json.loads(self.cache_path.read_text())
+                if isinstance(data, dict):
+                    return data
+                # File exists but isn't a dict — corrupt
+                logger.warning("Geocode cache is not a dict, starting fresh")
+                return {}
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning("Geocode cache corrupt, starting fresh: %s", e)
                 return {}
         return {}
 
     def _save_cache(self) -> None:
-        """Persist the geocode cache to disk."""
+        """Persist the geocode cache to disk atomically.
+
+        Why atomic write (write to temp, then rename)?
+        If the process crashes mid-write, a direct write_text() would leave
+        a corrupt/partial JSON file. Writing to a temp file first and then
+        renaming ensures the cache is either fully written or absent.
+        On POSIX systems, rename() is atomic within the same filesystem.
+        """
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-        self.cache_path.write_text(json.dumps(self._cache, indent=2))
+        tmp_path = self.cache_path.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(self._cache, indent=2))
+        tmp_path.rename(self.cache_path)

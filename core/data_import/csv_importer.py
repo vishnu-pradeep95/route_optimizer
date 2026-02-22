@@ -19,6 +19,7 @@ LPG cylinder weights:
 """
 
 import logging
+from datetime import time
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +57,13 @@ class ColumnMapping(BaseModel):
     notes: str = Field(default="notes", description="Column for delivery notes")
     latitude: str = Field(default="latitude", description="Column for latitude (if available)")
     longitude: str = Field(default="longitude", description="Column for longitude (if available)")
+    # Phase 2: time window columns for VRPTW support
+    delivery_window_start: str = Field(
+        default="delivery_window_start", description="Column for earliest delivery time (HH:MM)"
+    )
+    delivery_window_end: str = Field(
+        default="delivery_window_end", description="Column for latest delivery time (HH:MM)"
+    )
 
 
 class CsvImporter:
@@ -75,6 +83,7 @@ class CsvImporter:
         column_mapping: ColumnMapping | None = None,
         default_cylinder_weight_kg: float = 14.2,
         cylinder_weight_lookup: dict[str, float] | None = None,
+        coordinate_bounds: tuple[float, float, float, float] | None = None,
     ):
         """Initialize the CSV importer.
 
@@ -86,12 +95,18 @@ class CsvImporter:
             cylinder_weight_lookup: Mapping from cylinder type name to weight in kg.
                 If None, uses the built-in defaults (domestic/commercial/5kg).
                 Business-specific consumers can pass their own lookup table.
+            coordinate_bounds: Optional (lat_min, lat_max, lon_min, lon_max) for
+                sanity-checking coordinates. If None, no bounds check is applied.
+                Example for India: (6.0, 37.0, 68.0, 97.5).
         """
         self.mapping = column_mapping or ColumnMapping()
         self.default_weight = default_cylinder_weight_kg
         # Why injectable? The cylinder types and weights are business-specific.
         # LPG has domestic/commercial; a food delivery app would not need this at all.
         self.weight_lookup = cylinder_weight_lookup or DEFAULT_CYLINDER_WEIGHTS
+        # Coordinate bounds are injected so core/ stays business-agnostic.
+        # The Kerala app passes India bounds; a European user passes European bounds.
+        self.coordinate_bounds = coordinate_bounds
 
     def import_orders(self, source: str) -> list[Order]:
         """Read a CSV or Excel file and return a list of Orders.
@@ -204,6 +219,10 @@ class CsvImporter:
         # --- Location: only if lat/lon columns exist and have values ---
         location = self._resolve_location(row)
 
+        # --- Time windows (Phase 2): "deliver between 09:00 and 12:00" ---
+        tw_start = self._resolve_time(row, self.mapping.delivery_window_start)
+        tw_end = self._resolve_time(row, self.mapping.delivery_window_end)
+
         return Order(
             order_id=order_id,
             location=location,
@@ -213,6 +232,8 @@ class CsvImporter:
             quantity=quantity,
             priority=priority,
             notes=notes,
+            delivery_window_start=tw_start,
+            delivery_window_end=tw_end,
         )
 
     def _get_field(self, row: pd.Series, column_name: str, default: str = "") -> str:
@@ -262,10 +283,43 @@ class CsvImporter:
             try:
                 lat = float(lat_str)
                 lon = float(lon_str)
-                # Basic sanity check: is this even in India?
-                if 6.0 <= lat <= 37.0 and 68.0 <= lon <= 97.5:
+                # Sanity check coordinates against bounds if configured.
+                # Without bounds, all valid WGS84 coordinates are accepted.
+                if self.coordinate_bounds:
+                    lat_min, lat_max, lon_min, lon_max = self.coordinate_bounds
+                    if lat_min <= lat <= lat_max and lon_min <= lon <= lon_max:
+                        return Location(latitude=lat, longitude=lon)
+                else:
                     return Location(latitude=lat, longitude=lon)
             except ValueError:
                 pass
 
+        return None
+
+    def _resolve_time(self, row: pd.Series, column_name: str) -> time | None:
+        """Parse a time string (HH:MM or HH:MM:SS) from a CSV column.
+
+        Supports common time formats:
+        - "09:00", "9:00", "09:00:00"
+        - "9 AM", "09:00 AM" (12-hour format)
+
+        Returns None if the column doesn't exist, is empty, or can't be parsed.
+        Time windows are optional — if not provided, the order has no time
+        constraint (pure CVRP instead of VRPTW).
+        """
+        from datetime import datetime as dt
+
+        time_str = self._get_field(row, column_name)
+        if not time_str:
+            return None
+
+        # Try common time formats
+        for fmt in ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M:%S %p", "%I %p"):
+            try:
+                parsed = dt.strptime(time_str, fmt)
+                return time(parsed.hour, parsed.minute, parsed.second)
+            except ValueError:
+                continue
+
+        logger.warning("Could not parse time '%s' from column '%s'", time_str, column_name)
         return None

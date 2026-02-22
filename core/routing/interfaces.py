@@ -46,13 +46,16 @@ class DistanceMatrix(BaseModel):
     Attributes:
         durations: NxN matrix of travel durations in seconds.
             durations[i][j] = time from location i to location j.
+            May contain None if OSRM cannot route between two points
+            (e.g., disconnected road segments in OSM data).
         distances: NxN matrix of travel distances in meters.
             distances[i][j] = distance from location i to location j.
+            May contain None for the same reason as durations.
         locations: The locations in the same order as the matrix indices.
     """
 
-    durations: list[list[float]]
-    distances: list[list[float]]
+    durations: list[list[float | None]]
+    distances: list[list[float | None]]
     locations: list[Location]
 
     @property

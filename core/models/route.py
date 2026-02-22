@@ -5,11 +5,22 @@ which orders to deliver and in what sequence, along with estimated times
 and distances.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
 from core.models.location import Location
+
+
+def _utcnow() -> datetime:
+    """Return timezone-aware UTC now.
+
+    Why a helper instead of inline lambda?
+    Pydantic's default_factory must be a callable. Using
+    datetime.now(timezone.utc) directly would evaluate at import time
+    (not per-instance). This wrapper defers evaluation to instance creation.
+    """
+    return datetime.now(timezone.utc)
 
 
 class RouteStop(BaseModel):
@@ -68,7 +79,7 @@ class Route(BaseModel):
     total_duration_minutes: float = Field(default=0.0, ge=0)
     total_weight_kg: float = Field(default=0.0, ge=0)
     total_items: int = Field(default=0, ge=0)
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=_utcnow)
 
     @property
     def stop_count(self) -> int:
@@ -95,7 +106,7 @@ class RouteAssignment(BaseModel):
     routes: list[Route] = Field(default_factory=list)
     unassigned_order_ids: list[str] = Field(default_factory=list)
     optimization_time_ms: float = Field(default=0.0, ge=0)
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=_utcnow)
 
     @property
     def total_orders_assigned(self) -> int:

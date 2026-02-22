@@ -34,7 +34,7 @@ Append it to `plan/session-journal.md` following this exact format:
 ```
 
 **Rules for SAVE:**
-- Try to keep entrioes limited to ensure journal remains concise.
+- Try to keep entries limited to ensure journal remains concise.
 - Be specific: name files changed, commands run, tools configured.
 - Use `DECIDED:` / `OPEN:` / `BLOCKED:` prefixes — they're grep-searchable.
 - Never duplicate information already in previous entries — reference them instead.
@@ -75,3 +75,12 @@ while preserving the full history.
 - Exact error messages (summarize the issue and resolution)
 - Conversation back-and-forth (only outcomes matter)
 - Anything already in the design doc or copilot-instructions.md
+
+## Security & Optimization Context to Capture
+
+When saving a session entry, always check and record:
+
+- **Security changes**: any new security-related decisions (CORS config, auth patterns, input validation, Docker non-root). Use `DECIDED:` prefix.
+- **Performance fixes**: any optimization work (query N+1 fixes, caching added, batch operations). Note the measurable impact if available.
+- **Open security items**: unimplemented security features (rate limiting, auth, etc.) go under `OPEN:` so they're tracked across sessions.
+- **Test count**: always note the current test count (e.g., "118 tests passing") so regressions are immediately visible across sessions.

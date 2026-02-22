@@ -240,3 +240,31 @@ class TestGoogleGeocoder:
         assert cache_file.exists()
         cache_data = json.loads(cache_file.read_text())
         assert len(cache_data) > 0
+
+    def test_corrupt_cache_file_recovered(self, tmp_path):
+        """A corrupt cache file should not crash the geocoder.
+
+        If the app crashed mid-write (unlikely with atomic saves, but possible),
+        the next startup should recover gracefully by starting with an empty cache.
+        """
+        cache_dir = tmp_path / "corrupt_cache"
+        cache_dir.mkdir()
+        cache_file = cache_dir / "google_cache.json"
+        cache_file.write_text("{invalid json content!!!}")
+
+        # Should not raise — starts with empty cache
+        geocoder = GoogleGeocoder(api_key="test-key", cache_dir=str(cache_dir))
+        assert geocoder._cache == {}
+
+    def test_cache_with_non_dict_content_recovered(self, tmp_path):
+        """If cache file contains valid JSON but not a dict, start fresh.
+
+        Edge case: a file containing a JSON array [] instead of a dict {}.
+        """
+        cache_dir = tmp_path / "bad_cache"
+        cache_dir.mkdir()
+        cache_file = cache_dir / "google_cache.json"
+        cache_file.write_text("[1, 2, 3]")
+
+        geocoder = GoogleGeocoder(api_key="test-key", cache_dir=str(cache_dir))
+        assert geocoder._cache == {}

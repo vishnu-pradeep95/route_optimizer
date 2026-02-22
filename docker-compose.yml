@@ -13,6 +13,49 @@
 # The OSRM data must be preprocessed before starting. See infra/osrm/README.md
 
 services:
+  # ─── PostgreSQL + PostGIS: persistent storage ──────────────────────
+  # Stores orders, routes, vehicles, drivers, telemetry.
+  # PostGIS adds spatial types for GPS coordinates and proximity queries.
+  # Data persisted via named volume — survives container restarts.  #
+  # Why PostGIS instead of plain PostgreSQL?
+  # We store GPS coordinates as PostGIS geometry(Point, 4326) instead of
+  # plain float columns. This gives us:
+  # - Spatial indexes (GiST) for fast proximity queries ("find all drivers
+  #   within 500m of this depot")
+  # - Built-in functions like ST_Distance, ST_DWithin, ST_MakePoint
+  # - Coordinate system awareness (SRID 4326 = WGS84, the GPS standard)
+  # The 16-3.5 tag means PostgreSQL 16 + PostGIS 3.5.
+  #
+  # Why a named volume (pgdata) instead of bind mount?
+  # Named volumes are managed by Docker and survive container rebuilds.
+  # Bind mounts (-v ./data/postgres:/var/lib/...) tie you to a host path
+  # and can cause permission issues on Linux.
+  # To reset the database: docker volume rm routing_opt_pgdata  db:
+    image: postgis/postgis:16-3.5
+    container_name: lpg-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: routing_opt
+      POSTGRES_USER: routing
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-routing_dev_pass}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    # Why healthcheck + condition: service_healthy?
+    # Without this, Docker starts all services simultaneously. The API
+    # would try to connect to PostgreSQL before it's ready, causing
+    # connection refused errors. The healthcheck runs pg_isready every
+    # 10 seconds, and Docker waits until it passes before starting
+    # dependent services (api). This is Docker Compose's built-in
+    # readiness mechanism — no retry loops needed in application code.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U routing -d routing_opt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   # ─── OSRM: provides travel time/distance matrix ─────────────────────
   # Uses Kerala OpenStreetMap data. Preprocessed with Multi-Level Dijkstra
   # for fastest queries. Runs on port 5000.
@@ -62,9 +105,18 @@ services:
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
       - OSRM_URL=http://osrm:5000
       - VROOM_URL=http://vroom:3000
+      - DATABASE_URL=postgresql+asyncpg://routing:${DB_PASSWORD:-routing_dev_pass}@db:5432/routing_opt
     volumes:
       - ./data:/app/data
     depends_on:
-      - osrm
-      - vroom
+      db:
+        condition: service_healthy
+      osrm:
+        condition: service_started
+      vroom:
+        condition: service_started
     restart: unless-stopped
+
+# Named volumes — persist data across container restarts
+volumes:
+  pgdata:

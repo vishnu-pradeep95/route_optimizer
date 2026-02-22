@@ -27,6 +27,19 @@ These are **non-negotiable**. Flag any violation as `🔴 CRITICAL`:
 - [ ] **No real PII** in optimizer/database — only pseudonymized references, coordinates, weights
 - [ ] **Offline capability** — driver-facing features must work without network connectivity
 
+### 1b. CRITICAL — Security
+
+Security issues are as critical as safety. Flag any violation as `🔴 CRITICAL`:
+
+- [ ] **No wildcard CORS** — `allow_origins=["*"]` is forbidden in production. Must use env-based whitelist (`CORS_ALLOWED_ORIGINS`)
+- [ ] **Authentication required** — all data-mutating endpoints need auth (API key or JWT). Flag unprotected POST/PUT/DELETE.
+- [ ] **No secrets in code** — API keys, passwords, tokens must come from env vars / `.env`, never hardcoded
+- [ ] **Docker non-root** — containers must run as non-root user (`USER appuser`)
+- [ ] **Input validation** — all user inputs (query params, request bodies, file uploads) must be validated with bounds
+- [ ] **SQL injection** — no f-string/format SQL. All queries use SQLAlchemy ORM or parameterized raw SQL
+- [ ] **File upload safety** — validate filename (guard None), use temp files, clean up in `finally`
+- [ ] **Error messages** — no stack traces or internal paths in HTTP responses
+
 ### 2. WARNING — Design Document Alignment
 
 Cross-reference changes against `plan/kerala_delivery_route_system_design.md`. Flag
@@ -84,6 +97,19 @@ Tests are mandatory. Flag gaps as `🟢 INFO`:
 - [ ] Docker configs are commented
 - [ ] README exists or is updated for any new module
 - [ ] File is in the correct location per the modular architecture
+
+### 7. INFO — Optimization & Performance
+
+Flag performance issues as `🟢 INFO`:
+
+- [ ] **No N+1 queries** — all ORM relationships accessed in loops must use `selectinload()`
+- [ ] **Geocoding cache** — DB cache checked before external API calls; results cached after success
+- [ ] **Expensive objects** — don't recreate geocoders, HTTP clients, or optimizers per-request
+- [ ] **Query limits** — all list endpoints enforce `limit` parameter with `ge=`/`le=` bounds
+- [ ] **Bulk operations** — prefer `add_all()` or batch inserts over individual `session.add()` in loops
+- [ ] **VROOM weights** — use `round()` not `int()` for capacity/delivery to avoid cumulative error
+- [ ] **Atomic file writes** — write to `.tmp`, then `rename()` for cache/config files
+- [ ] **Timezone consistency** — all `datetime` values are timezone-aware (UTC). No naive datetimes.
 
 ## Output Format
 

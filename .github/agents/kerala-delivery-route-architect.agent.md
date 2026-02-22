@@ -485,14 +485,46 @@ A Mumbai food delivery startup would:
 
 ## Educational Code Standards
 
-This is a **learning project**. The code should teach, not just function.
+This is a **learning project**. The developer is actively learning software engineering
+patterns, database design, async Python, spatial data, and DevOps. Every piece of code
+should teach, not just function. The goal is that reading any file gives the developer
+a mini-lesson on the concepts being used.
 
-### Comment Rules
-Every significant block of code gets a comment explaining the **design decision** (why),
-not just the mechanics (what). Include links to documentation or articles where a
-decision came from.
+### The "Why" Rule (Most Important)
 
-**Good example:**
+**Every significant code decision must explain WHY, not WHAT.** The code itself
+already tells you *what* it does — a comment that restates the code is useless.
+A comment that explains *why this approach was chosen over alternatives* is invaluable.
+
+**Teaching moments to always capture:**
+1. **Trade-offs**: "We chose X over Y because [reason]. The downside is [trade-off]."
+2. **Gotchas**: "This looks like it should work with Z, but it doesn't because [reason]."
+3. **Calibration hints**: "This value (50m, 1.3×, etc.) can be tuned. To adjust it, [how]."
+4. **Links to docs**: Always include a URL to official docs or a good article when
+   referencing an API, library, or pattern. The developer should be able to click
+   through and learn more.
+5. **Architecture context**: "This module exists because [separation of concerns reason].
+   If we put this logic in [wrong place], it would [bad consequence]."
+
+### Comment Depth by Code Element
+
+| Code Element | Comment Depth | What to Explain | Example |
+|---|---|---|---|
+| **Module/file header** | 5–10 lines | What this module does, why it exists, how it fits in the architecture, what design pattern it follows | See `core/database/__init__.py` |
+| **Class definition** | 3–8 lines | Why this class exists, what pattern it implements, key design decisions | "Why Protocol instead of ABC? Because..." |
+| **Function/method** | Docstring + inline | Args, returns, side effects, and *why* this approach over alternatives | Include business context |
+| **Non-obvious algorithm** | 3–5 lines | Why this algorithm was chosen, what alternatives were considered, Big-O | "selectinload not joinedload because..." |
+| **Magic numbers / thresholds** | 2–3 lines | Where the value came from, what happens if you change it, how to recalibrate | "50m GPS threshold — tune down when..." |
+| **Config values** | 1–2 lines | What happens if you change this value, the valid range | "446 kg = 90% of rated 496 kg" |
+| **External API calls** | 2–3 lines | Link to API docs, rate limits, error handling rationale, cost implications | "Google API: $5/1000 requests" |
+| **Import choices** | When non-obvious | Why this library over alternatives | "asyncpg not psycopg because..." |
+| **Workarounds / hacks** | Always | What the ideal solution would be, why we're doing this instead, when to fix it | "TODO: replace when..." |
+| **SQL queries** | Always | What the query does in business terms, why these indexes help, join strategy | "N+1 problem avoided by selectinload" |
+| **Docker/infra config** | Always | Why this setting matters, what happens without it, how to change it | "healthcheck prevents race condition" |
+
+### Good vs Bad Examples
+
+**Good — explains the WHY and teaches a concept:**
 ```python
 # Why 1.3× safety multiplier on travel times:
 # OSRM calculates ideal travel times assuming perfect conditions. Kerala's narrow
@@ -503,23 +535,73 @@ decision came from.
 time_estimate = osrm_time * SAFETY_MULTIPLIER  # SAFETY_MULTIPLIER = 1.3
 ```
 
-**Bad example:**
+**Good — explains a non-obvious library behavior:**
+```python
+# Why selectinload(RouteDB.stops).selectinload(RouteStopDB.order)?
+# In async SQLAlchemy 2.0, accessing a relationship that wasn't eagerly loaded
+# triggers a synchronous lazy-load, which raises MissingGreenlet in an async
+# context. We need stop.order.order_id later, so load it now in 2 extra queries.
+# joinedload would also work but causes row multiplication with one-to-many.
+# See: https://docs.sqlalchemy.org/en/20/errors.html#error-xd2s
+```
+
+**Good — explains a Docker/infra concept:**
+```yaml
+# Why healthcheck + condition: service_healthy?
+# Without this, Docker starts all services simultaneously. The API would try
+# to connect to PostgreSQL before it's ready, causing connection refused errors.
+# The healthcheck runs pg_isready every 10 seconds, and Docker waits until it
+# passes before starting dependent services.
+```
+
+**Bad — restates the code:**
 ```python
 time_estimate = osrm_time * 1.3  # multiply by 1.3
 ```
 
-### What Gets Commented
-| Code Element | Comment Required | What to Explain |
-|---|---|---|
-| Module/file header | Always | What this module does, why it exists, how it fits in the architecture |
-| Class definition | Always | Why this class exists, what pattern it implements |
-| Function/method | Always (docstring) | Args, returns, side effects, and *why* this approach |
-| Non-obvious algorithm | Always | Why this algorithm was chosen over alternatives |
-| Magic numbers / thresholds | Always | Where the value came from, how to recalibrate |
-| Config values | Always | What happens if you change this value |
-| External API calls | Always | Link to API docs, rate limits, error handling rationale |
-| Import choices | When non-obvious | Why this library over alternatives |
-| Workarounds / hacks | Always | What the ideal solution would be, why we're doing this instead |
+**Bad — no context for a magic number:**
+```python
+if accuracy_m > 50.0:  # check accuracy threshold
+    return None
+```
+
+### Teaching Patterns in Tests
+
+Tests should also be educational. Every test class gets a docstring explaining what
+business rule or safety constraint it validates. Every test method's docstring explains
+the scenario in business terms, not just technical terms.
+
+**Good test docstring:**
+```python
+def test_telemetry_speed_alert(self):
+    """Speed > 40 km/h should trigger a safety alert.
+
+    Non-negotiable Kerala MVD constraint. The Motor Vehicles Department
+    issued directives against delivery speed pressure after quick-commerce
+    companies were linked to rider accidents. Our system flags speeding
+    for safety review — NOT to punish drivers, but to identify dangerous
+    road segments and adjust routes.
+    """
+```
+
+### Architecture Diagrams in Comments
+
+For complex modules, include ASCII art or Mermaid references showing data flow.
+This helps developers understand how the module fits into the bigger picture.
+
+```python
+\"\"\"Repository layer — CRUD operations for the routing optimization database.
+
+Data flow when a CSV is uploaded:
+    CSV file
+      → CsvImporter (core/data_import/)
+      → list[Order] (Pydantic models)
+      → VroomAdapter.optimize() → RouteAssignment
+      → repository.save_optimization_run()  ← THIS MODULE
+      → OrderDB, RouteDB, RouteStopDB (ORM models)
+      → PostgreSQL + PostGIS
+\"\"\"
+```
 
 ---
 

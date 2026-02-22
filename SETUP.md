@@ -72,7 +72,7 @@ pip install -r requirements.txt
 
 Verify:
 ```bash
-python -c "import fastapi, httpx, psycopg, shapely; print('All packages OK')"
+python -c "import fastapi, httpx, psycopg, shapely, sqlalchemy, asyncpg, geoalchemy2; print('All packages OK')"
 ```
 
 > **Tip:** If you're using VS Code, it will auto-detect `.venv/` and activate it
@@ -173,7 +173,9 @@ nano .env   # or: code .env
 | Variable | Where to Get It | Required? |
 |---|---|---|
 | `GOOGLE_MAPS_API_KEY` | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → enable "Geocoding API" | Phase 0+ |
-| `POSTGRES_PASSWORD` | Choose any strong password | Phase 0+ |
+| `POSTGRES_PASSWORD` | Choose any strong password | **Yes** — used by Docker Compose for the PostgreSQL container |
+| `POSTGRES_USER` | Defaults to `routeopt` | No |
+| `POSTGRES_DB` | Defaults to `routeopt` | No |
 | Other values | Defaults work for local development | — |
 
 ---
@@ -201,10 +203,15 @@ source .venv/bin/activate
 echo "=== Python ==="
 python --version
 python -c "import fastapi; print(f'FastAPI {fastapi.__version__}')"
+python -c "import sqlalchemy; print(f'SQLAlchemy {sqlalchemy.__version__}')"
+python -c "import asyncpg; print('asyncpg OK')"
 
 echo "=== Docker ==="
 docker --version
 docker compose version
+
+echo "=== Services ==="
+docker compose ps 2>/dev/null || echo "Services not started (run: docker compose up -d)"
 
 echo "=== Node ==="
 node --version 2>/dev/null || echo "Node.js not installed (optional for now)"
@@ -212,6 +219,9 @@ node --version 2>/dev/null || echo "Node.js not installed (optional for now)"
 echo "=== Git ==="
 git --version
 git log --oneline -3
+
+echo "=== Tests ==="
+pytest tests/ -q 2>/dev/null || echo "Run 'pytest tests/ -v' for full output"
 
 echo "=== All good! ==="
 ```
@@ -227,10 +237,14 @@ You should see version numbers for Python, Docker, and Git with no errors.
 | Activate Python venv | `source .venv/bin/activate` |
 | Install a new Python package | `pip install <package> && pip freeze > requirements.txt` |
 | Start Docker (WSL) | `sudo service docker start` |
-| Start all services | `docker compose up -d` (once docker-compose.yml exists) |
+| Start all services | `docker compose up -d` |
+| Start only database | `docker compose up -d db` |
 | Stop all services | `docker compose down` |
-| Run backend server | `uvicorn backend.app.main:app --reload` |
-| Run tests | `pytest` (once tests exist) |
+| Reset database (delete data) | `docker compose down -v` then `docker compose up -d db` |
+| View service logs | `docker compose logs -f api` |
+| Run backend server | `uvicorn apps.kerala_delivery.api.main:app --reload` |
+| Run tests | `pytest tests/ -v` |
+| Run tests (quick) | `pytest tests/ -q` |
 
 ---
 
