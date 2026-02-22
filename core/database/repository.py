@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 
 from geoalchemy2.functions import ST_MakePoint, ST_SetSRID
 from geoalchemy2.shape import to_shape
+from shapely import Point
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -66,7 +67,9 @@ def _point_to_location(
     """
     if geom is None:
         return None
-    shape = to_shape(geom)
+    # to_shape() returns BaseGeometry; cast to Point for .x/.y access.
+    # The type checker doesn't know the column stores Point, not LineString.
+    shape: Point = to_shape(geom)  # type: ignore[assignment]
     return Location(
         latitude=shape.y,    # Shapely point: x=longitude, y=latitude
         longitude=shape.x,

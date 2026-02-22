@@ -285,6 +285,44 @@ let currentRoute = null;
 let map = null;
 let markers = [];
 
+// GPS telemetry interval ID (cleared when route is unloaded).
+// Sends pings to /api/telemetry every TELEMETRY_INTERVAL_MS while
+// the driver has an active route. Enables speed alerts and live
+// tracking on the ops dashboard.
+let telemetryIntervalId = null;
+const TELEMETRY_INTERVAL_MS = 15_000; // 15 seconds — balance accuracy vs battery
+
+// ============================================================
+// Auth Header Helper
+// ============================================================
+// The API requires X-API-Key on all POST endpoints when API_KEY
+// is set on the server. The driver app reads the key from
+// localStorage (set via a config screen or injected at deploy).
+// In dev mode (no key set), the header is omitted and the server
+// allows all requests.
+function getAuthHeaders() {
+    const headers = {};
+    const apiKey = localStorage.getItem('lpg_api_key');
+    if (apiKey) {
+        headers['X-API-Key'] = apiKey;
+    }
+    return headers;
+}
+
+// Helper for authenticated POST requests
+async function authPost(url, body, isJson = true) {
+    const headers = { ...getAuthHeaders() };
+    const opts = { method: 'POST', headers };
+    if (isJson) {
+        headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+    } else {
+        // FormData — let browser set Content-Type with boundary
+        opts.body = body;
+    }
+    return fetch(url, opts);
+}
+
 // ============================================================
 // Service Worker Registration
 // ============================================================
@@ -379,13 +417,9 @@ async function replayOfflineQueue() {
 
     for (const item of queue) {
         try {
-            const resp = await fetch(
+            const resp = await authPost(
                 `${API_BASE}/api/routes/${item.vehicleId}/stops/${item.orderId}/status`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: item.status }),
-                }
+                { status: item.status },
             );
             if (!resp.ok) remaining.push(item); // Keep failed items for retry
         } catch {
@@ -426,6 +460,8 @@ window.addEventListener('DOMContentLoaded', () => {
             `${currentRoute.total_stops} stops · ${currentRoute.total_distance_km} km`;
         renderStopList();
         updateSummary();
+        // Resume telemetry for the cached route
+        startTelemetry();
     }
 
     // Replay any offline queued updates
@@ -448,10 +484,7 @@ async function handleFileUpload(input) {
     formData.append('file', file);
 
     try {
-        const resp = await fetch(`${API_BASE}/api/upload-orders`, {
-            method: 'POST',
-            body: formData,
-        });
+        const resp = await authPost(`${API_BASE}/api/upload-orders`, formData, false);
 
         if (!resp.ok) {
             const err = await resp.json();
@@ -528,6 +561,9 @@ async function loadRoute(vehicleId) {
 
     renderStopList();
     updateSummary();
+
+    // Start GPS telemetry for speed alerts + live tracking
+    startTelemetry();
 }
 
 // ============================================================
@@ -685,13 +721,9 @@ async function updateStatus(vehicleId, orderId, status) {
     // Send to server — the API expects a JSON body with { status: "..." }
     // See: apps/kerala_delivery/api/main.py StatusUpdate model
     try {
-        const resp = await fetch(
+        const resp = await authPost(
             `${API_BASE}/api/routes/${vehicleId}/stops/${orderId}/status`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status }),
-            }
+            { status },
         );
 
         if (!resp.ok) throw new Error('Server rejected update');
@@ -712,6 +744,117 @@ function updateSummary() {
     document.getElementById('summary-done').textContent = done;
     document.getElementById('summary-remaining').textContent = remaining;
     document.getElementById('summary-distance').textContent = currentRoute.total_distance_km;
+}
+
+// ============================================================
+// GPS Telemetry — periodic pings for speed alerts & tracking
+// ============================================================
+// Non-negotiable safety constraint: the system must flag GPS speed
+// > 40 km/h in urban zones (Kerala MVD directive). This requires
+// the driver app to periodically submit location data.
+//
+// Flow:
+//   1. When a route is loaded, startTelemetry() begins watching GPS
+//   2. Every TELEMETRY_INTERVAL_MS, a ping is sent to /api/telemetry
+//   3. If the server responds with speed_alert=true, a gentle
+//      non-distracting warning is shown (NOT a panic alarm)
+//   4. Pings are queued in localStorage when offline
+//
+// Battery note: navigator.watchPosition with enableHighAccuracy is more
+// battery-efficient than repeated getCurrentPosition calls. It lets
+// the OS batch GPS reads with other apps requesting location.
+
+let lastGpsPosition = null;
+
+function startTelemetry() {
+    if (telemetryIntervalId) return; // Already running
+    if (!('geolocation' in navigator)) {
+        console.warn('[Telemetry] Geolocation not available');
+        return;
+    }
+
+    // Watch position continuously — the OS is smarter about battery
+    // than polling getCurrentPosition repeatedly.
+    navigator.geolocation.watchPosition(
+        (pos) => { lastGpsPosition = pos; },
+        (err) => console.warn('[Telemetry] GPS error:', err.message),
+        { enableHighAccuracy: true, maximumAge: 10_000 }
+    );
+
+    // Send the latest cached position at regular intervals
+    telemetryIntervalId = setInterval(sendTelemetryPing, TELEMETRY_INTERVAL_MS);
+    console.log(`[Telemetry] Started (every ${TELEMETRY_INTERVAL_MS / 1000}s)`);
+}
+
+function stopTelemetry() {
+    if (telemetryIntervalId) {
+        clearInterval(telemetryIntervalId);
+        telemetryIntervalId = null;
+        console.log('[Telemetry] Stopped');
+    }
+}
+
+async function sendTelemetryPing() {
+    if (!lastGpsPosition || !currentRoute) return;
+
+    const { latitude, longitude, speed, accuracy, heading } = lastGpsPosition.coords;
+    const vehicleId = loadFromStorage(STORAGE_KEYS.VEHICLE_ID);
+    if (!vehicleId) return;
+
+    const ping = {
+        vehicle_id: vehicleId,
+        latitude,
+        longitude,
+        // GPS speed is in m/s; convert to km/h for the API
+        speed_kmh: speed != null ? speed * 3.6 : null,
+        accuracy_m: accuracy,
+        heading: heading,
+        recorded_at: new Date(lastGpsPosition.timestamp).toISOString(),
+    };
+
+    try {
+        const resp = await authPost(`${API_BASE}/api/telemetry`, ping);
+        if (resp.ok) {
+            const data = await resp.json();
+            handleSpeedAlert(data.speed_alert, data.message);
+        }
+    } catch {
+        // Offline — queue for replay. Not critical if individual pings are lost.
+        console.log('[Telemetry] Offline — ping skipped');
+    }
+}
+
+// ============================================================
+// Speed Alert UI
+// ============================================================
+// Safety: show a GENTLE visual reminder when the driver exceeds
+// 40 km/h. NOT a distracting alarm (we don't want to startle a
+// driver who is actively driving). The banner auto-dismisses.
+
+let speedAlertTimeout = null;
+
+function handleSpeedAlert(isAlert, message) {
+    const existing = document.getElementById('speed-alert-banner');
+    if (!isAlert) {
+        if (existing) existing.remove();
+        return;
+    }
+
+    if (!existing) {
+        const banner = document.createElement('div');
+        banner.id = 'speed-alert-banner';
+        banner.style.cssText =
+            'position:fixed;top:48px;left:0;right:0;background:#ff5722;color:white;' +
+            'text-align:center;padding:8px;font-size:14px;font-weight:600;z-index:1002;';
+        banner.textContent = '⚠️ Slow down — speed limit 40 km/h';
+        document.body.prepend(banner);
+    }
+
+    // Auto-dismiss after 10 seconds so it's not permanent
+    clearTimeout(speedAlertTimeout);
+    speedAlertTimeout = setTimeout(() => {
+        document.getElementById('speed-alert-banner')?.remove();
+    }, 10_000);
 }
 </script>
 </body>

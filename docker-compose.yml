@@ -30,7 +30,8 @@ services:
   # Named volumes are managed by Docker and survive container rebuilds.
   # Bind mounts (-v ./data/postgres:/var/lib/...) tie you to a host path
   # and can cause permission issues on Linux.
-  # To reset the database: docker volume rm routing_opt_pgdata  db:
+  # To reset the database: docker volume rm routing_opt_pgdata
+  db:
     image: postgis/postgis:16-3.5
     container_name: lpg-db
     ports:
@@ -103,6 +104,8 @@ services:
       - "8000:8000"
     environment:
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+      - API_KEY=${API_KEY:-}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
       - OSRM_URL=http://osrm:5000
       - VROOM_URL=http://vroom:3000
       - DATABASE_URL=postgresql+asyncpg://routing:${POSTGRES_PASSWORD:-routing_dev_pass}@db:5432/routing_opt

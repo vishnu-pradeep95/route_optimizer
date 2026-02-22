@@ -57,6 +57,19 @@ async def lifespan(app: FastAPI):
     - on_event is deprecated in newer FastAPI versions.
     See: https://fastapi.tiangolo.com/advanced/events/#lifespan
     """
+    # SECURITY: warn if API_KEY is unset outside dev mode.
+    # Missing API_KEY in production means all POST endpoints are unprotected.
+    env = os.environ.get("ENVIRONMENT", "development")
+    api_key = os.environ.get("API_KEY", "")
+    if not api_key and env != "development":
+        logger.warning(
+            "⚠️  API_KEY is not set and ENVIRONMENT=%s. "
+            "All POST endpoints are UNPROTECTED. Set API_KEY in production.",
+            env,
+        )
+    elif api_key:
+        logger.info("API key authentication enabled for POST endpoints")
+
     logger.info("Starting up — DB engine pool initialized")
     yield
     # Shutdown: dispose DB connection pool
@@ -660,8 +673,9 @@ async def get_vehicle_telemetry(
         "count": len(pings),
         "pings": [
             {
-                "latitude": to_shape(p.location).y if p.location else None,
-                "longitude": to_shape(p.location).x if p.location else None,
+                # Cast to Point for type checker — telemetry stores Point geometry
+                "latitude": to_shape(p.location).y if p.location else None,  # type: ignore[union-attr]
+                "longitude": to_shape(p.location).x if p.location else None,  # type: ignore[union-attr]
                 "speed_kmh": p.speed_kmh,
                 "accuracy_m": p.accuracy_m,
                 "heading": p.heading,
