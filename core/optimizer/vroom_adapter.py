@@ -139,7 +139,12 @@ class VroomAdapter:
         # Build jobs array (one per order)
         vroom_jobs = []
         for idx, order in enumerate(orders):
-            loc = order.location  # Already validated as not None
+            loc = order.location
+            # All orders are guaranteed geocoded by the ungeocoded check above.
+            # This guard satisfies the type checker and provides a clear error
+            # if the invariant is ever violated.
+            if loc is None:
+                raise ValueError(f"Order {order.order_id} not geocoded — cannot optimize")
             job: dict = {
                 "id": idx,
                 "location": [loc.longitude, loc.latitude],

@@ -357,10 +357,15 @@ async def update_stop_status(
         )
         .values(**values)
     )
+    # rowcount is available on CursorResult (returned by UPDATE/DELETE statements).
+    # The type checker sees Result[Any] which doesn't expose rowcount, but at runtime
+    # async session.execute() with a DML statement always returns CursorResult.
+    rows_updated: int = result.rowcount  # type: ignore[attr-defined]
+
     # Also update the corresponding order status — but ONLY if the stop was found.
     # Without this guard, a mismatched order_db_id would leave RouteStopDB unchanged
     # (0 rows updated) while still mutating the OrderDB status, corrupting state.
-    if result.rowcount > 0:
+    if rows_updated > 0:
         await session.execute(
             update(OrderDB)
             .where(OrderDB.id == order_db_id)
@@ -368,7 +373,7 @@ async def update_stop_status(
         )
 
     await session.flush()
-    return result.rowcount > 0
+    return rows_updated > 0
 
 
 # =============================================================================

@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -93,6 +94,74 @@ if _driver_app_dir.exists():
     app.mount("/driver", StaticFiles(directory=str(_driver_app_dir), html=True), name="driver_app")
 
 # =============================================================================
+# Authentication — API key on mutating endpoints
+# =============================================================================
+# Why API key (not JWT)?
+# This is an internal operations tool with a small user base (dispatchers +
+# driver app). API key auth is simpler to implement and debug. JWT is better
+# for multi-tenant SaaS — we'll migrate if/when needed in Phase 3+.
+# See: plan/session-journal.md (OPEN: C1 auth discussion)
+# SECURITY: auto_error=False so we get None (not 403) when the header is
+# missing — our verify_api_key function handles the error with a clear message.
+_api_key_scheme = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+# Maximum upload file size (bytes). 10 MB is generous for CSV/Excel files
+# containing 40-50 delivery orders per day. Prevents accidental or malicious
+# large uploads from consuming server memory.
+MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+async def verify_api_key(
+    api_key: str | None = Depends(_api_key_scheme),
+) -> None:
+    """Verify the X-API-Key header on mutating (POST) endpoints.
+
+    Security model:
+    - If API_KEY env var is empty/unset: all requests allowed (dev mode).
+      This lets developers run locally without configuring a key.
+    - If API_KEY is set: every POST request must include a matching
+      X-API-Key header or receive 401 Unauthorized.
+
+    Usage: add ``dependencies=[Depends(verify_api_key)]`` to @app.post().
+    GET endpoints remain unauthenticated (read-only, non-sensitive).
+    """
+    expected_key = os.environ.get("API_KEY", "")
+    if not expected_key:
+        return  # Dev mode — no auth required
+    if not api_key or api_key != expected_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key. Include X-API-Key header.",
+        )
+
+
+# =============================================================================
+# Geocoder singleton — reuse across requests to avoid repeated init
+# =============================================================================
+# Why singleton? GoogleGeocoder loads a file-based cache from disk on init.
+# Re-creating it per request wastes I/O reading the same cache file every time.
+# A module-level singleton loads the cache once and reuses it.
+_geocoder_instance: GoogleGeocoder | None = None
+
+
+def _get_geocoder() -> GoogleGeocoder | None:
+    """Get or create the shared GoogleGeocoder instance.
+
+    Returns None if GOOGLE_MAPS_API_KEY is not set (geocoding disabled).
+    Thread-safe for the single-worker uvicorn setup we use.
+    Note: the instance is cached on first successful creation. If the API key
+    changes at runtime, restart the server to pick up the new key.
+    """
+    global _geocoder_instance
+    if _geocoder_instance is not None:
+        return _geocoder_instance
+    api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    if api_key:
+        _geocoder_instance = GoogleGeocoder(api_key=api_key)
+    return _geocoder_instance
+
+
+# =============================================================================
 # Database session dependency
 # =============================================================================
 # Why a global dependency instead of importing get_session in each endpoint?
@@ -155,7 +224,7 @@ async def health_check():
     return {"status": "ok", "service": "kerala-lpg-optimizer", "version": app.version}
 
 
-@app.post("/api/upload-orders", response_model=OptimizationSummary)
+@app.post("/api/upload-orders", response_model=OptimizationSummary, dependencies=[Depends(verify_api_key)])
 async def upload_and_optimize(
     file: UploadFile = File(...),
     session: AsyncSession = SessionDep,
@@ -170,16 +239,32 @@ async def upload_and_optimize(
 
     Returns a summary with a run_id. Drivers then call
     GET /api/routes/{vehicle_id} to get their specific route.
+    Requires X-API-Key header when API_KEY env var is set.
     """
     # Save uploaded file to temp location
     # SECURITY: file.filename can be None if the client omits the name header.
     # Always guard against None before calling string methods.
     filename = file.filename or ""
+    # SECURITY: validate file extension before processing.
+    # Prevents uploading executables, scripts, or other dangerous file types.
+    if not filename.lower().endswith((".csv", ".xlsx", ".xls")):
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file format. Use .csv, .xlsx, or .xls",
+        )
+
     suffix = ".csv" if filename.lower().endswith(".csv") else ".xlsx"
     tmp_path: str | None = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             content = await file.read()
+            # SECURITY: enforce max upload size to prevent memory exhaustion.
+            # 10 MB is generous for CSV/Excel with 40-50 orders per day.
+            if len(content) > MAX_UPLOAD_SIZE_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)} MB.",
+                )
             tmp.write(content)
             tmp_path = tmp.name
         # Step 1: Import orders from CSV/Excel
@@ -196,9 +281,9 @@ async def upload_and_optimize(
             raise HTTPException(status_code=400, detail="No valid orders found in file")
 
         # Step 2: Geocode orders that don't have coordinates
-        # First check the database geocode cache (free!), then fall back to Google API
-        api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "")
-        geocoder = GoogleGeocoder(api_key=api_key) if api_key else None
+        # First check the database geocode cache (free!), then fall back to Google API.
+        # Uses module-level singleton to avoid re-reading cache file per request.
+        geocoder = _get_geocoder()
 
         for order in orders:
             if not order.is_geocoded:
@@ -209,7 +294,10 @@ async def upload_and_optimize(
                     logger.info("Cache hit for address: %s", order.address_raw[:50])
                 elif geocoder:
                     result = geocoder.geocode(order.address_raw)
-                    if result.success:
+                    # Guard: check result.location is not None before accessing
+                    # its attributes. GeocodingResult can have success=True with
+                    # location=None in edge cases.
+                    if result.success and result.location:
                         order.location = result.location
                         # Cache for future use
                         await repo.save_geocode_cache(
@@ -404,7 +492,7 @@ class StatusUpdate(BaseModel):
     )
 
 
-@app.post("/api/routes/{vehicle_id}/stops/{order_id}/status")
+@app.post("/api/routes/{vehicle_id}/stops/{order_id}/status", dependencies=[Depends(verify_api_key)])
 async def update_stop_status(
     vehicle_id: str,
     order_id: str,
@@ -496,7 +584,7 @@ class TelemetryResponse(BaseModel):
     message: str
 
 
-@app.post("/api/telemetry", response_model=TelemetryResponse)
+@app.post("/api/telemetry", response_model=TelemetryResponse, dependencies=[Depends(verify_api_key)])
 async def submit_telemetry(
     ping: TelemetryPing,
     session: AsyncSession = SessionDep,

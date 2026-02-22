@@ -6,7 +6,7 @@ include: customer ID, address, cylinder type (14.2 kg domestic or 19 kg
 commercial), quantity, and booking reference.
 """
 
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -73,7 +73,10 @@ class Order(BaseModel):
     )
     notes: str = Field(default="", description="Delivery instructions for driver")
     status: OrderStatus = Field(default=OrderStatus.PENDING)
-    created_at: datetime = Field(default_factory=datetime.now)
+    # Why lambda instead of datetime.now(timezone.utc) directly?
+    # Field(default_factory=...) needs a callable. Using the bare expression
+    # would evaluate once at import time (same timestamp for every order).
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     # Phase 2: delivery time windows — "deliver between 09:00 and 12:00"
     # Used by VROOM's VRPTW solver to respect customer time preferences.
     # If both are None, the order has no time constraint (pure CVRP).

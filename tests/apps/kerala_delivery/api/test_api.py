@@ -815,3 +815,197 @@ class TestGeocodeCacheHit:
         data = resp.json()
         assert data["total_orders"] == 2
         assert data["orders_assigned"] == 2
+
+
+# =============================================================================
+# Authentication Tests
+# =============================================================================
+
+
+class TestAuthentication:
+    """Tests for API key authentication on mutating endpoints.
+
+    When the API_KEY environment variable is set, all POST endpoints
+    must include a valid X-API-Key header. GET endpoints remain open
+    (read-only, non-sensitive data for the dashboard).
+
+    Security requirement from Code Review #6 — Critical finding C1.
+    """
+
+    @pytest.fixture
+    def auth_client(self, mock_session):
+        """TestClient with API_KEY set — requires auth on POST endpoints.
+
+        Uses patch.dict to set API_KEY for the duration of each test.
+        The verify_api_key dependency reads os.environ at request time,
+        so the env var must be set when the request is made (not just
+        when the TestClient is created).
+        """
+        async def override_get_session():
+            yield mock_session
+
+        app.dependency_overrides[get_session] = override_get_session
+        with patch.dict(os.environ, {"API_KEY": "test-secret-key-123"}):
+            yield TestClient(app)
+        app.dependency_overrides.clear()
+
+    def test_upload_rejects_missing_key(self, auth_client, sample_csv_file):
+        """POST /api/upload-orders without X-API-Key header returns 401."""
+        resp = auth_client.post(
+            "/api/upload-orders",
+            files={"file": ("orders.csv", sample_csv_file, "text/csv")},
+        )
+        assert resp.status_code == 401
+        assert "API key" in resp.json()["detail"]
+
+    def test_upload_rejects_wrong_key(self, auth_client, sample_csv_file):
+        """POST /api/upload-orders with incorrect API key returns 401."""
+        resp = auth_client.post(
+            "/api/upload-orders",
+            files={"file": ("orders.csv", sample_csv_file, "text/csv")},
+            headers={"X-API-Key": "wrong-key"},
+        )
+        assert resp.status_code == 401
+
+    def test_status_update_rejects_missing_key(self, auth_client):
+        """POST /api/routes/.../status without API key returns 401."""
+        resp = auth_client.post(
+            "/api/routes/VEH-01/stops/ORD-001/status",
+            json={"status": "delivered"},
+        )
+        assert resp.status_code == 401
+
+    def test_telemetry_rejects_missing_key(self, auth_client):
+        """POST /api/telemetry without API key returns 401."""
+        resp = auth_client.post(
+            "/api/telemetry",
+            json={
+                "vehicle_id": "VEH-01",
+                "latitude": 9.9716,
+                "longitude": 76.2846,
+                "speed_kmh": 30.0,
+            },
+        )
+        assert resp.status_code == 401
+
+    def test_get_endpoints_open_without_key(self, auth_client):
+        """GET endpoints should work without API key even when API_KEY is set.
+
+        GET /api/routes returns 404 (no routes), not 401 — proving that
+        authentication was not enforced on the read-only endpoint.
+        """
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=None)
+            resp = auth_client.get("/api/routes")
+        assert resp.status_code == 404  # No routes, but auth passed
+
+    def test_upload_accepts_correct_key(
+        self, auth_client, sample_csv_file, mock_vroom_2_orders, mock_run_id
+    ):
+        """POST /api/upload-orders with correct API key succeeds (200)."""
+        with (
+            patch("core.optimizer.vroom_adapter.httpx.post") as mock_post,
+            patch("apps.kerala_delivery.api.main.repo") as mock_repo,
+        ):
+            mock_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: mock_vroom_2_orders,
+                raise_for_status=lambda: None,
+            )
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[])
+            mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
+
+            resp = auth_client.post(
+                "/api/upload-orders",
+                files={"file": ("orders.csv", sample_csv_file, "text/csv")},
+                headers={"X-API-Key": "test-secret-key-123"},
+            )
+        assert resp.status_code == 200
+
+
+# =============================================================================
+# Upload Validation Tests
+# =============================================================================
+
+
+class TestUploadValidation:
+    """Tests for upload file validation — extension and size checks.
+
+    SECURITY: prevents uploading executable files, scripts, or
+    excessively large files that could exhaust server memory.
+    Added after Code Review #6 — Warning W1.
+    """
+
+    def test_rejects_unsupported_extension(self, client):
+        """Uploading a .txt file should return 400."""
+        resp = client.post(
+            "/api/upload-orders",
+            files={"file": ("orders.txt", b"some data", "text/plain")},
+        )
+        assert resp.status_code == 400
+        assert "unsupported" in resp.json()["detail"].lower()
+
+    def test_rejects_exe_file(self, client):
+        """Uploading an .exe should return 400."""
+        resp = client.post(
+            "/api/upload-orders",
+            files={"file": ("malware.exe", b"\x00" * 100, "application/octet-stream")},
+        )
+        assert resp.status_code == 400
+
+    def test_rejects_filename_without_extension(self, client):
+        """Upload with no file extension should return 400."""
+        resp = client.post(
+            "/api/upload-orders",
+            files={"file": ("orders_noext", b"data", "text/csv")},
+        )
+        assert resp.status_code == 400
+
+    def test_rejects_oversized_file(self, client):
+        """Upload exceeding MAX_UPLOAD_SIZE_BYTES should return 413.
+
+        We patch the constant to 100 bytes to avoid creating a 10+ MB
+        payload in memory during tests.
+        """
+        with patch("apps.kerala_delivery.api.main.MAX_UPLOAD_SIZE_BYTES", 100):
+            resp = client.post(
+                "/api/upload-orders",
+                files={"file": ("big.csv", b"x" * 200, "text/csv")},
+            )
+        assert resp.status_code == 413
+        assert "too large" in resp.json()["detail"].lower()
+
+
+# =============================================================================
+# Query Parameter Bounds Tests
+# =============================================================================
+
+
+class TestQueryBoundsValidation:
+    """Tests for query parameter boundary validation (ge/le constraints).
+
+    FastAPI + Pydantic validate Query() parameters automatically and
+    return 422 Unprocessable Entity for out-of-range values. These tests
+    verify the bounds are enforced. Added after Code Review #6 — Warning W4.
+    """
+
+    def test_telemetry_limit_zero_returns_422(self, client):
+        """limit=0 on /api/telemetry/{id} should fail (ge=1)."""
+        resp = client.get("/api/telemetry/VEH-01?limit=0")
+        assert resp.status_code == 422
+
+    def test_telemetry_limit_exceeds_max_returns_422(self, client):
+        """limit=1001 on /api/telemetry/{id} should fail (le=1000)."""
+        resp = client.get("/api/telemetry/VEH-01?limit=1001")
+        assert resp.status_code == 422
+
+    def test_runs_limit_zero_returns_422(self, client):
+        """limit=0 on /api/runs should fail (ge=1)."""
+        resp = client.get("/api/runs?limit=0")
+        assert resp.status_code == 422
+
+    def test_runs_limit_exceeds_max_returns_422(self, client):
+        """limit=101 on /api/runs should fail (le=100)."""
+        resp = client.get("/api/runs?limit=101")
+        assert resp.status_code == 422

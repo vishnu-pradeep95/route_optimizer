@@ -177,3 +177,39 @@ class TestRoute:
         )
         assert assignment.total_orders_assigned == 3
         assert assignment.vehicles_used == 2
+
+
+class TestTimezoneConsistency:
+    """Verify all model timestamps are timezone-aware (UTC).
+
+    Naive datetimes (no tzinfo) cause subtle bugs when comparing timestamps
+    across services or when PostgreSQL stores them as TIMESTAMP WITHOUT
+    TIME ZONE. All created_at fields must default to UTC-aware datetimes.
+    Added after Code Review #6 — Warning W2.
+    """
+
+    def test_order_created_at_is_utc_aware(self):
+        """Order.created_at should default to a timezone-aware UTC datetime."""
+        order = Order(
+            order_id="TZ-001",
+            address_raw="Test Address, Kochi",
+            customer_ref="CUST-001",
+            weight_kg=14.2,
+        )
+        assert order.created_at.tzinfo is not None, (
+            "Order.created_at must be timezone-aware"
+        )
+
+    def test_route_created_at_is_utc_aware(self):
+        """Route.created_at should default to a timezone-aware UTC datetime."""
+        route = Route(route_id="R-TZ-001", vehicle_id="VEH-01")
+        assert route.created_at.tzinfo is not None, (
+            "Route.created_at must be timezone-aware"
+        )
+
+    def test_route_assignment_created_at_is_utc_aware(self):
+        """RouteAssignment.created_at should default to a timezone-aware UTC datetime."""
+        assignment = RouteAssignment(assignment_id="A-TZ-001")
+        assert assignment.created_at.tzinfo is not None, (
+            "RouteAssignment.created_at must be timezone-aware"
+        )

@@ -38,7 +38,7 @@ services:
     environment:
       POSTGRES_DB: routing_opt
       POSTGRES_USER: routing
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-routing_dev_pass}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-routing_dev_pass}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
@@ -105,7 +105,7 @@ services:
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
       - OSRM_URL=http://osrm:5000
       - VROOM_URL=http://vroom:3000
-      - DATABASE_URL=postgresql+asyncpg://routing:${DB_PASSWORD:-routing_dev_pass}@db:5432/routing_opt
+      - DATABASE_URL=postgresql+asyncpg://routing:${POSTGRES_PASSWORD:-routing_dev_pass}@db:5432/routing_opt
     volumes:
       - ./data:/app/data
     depends_on:
