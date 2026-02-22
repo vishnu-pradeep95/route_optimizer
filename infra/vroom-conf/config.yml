@@ -1,0 +1,30 @@
+### VROOM Express configuration for the Kerala delivery route optimizer.
+#
+# This tells VROOM how to connect to the OSRM routing engine.
+# OSRM runs in a sibling Docker container named 'osrm' on port 5000.
+# The 'car' profile is the closest default to our three-wheeler —
+# we compensate with a 1.3× safety multiplier in Python.
+#
+# See: https://github.com/VROOM-Project/vroom-express#setup
+
+cliArgs:
+  geometry: false
+  planmode: false
+  threads: 4
+  explore: 5
+  limit: '1mb'
+  logdir: '/..'
+  logsize: '100M'
+  maxlocations: 1000
+  maxvehicles: 200
+  override: true
+  path: ''
+  port: 3000
+  router: 'osrm'
+  timeout: 300000
+  baseurl: '/'
+routingServers:
+  osrm:
+    car:
+      host: 'osrm'
+      port: '5000'

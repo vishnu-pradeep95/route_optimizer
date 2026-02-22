@@ -1,0 +1,70 @@
+# Docker Compose for the Kerala LPG Delivery Route Optimizer
+#
+# Services:
+#   osrm    — Open Source Routing Machine (travel time/distance calculations)
+#   vroom   — Vehicle Route Optimizer (assigns orders to vehicles, sequences stops)
+#   api     — FastAPI backend (imports CSV, geocodes, triggers optimizer, serves routes)
+#
+# Usage:
+#   1. First time: download Kerala OSM data and preprocess (see SETUP.md)
+#   2. docker compose up -d
+#   3. Open http://localhost:8000/driver/ for the driver app
+#
+# The OSRM data must be preprocessed before starting. See infra/osrm/README.md
+
+services:
+  # ─── OSRM: provides travel time/distance matrix ─────────────────────
+  # Uses Kerala OpenStreetMap data. Preprocessed with Multi-Level Dijkstra
+  # for fastest queries. Runs on port 5000.
+  osrm:
+    image: osrm/osrm-backend:latest
+    container_name: osrm-kerala
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data/osrm:/data
+    command: osrm-routed --algorithm mld /data/kerala-latest.osrm
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ─── VROOM: route optimization solver ────────────────────────────────
+  # Connects to OSRM for travel times, solves CVRP/VRPTW in milliseconds.
+  # Runs on port 3000. Config in infra/vroom-conf/config.yml sets OSRM host.
+  vroom:
+    image: vroomvrp/vroom-docker:v1.14.0-rc.2
+    container_name: vroom-solver
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./infra/vroom-conf/config.yml:/vroom-express/config.yml
+    environment:
+      - VROOM_ROUTER=osrm
+    depends_on:
+      osrm:
+        condition: service_started
+    restart: unless-stopped
+
+  # ─── Backend API ─────────────────────────────────────────────────────
+  # FastAPI server: handles CSV upload, geocoding, optimization trigger,
+  # and serves driver routes. Also serves the driver PWA.
+  api:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+    container_name: lpg-api
+    ports:
+      - "8000:8000"
+    environment:
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+      - OSRM_URL=http://osrm:5000
+      - VROOM_URL=http://vroom:3000
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - osrm
+      - vroom
+    restart: unless-stopped
