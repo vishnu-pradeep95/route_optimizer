@@ -18,7 +18,6 @@ carries the metadata for all models that inherit from it.
 """
 
 import asyncio
-import os
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -91,13 +90,15 @@ def include_object(
     return not reflected
 
 # ---------------------------------------------------------------------------
-# Override sqlalchemy.url from DATABASE_URL env var if present.
-# This ensures Alembic uses the same connection string as the app.
-# Falls back to the value in alembic.ini for local dev.
+# Resolve the database URL — single source of truth.
+#
+# Priority: DATABASE_URL env var → core.database.connection default.
+# This ensures Alembic always connects to the same DB as the FastAPI app.
+# The alembic.ini sqlalchemy.url is a placeholder — never used directly.
 # ---------------------------------------------------------------------------
-DATABASE_URL = os.environ.get("DATABASE_URL")
-if DATABASE_URL:
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+from core.database.connection import DATABASE_URL  # noqa: E402
+
+config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 
 def run_migrations_offline() -> None:

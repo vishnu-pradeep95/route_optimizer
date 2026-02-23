@@ -59,9 +59,12 @@ export interface RouteDetail {
 export interface TelemetryPing {
   latitude: number;
   longitude: number;
-  speed_kmh: number;
-  accuracy_m: number;
-  heading: number;
+  /** Nullable — API returns null when speed can't be calculated from GPS fix. */
+  speed_kmh: number | null;
+  /** Nullable — GPS accuracy varies; null means the device didn't report it. */
+  accuracy_m: number | null;
+  /** Nullable — heading unavailable when vehicle is stationary. */
+  heading: number | null;
   recorded_at: string;
   /** True when speed exceeds 40 km/h in urban zone (Kerala MVD safety rule). */
   speed_alert: boolean;

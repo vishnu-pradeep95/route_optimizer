@@ -245,6 +245,14 @@ You should see version numbers for Python, Docker, and Git with no errors.
 | Run backend server | `uvicorn apps.kerala_delivery.api.main:app --reload` |
 | Run tests | `pytest tests/ -v` |
 | Run tests (quick) | `pytest tests/ -q` |
+| **Alembic: apply migrations** | `alembic upgrade head` |
+| **Alembic: current revision** | `alembic current` |
+| **Alembic: migration history** | `alembic history` |
+| **Alembic: autogenerate migration** | `alembic revision --autogenerate -m "description"` |
+| **Dashboard: install deps** | `cd apps/kerala_delivery/dashboard && npm install` |
+| **Dashboard: dev server** | `cd apps/kerala_delivery/dashboard && npm run dev` → http://localhost:5173 |
+| **Dashboard: production build** | `cd apps/kerala_delivery/dashboard && npm run build` |
+| **Dashboard: type check** | `cd apps/kerala_delivery/dashboard && npx tsc --noEmit` |
 
 ---
 

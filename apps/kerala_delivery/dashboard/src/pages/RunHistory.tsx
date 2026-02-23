@@ -12,7 +12,7 @@
  * 3. Display routes in an expandable detail panel below the table
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Fragment } from "react";
 import { fetchRuns, fetchRunRoutes } from "../lib/api";
 import type { OptimizationRun, RouteSummary } from "../types";
 import { STATUS_COLORS } from "../types";
@@ -157,9 +157,8 @@ export function RunHistory() {
           </thead>
           <tbody>
             {runs.map((run) => (
-              <>
+              <Fragment key={run.run_id}>
                 <tr
-                  key={run.run_id}
                   className={`run-row ${expandedRunId === run.run_id ? "expanded" : ""}`}
                   onClick={() => handleRowClick(run.run_id)}
                   title="Click to view routes"
@@ -247,7 +246,7 @@ export function RunHistory() {
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             ))}
 
             {runs.length === 0 && !error && (

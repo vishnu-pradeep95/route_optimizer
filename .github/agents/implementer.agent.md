@@ -164,6 +164,7 @@ Before finishing any implementation, verify these security requirements:
 | **File uploads** | Validate file extension, guard against `file.filename is None`, use temp files with cleanup in `finally`. | Prevents path traversal, resource leaks |
 | **SQL injection** | Never use f-strings or `.format()` in SQL. Always use SQLAlchemy parameterized queries. | Prevents data exfiltration/corruption |
 | **Secrets** | API keys in env vars only (`.env`), never in code. Check `.env.example` is updated. | Prevents credential leaks in git |
+| **Alembic config** | Never put real credentials in `alembic.ini`. Import `DATABASE_URL` from `core.database.connection` in `env.py`. | Single source of truth for DB URL; prevents accidental credential commits |
 | **Docker** | Run containers as non-root (`USER appuser`). Pin image versions. | Limits blast radius of container escapes |
 | **Rate limiting** | High-frequency endpoints (telemetry, uploads) should note rate limiting needs. | Prevents DoS |
 | **Error messages** | Never expose stack traces or internal paths in HTTP error responses. | Prevents information disclosure |
@@ -180,6 +181,9 @@ Performance matters for real-time delivery operations:
 | **Batch operations** | Use `session.add_all()` or bulk inserts for multiple rows. | Reduces round-trips to PostgreSQL |
 | **Query limits** | All list endpoints must accept and enforce a `limit` parameter with sensible defaults. | Prevents unbounded result sets |
 | **VROOM weights** | Use `round()` not `int()` for VROOM capacity/delivery values. | Prevents cumulative 1.4% weight underestimation |
+| **Alembic migrations** | Every migration gets an educational docstring. ORM index names must match `init.sql` names exactly (no `_orm` suffix). | Prevents duplicate indexes; supports learning goals |
+| **Dashboard types** | API fields that can be `null` (e.g., `speed_kmh`, `heading`) must be typed `number \| null` in TypeScript and guarded with `?? default` in JSX. | Prevents runtime `null.toFixed()` crashes |
+| **No countdown timers** | Never add countdown timers or "arriving in X minutes" UI in any dashboard or driver app. Kerala MVD directive. | Legal compliance — see copilot-instructions.md |
 
 ## Task Execution Pattern
 

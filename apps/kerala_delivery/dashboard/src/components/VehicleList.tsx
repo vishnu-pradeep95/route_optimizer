@@ -144,7 +144,7 @@ export function VehicleList({
                   <span>{route.total_distance_km.toFixed(1)} km</span>
                 </div>
                 <div className="vehicle-stat">
-                  <span className="stat-icon">⏱</span>
+                  <span className="stat-icon">⚖️</span>
                   <span>{route.total_weight_kg.toFixed(0)} kg</span>
                 </div>
               </div>

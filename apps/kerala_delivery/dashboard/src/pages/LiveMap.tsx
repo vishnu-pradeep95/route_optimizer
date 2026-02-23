@@ -72,6 +72,9 @@ export function LiveMap() {
       setUnassignedOrders(routesRes.unassigned_orders);
 
       // Fetch details for all vehicles in parallel
+      // TODO Phase 3: Replace this N+1 pattern with a single batch endpoint
+      // (e.g. GET /api/routes?include_stops=true) to reduce HTTP round-trips.
+      // At current scale (5-13 vehicles) this is fine, but won't scale to 50+.
       const detailResults = await Promise.allSettled(
         routesRes.routes.map((r) => fetchRouteDetail(r.vehicle_id))
       );

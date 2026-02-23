@@ -22,11 +22,16 @@ cp .env.example .env
 sudo service docker start          # WSL2 only
 docker compose up -d
 
-# 4. Run tests
+# 4. Apply database migrations
+alembic upgrade head
+
+# 5. Run tests
 pytest tests/ -v
 
-# 5. Open the driver app
-# http://localhost:8000/driver/
+# 6. Open the driver app / dashboard
+# Driver PWA:     http://localhost:8000/driver/
+# Ops dashboard:  cd apps/kerala_delivery/dashboard && npm run dev
+#                 → http://localhost:5173
 ```
 
 > **Full setup guide** (first-time, including Docker install, OSRM data prep): see [SETUP.md](SETUP.md)
@@ -87,9 +92,13 @@ routing_opt/
 │   └── kerala_delivery/           ← FIRST APP: Kerala LPG business logic
 │       ├── config.py              ← All Kerala-specific constants
 │       ├── api/main.py            ← FastAPI backend (upload, optimize, serve)
-│       └── driver_app/            ← PWA (index.html, sw.js, manifest.json)
+│       ├── driver_app/            ← PWA (index.html, sw.js, manifest.json)
+│       └── dashboard/             ← Ops dashboard (React + Vite + MapLibre GL JS)
+│           ├── src/pages/         ← LiveMap (real-time tracking), RunHistory
+│           ├── src/components/    ← RouteMap, VehicleList, StatsBar
+│           └── src/lib/api.ts     ← Typed fetch client for all API endpoints
 │
-├── tests/                         ← Mirrors source structure (109 tests)
+├── tests/                         ← Mirrors source structure (144 tests)
 │   ├── conftest.py                ← Shared fixtures (Kerala coordinates)
 │   ├── core/                      ← Unit tests for all core modules
 │   │   └── database/              ← 35 DB tests (models, repository, connection)
@@ -99,6 +108,9 @@ routing_opt/
 ├── infra/
 │   ├── Dockerfile                 ← API container image
 │   ├── postgres/init.sql          ← PostGIS schema + extensions + seed data
+│   ├── alembic/                   ← Database migrations (async SQLAlchemy)
+│   │   ├── env.py                 ← Async migration runner + PostGIS filter
+│   │   └── versions/              ← Migration scripts (3 so far)
 │   └── vroom-conf/                ← VROOM service configuration
 ├── docker-compose.yml             ← PostgreSQL + OSRM + VROOM + API stack
 ├── data/
@@ -216,7 +228,8 @@ These are enforced by the system and cannot be bypassed:
 | **Data models** | Pydantic v2 + SQLAlchemy ORM | Validation, serialization, persistence |
 | **Geocoding** | Google Maps API (PostGIS cache) | Address → GPS coordinates |
 | **Driver app** | PWA (HTML/JS/Service Worker) | Mobile-friendly, offline-capable |
-| **Migrations** | Alembic | Database schema versioning |
+| **Migrations** | Alembic (async) | Database schema versioning (3 migrations applied) |
+| **Ops Dashboard** | React 19 + Vite 7 + MapLibre GL JS 5 | Live vehicle tracking, route visualization, run history |
 | **Infrastructure** | Docker Compose | Single-command deployment |
 
 ---
@@ -228,7 +241,7 @@ source .venv/bin/activate
 pytest tests/ -v
 ```
 
-**109 tests** covering:
+**144 tests** covering:
 - Core models (location, order, vehicle, route validation)
 - OSRM adapter (travel time, distance matrix, safety multiplier)
 - VROOM adapter (route optimization, priority, unassigned handling)

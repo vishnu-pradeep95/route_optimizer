@@ -1,9 +1,21 @@
-"""align types and nullability with ORM models
+"""Align types and nullability with ORM models.
 
 Revision ID: ccbb9fc2db2c
 Revises: 215c8204dc10
 Create Date: 2026-02-22 00:44:21.396599
 
+What this migration does and why:
+- Aligns the PostgreSQL schema (created by init.sql) with the SQLAlchemy ORM
+  model definitions in core/database/models.py.
+- REAL -> Float: PostgreSQL REAL is 4-byte; SQLAlchemy Float maps to 8-byte
+  DOUBLE PRECISION by default. The extra precision helps with cumulative
+  distance/weight calculations across many route stops.
+- nullable -> NOT NULL: Fields like created_at, is_active, and confidence were
+  missing NOT NULL constraints in init.sql. The ORM expects them non-nullable.
+- Adds GiST spatial indexes on route_stops and vehicles for delivery-location
+  and depot-location queries respectively.
+- Adds telemetry indexes with _orm suffix (the init.sql originals are kept
+  for safety; the _orm variants ensure autogenerate doesn't recreate them).
 """
 from typing import Sequence, Union
 

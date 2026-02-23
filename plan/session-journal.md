@@ -204,3 +204,64 @@
 5. Push to remote: `git push origin main`
 
 ---
+
+## 2026-02-22 — Phase 2: Alembic Migrations + Ops Dashboard + Code Review #6 Fixes
+
+**Phase:** 2 (multi-vehicle + database — Alembic + dashboard complete)
+**Tests:** 144 passing (118 → 144)
+
+**What happened:**
+- **Alembic async migrations** initialized. `env.py` uses async engine (asyncpg), imports `DATABASE_URL` from `core.database.connection` (single source of truth), and filters PostGIS system tables via `include_object()` callback.
+- **3 migrations created & applied:**
+  1. `215c8204dc10` — baseline stamp (represents init.sql schema)
+  2. `ccbb9fc2db2c` — align REAL→Float, nullable→NOT NULL, add spatial indexes
+  3. `4228dedc0975` — drop duplicate `_orm`-suffix telemetry indexes (Review #6 fix W1)
+- **React + TypeScript ops dashboard** built at `apps/kerala_delivery/dashboard/`:
+  - Stack: React 19 + Vite 7 + MapLibre GL JS 5 + react-map-gl 8
+  - Pages: LiveMap (real-time vehicle tracking, 15s telemetry polling), RunHistory (expandable optimization run table)
+  - Components: RouteMap (polylines + stop markers + live GPS dots), VehicleList (sidebar with ETA ranges), StatsBar (summary cards)
+  - Typed API client (`lib/api.ts`) for all 6 backend endpoints
+  - Production build: 0 TS errors, 78 modules, ~170 KB gzip
+- **Code Review #6** (1 CRITICAL, 3 WARNING, 5 INFO) — **all findings implemented:**
+  - C1: Removed hardcoded DB password from `alembic.ini` → placeholder + env.py imports from connection.py
+  - W1: Reconciled duplicate telemetry indexes (renamed ORM indexes to match init.sql, created migration to drop `_orm` duplicates)
+  - W2: Added TODO for batch endpoint to replace N+1 telemetry fetch pattern in LiveMap
+  - W3: Added TODO for Phase 3 drag-and-drop route adjustment in RouteMap
+  - I1: Fixed wrong icon (⏱ → ⚖️ for weight in VehicleList)
+  - I3: Fixed missing Fragment key in RunHistory
+  - I4: Made telemetry fields nullable (`speed_kmh`, `accuracy_m`, `heading` → `number | null`) + null guards in RouteMap
+  - I5: Added educational docstring to type-alignment migration
+
+**Files changed (25+):**
+| Area | Files |
+|---|---|
+| Alembic | `alembic.ini`, `infra/alembic/{env.py, script.py.mako}`, `infra/alembic/versions/{215c8204dc10,ccbb9fc2db2c,4228dedc0975}*.py` |
+| Dashboard | `apps/kerala_delivery/dashboard/{package.json, tsconfig*.json, vite.config.ts, index.html, src/{App,main}.tsx, types.ts, lib/api.ts, components/{RouteMap,VehicleList,StatsBar}.tsx, pages/{LiveMap,RunHistory}.tsx, vite-env.d.ts}` |
+| Backend | `core/database/models.py` (index rename) |
+
+**DECIDED:** Alembic env.py imports `DATABASE_URL` from `core.database.connection` — no credentials in alembic.ini
+**DECIDED:** ORM index names match init.sql exactly (no `_orm` suffix) — prevents autogenerate duplicates
+**DECIDED:** Dashboard uses MapLibre GL JS (open source) + OpenStreetMap tiles — no map API key needed
+**DECIDED:** 15-second telemetry polling interval (matches driver app's GPS send interval)
+**DECIDED:** Dashboard dev server proxies `/api/*` and `/health` to FastAPI on port 8000
+**DECIDED (resolves OPEN):** Alembic migrations initialized — no longer managed by init.sql only
+**DECIDED (resolves OPEN):** Ops dashboard exists — React + MapLibre GL JS with live tracking
+
+**OPEN:** N+1 telemetry fetch pattern in LiveMap — needs batch endpoint (W2, Phase 3)
+**OPEN:** Drag-and-drop route adjustment not implemented (W3, Phase 3)
+**OPEN:** No dashboard tests (I2 — deferred to Phase 3)
+**OPEN:** Authentication not implemented (C1 from Review #5 — still highest-priority security gap)
+**OPEN:** Upload pipeline not fully wired to DB persistence
+**OPEN:** Offline-first PWA sync not implemented
+**OPEN:** `MIN_DELIVERY_WINDOW_MINUTES` enforcement not yet wired into optimizer
+**OPEN:** OSRM speed profile not yet calibrated with real GPS data
+**OPEN:** No real customer data loaded — using sample_orders.csv with 30 synthetic Kochi orders
+**OPEN:** Rate limiting not implemented on any endpoint
+
+**Next steps:**
+1. Implement API key authentication (highest-priority security gap)
+2. Wire upload pipeline to persist via repository
+3. Add dashboard E2E tests (Playwright)
+4. Phase 3: batch telemetry endpoint, drag-and-drop route editing, production deploy
+
+---

@@ -149,7 +149,9 @@ export function RouteMap({
       >
         <NavigationControl position="top-right" />
 
-        {/* Route polylines — one GeoJSON source + layer per vehicle for distinct colors */}
+        {/* Route polylines — one GeoJSON source + layer per vehicle for distinct colors.
+            TODO Phase 3: Add drag-and-drop route adjustment per design doc Section 6.3
+            (operator can reorder stops on the map and trigger re-optimization). */}
         {routeFeatures.map((route) => {
           const colorIndex = vehicleIndexMap.get(route.vehicle_id) ?? 0;
           const color = getVehicleColor(colorIndex);
@@ -224,12 +226,12 @@ export function RouteMap({
                     ? STATUS_COLORS.alert
                     : getVehicleColor(colorIndex),
                 }}
-                title={`${vehicleId}: ${ping.speed_kmh.toFixed(0)} km/h${ping.speed_alert ? " ⚠ SPEED ALERT" : ""}`}
+                title={`${vehicleId}: ${(ping.speed_kmh ?? 0).toFixed(0)} km/h${ping.speed_alert ? " ⚠ SPEED ALERT" : ""}`}
               >
                 {/* Arrow indicating heading direction */}
                 <span
                   className="live-marker-arrow"
-                  style={{ transform: `rotate(${ping.heading}deg)` }}
+                  style={{ transform: `rotate(${ping.heading ?? 0}deg)` }}
                 >
                   ▲
                 </span>

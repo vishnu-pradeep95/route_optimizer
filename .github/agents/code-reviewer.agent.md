@@ -151,6 +151,7 @@ Structure your review as:
 - **Optimizer integration**: Verify VROOM/OR-Tools input format matches API docs
 - **Driver app**: Verify offline-first patterns, no network-dependent critical paths
 - **Travel time calculations**: Always check the 1.3× multiplier is applied
-- **Database migrations**: Verify PostGIS extension is enabled, spatial indexes created
+- **Database migrations**: Verify PostGIS extension is enabled, spatial indexes created. Alembic migrations must have educational docstrings explaining *why* this migration exists. Check for duplicate index names between init.sql and ORM `__table_args__`. Never hardcode credentials in `alembic.ini`.
+- **Dashboard (React/TypeScript)**: Verify nullable API fields are typed as `T | null`. Check null guards before `.toFixed()` or property access on optional fields. Ensure no countdown timers or time-pressure UI per Kerala MVD rules.
 - **Test quality**: Tests must explain *what business rule* they verify, not just "test this function"
 - **Comment quality**: Comments must explain *why*, not restate *what* the code does

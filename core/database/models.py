@@ -349,12 +349,16 @@ class TelemetryDB(Base):
     # See: https://postgis.net/docs/using_postgis_dbmanagement.html#gist_indexes
     __table_args__ = (
         # "Where are all drivers now?" — spatial lookup
-        Index("idx_telemetry_location_orm", location, postgresql_using="gist"),
+        # Use the same index names as init.sql to avoid duplicates.
+        # Previously these had an _orm suffix, which created duplicate indexes
+        # alongside the init.sql originals. Reconciled in migration after
+        # ccbb9fc2db2c (see Code Review #8, finding W1).
+        Index("idx_telemetry_location", location, postgresql_using="gist"),
         # "Show recent pings" — time-ordered
-        Index("idx_telemetry_recorded_at_orm", recorded_at.desc()),
+        Index("idx_telemetry_recorded_at", recorded_at.desc()),
         # "Show this driver's trace today" — vehicle + time
         Index(
-            "idx_telemetry_vehicle_time_orm",
+            "idx_telemetry_vehicle_time",
             "vehicle_id",
             recorded_at.desc(),
         ),
