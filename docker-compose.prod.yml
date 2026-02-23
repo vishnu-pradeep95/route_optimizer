@@ -1,0 +1,259 @@
+# =============================================================================
+# Docker Compose — PRODUCTION deployment for Kerala Delivery Route Optimizer
+# =============================================================================
+# This file extends/replaces docker-compose.yml for production use.
+# Key differences from dev:
+#   1. Caddy reverse proxy with auto-TLS (Let's Encrypt)
+#   2. Dashboard built and served as static files (no Vite dev server)
+#   3. Resource limits on all containers (prevents OOM on a shared VPS)
+#   4. Log rotation (prevents disk exhaustion from chatty containers)
+#   5. No exposed ports except 80/443 (everything behind Caddy)
+#   6. Database backup volume mounted
+#   7. Restart policies for reliability
+#
+# Usage:
+#   1. Copy .env.production.example → .env.production and fill in values
+#   2. Run: ./scripts/deploy.sh
+#   Or manually:
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Architecture:
+#   Internet → Caddy (:80/:443) → API (:8000 internal)
+#                                → Dashboard (static files)
+#                 API → PostgreSQL (:5432 internal)
+#                 API → OSRM (:5000 internal)
+#                 API → VROOM (:3000 internal)
+#
+# Cost estimate: $30–60/month on a 4 GB VPS (Hetzner, DigitalOcean, Linode)
+# =============================================================================
+
+services:
+  # ─── PostgreSQL + PostGIS: persistent storage ──────────────────────
+  # Production hardening vs dev:
+  # - Stronger password (from .env.production)
+  # - Shared memory size set explicitly (prevents cryptic OOM crashes)
+  # - Resource limits prevent runaway queries from eating all RAM
+  # - No exposed port (only accessible from Docker network)
+  # - Backup volume mounted for pg_dump outputs
+  db:
+    image: postgis/postgis:16-3.5
+    container_name: lpg-db-prod
+    # SECURITY: Do NOT expose port 5432 in production.
+    # The API connects via Docker's internal network (db:5432).
+    # If you need external access for debugging, use:
+    #   docker compose -f docker-compose.prod.yml exec db psql -U routing routing_opt
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-routing_opt}
+      POSTGRES_USER: ${POSTGRES_USER:-routing}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      # Backup directory — the backup script writes pg_dump files here.
+      # Mount a host directory so backups survive container rebuilds.
+      - ${BACKUP_DIR:-./backups}:/backups
+    # Why shm_size?
+    # PostgreSQL uses shared memory for query execution. The Docker default
+    # is 64 MB, which causes "could not resize shared memory segment" errors
+    # on complex spatial queries. 256 MB is generous for our scale.
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-routing} -d ${POSTGRES_DB:-routing_opt}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    # Resource limits — prevent a single runaway query from consuming all VPS RAM.
+    # 1 GB is generous for ~50 deliveries/day with telemetry.
+    # Adjust upward if you see OOM kills in `docker stats`.
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+    logging: &json-log
+      # JSON file logger with rotation.
+      # Without max-size, Docker stores logs forever → disk fills up.
+      # 10 MB × 3 files = 30 MB max per container. Plenty for debugging
+      # while preventing disk exhaustion on a ~20 GB VPS root partition.
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ─── OSRM: travel time/distance calculations ──────────────────────
+  osrm:
+    # Pin to a specific version for reproducible builds.
+    # OSRM MLD data format can change between versions, which would break
+    # routing without a data rebuild. Always rebuild data when upgrading.
+    # Check available tags: https://hub.docker.com/r/osrm/osrm-backend/tags
+    image: osrm/osrm-backend:v5.27.1
+    container_name: osrm-kerala-prod
+    volumes:
+      - ./data/osrm:/data:ro
+    command: osrm-routed --algorithm mld /data/kerala-latest.osrm
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          # OSRM Kerala data fits in ~500 MB RAM. 1 GB gives headroom for
+          # concurrent matrix queries during optimization.
+          memory: 1G
+          cpus: "1.0"
+    logging: *json-log
+
+  # ─── VROOM: route optimization solver ──────────────────────────────
+  vroom:
+    image: vroomvrp/vroom-docker:v1.14.0-rc.2
+    container_name: vroom-solver-prod
+    volumes:
+      - ./infra/vroom-conf/config.yml:/vroom-express/config.yml:ro
+    environment:
+      - VROOM_ROUTER=osrm
+    depends_on:
+      osrm:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          # VROOM solves 50 orders in <100ms. It spikes CPU briefly during
+          # optimization but doesn't need much memory.
+          memory: 512M
+          cpus: "1.0"
+    logging: *json-log
+
+  # ─── FastAPI backend ───────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+    container_name: lpg-api-prod
+    # No exposed ports — Caddy handles all external traffic.
+    # Uvicorn listens on 8000 inside the Docker network only.
+    environment:
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+      - API_KEY=${API_KEY:?Set API_KEY in .env.production}
+      - ENVIRONMENT=production
+      - OSRM_URL=http://osrm:5000
+      - VROOM_URL=http://vroom:3000
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-routing}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-routing_opt}
+      # CORS: set to your actual domain. Caddy handles TLS termination,
+      # so the API sees requests from https://your-domain.com.
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://localhost}
+      - RATE_LIMIT_ENABLED=true
+    volumes:
+      # Data directory for uploaded CSVs and geocode cache.
+      # Bind mount so files persist across container rebuilds.
+      - ./data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+      osrm:
+        condition: service_healthy
+      vroom:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # FastAPI with 2 workers needs ~300 MB base + ~100 MB per request
+          # peak (pandas DataFrame of CSV + geocoding). 1 GB is comfortable.
+          memory: 1G
+          cpus: "2.0"
+    logging: *json-log
+
+  # ─── Dashboard build ───────────────────────────────────────────────
+  # One-shot container: builds the React dashboard, copies to a shared volume,
+  # then exits. Caddy serves the built files. This avoids running a Node.js
+  # server in production (static files are served by Caddy directly).
+  dashboard-build:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.dashboard
+      args:
+        # Empty = same-origin (dashboard and API behind same Caddy domain).
+        VITE_API_URL: ""
+    container_name: dashboard-builder
+    volumes:
+      - dashboard_assets:/srv/dashboard
+    # The container runs `echo` and exits. Its only purpose is to populate
+    # the dashboard_assets volume during `docker compose up --build`.
+    restart: "no"
+
+  # ─── Caddy: reverse proxy + auto-TLS + static files ───────────────
+  # Why Caddy instead of Nginx?
+  # - Automatic HTTPS (Let's Encrypt) with zero configuration
+  # - Auto-renews certificates before expiry — no cron jobs
+  # - Readable config file (Caddyfile) vs Nginx's complex syntax
+  # - Built-in HTTP/2 and HTTP/3 support
+  # - Perfect for a solo-dev project: less ops overhead
+  # See: https://caddyserver.com/docs/
+  #
+  # Trade-off vs Nginx: Caddy uses slightly more memory (~30 MB vs ~10 MB).
+  # At our scale this is negligible. If you ever need Nginx-level performance
+  # (10k+ concurrent connections), switch then.
+  caddy:
+    image: caddy:2-alpine
+    container_name: lpg-caddy
+    ports:
+      # These are the ONLY ports exposed to the internet.
+      # Port 80: HTTP (auto-redirects to HTTPS)
+      # Port 443: HTTPS (TLS terminated by Caddy)
+      - "80:80"
+      - "443:443"
+      # Caddy admin API — disabled by default to minimize attack surface.
+      # Uncomment for debugging (cert status, config inspection):
+      # - "127.0.0.1:2019:2019"
+    environment:
+      # The domain Caddy will serve and get a TLS certificate for.
+      # Set in .env.production. Use "localhost" for local testing.
+      - DOMAIN=${DOMAIN:-localhost}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Caddy stores TLS certificates and OCSP staples here.
+      # Persisting this volume avoids re-issuing certs on container rebuild.
+      # Let's Encrypt has rate limits (50 certs/domain/week), so losing
+      # this data could temporarily lock you out.
+      - caddy_data:/data
+      - caddy_config:/config
+      # Dashboard static files built by the dashboard-build container.
+      - dashboard_assets:/srv/dashboard:ro
+    depends_on:
+      api:
+        condition: service_started
+      dashboard-build:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    logging: *json-log
+
+# Named volumes — persist across container restarts and rebuilds.
+volumes:
+  # PostgreSQL data files. NEVER delete this unless you want to lose all data.
+  # Backup strategy: scripts/backup_db.sh dumps to the backups/ host directory.
+  pgdata:
+
+  # Caddy TLS certificates (Let's Encrypt).
+  # Losing this forces Caddy to re-issue certs (rate-limited to 50/week).
+  caddy_data:
+
+  # Caddy runtime configuration cache.
+  caddy_config:
+
+  # Built dashboard static files (shared between dashboard-build and caddy).
+  dashboard_assets:

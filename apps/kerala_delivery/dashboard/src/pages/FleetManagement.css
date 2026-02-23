@@ -1,0 +1,312 @@
+/* FleetManagement — Vehicle fleet table and inline forms.
+ *
+ * Follows the same design language as RunHistory.css:
+ * muted header bar, sticky table headers, status badges.
+ *
+ * Why not a shared CSS module for both tables?
+ * Each page has slightly different column widths and interactive elements.
+ * Keeping styles separate avoids fragile selector coupling.
+ * If a third table page is added, extract shared table primitives then.
+ */
+
+.fleet-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.fleet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.fleet-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.fleet-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Toggle switch for "Active only" filter */
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+}
+
+.filter-toggle input[type="checkbox"] {
+  accent-color: #3b82f6;
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+/* Reuse the same button style as RunHistory for visual consistency */
+.fleet-btn {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.fleet-btn:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.fleet-btn-primary {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+.fleet-btn-primary:hover {
+  background: #2563eb;
+}
+
+.fleet-btn-danger {
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+.fleet-btn-danger:hover {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.fleet-btn-success {
+  color: #16a34a;
+  border-color: #86efac;
+}
+
+.fleet-btn-success:hover {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+/* Error banner — matches RunHistory.css pattern */
+.fleet-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 24px;
+  background: #fef2f2;
+  border-bottom: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 13px;
+}
+
+.fleet-error button {
+  background: #991b1b;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* Success banner for write operations */
+.fleet-success {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 24px;
+  background: #f0fdf4;
+  border-bottom: 1px solid #bbf7d0;
+  color: #166534;
+  font-size: 13px;
+}
+
+.fleet-success button {
+  background: none;
+  border: none;
+  color: #166534;
+  cursor: pointer;
+  font-size: 15px;
+  padding: 0 4px;
+}
+
+/* Table wrapper — scrollable body with sticky header */
+.fleet-table-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px;
+}
+
+.fleet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.fleet-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f1f5f9;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #475569;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.fleet-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+}
+
+.fleet-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+/* Reuse RunHistory's numeric alignment and status badge styles */
+.fleet-table .numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.fleet-status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  text-transform: uppercase;
+}
+
+.fleet-type-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  text-transform: capitalize;
+}
+
+.fleet-actions {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.fleet-actions button {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+/* Depot coordinates — compact monospace */
+.depot-coords {
+  font-family: "Fira Code", "Consolas", monospace;
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* --- Inline form (add / edit) --- */
+
+.fleet-form-container {
+  padding: 16px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #eff6ff;
+}
+
+.fleet-form-container h3 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e40af;
+}
+
+.fleet-form {
+  display: grid;
+  /* Responsive grid: auto-fit columns that are at least 180px wide */
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.fleet-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fleet-form-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.fleet-form-field input,
+.fleet-form-field select {
+  padding: 6px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #1e293b;
+  background: #ffffff;
+}
+
+.fleet-form-field input:focus,
+.fleet-form-field select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.fleet-form-actions {
+  display: flex;
+  gap: 8px;
+  align-items: end;
+  padding-top: 4px;
+}
+
+/* Empty state */
+.fleet-empty {
+  text-align: center;
+  padding: 40px 24px;
+  color: #94a3b8;
+}
+
+/* Loading state — consistent with RunHistory */
+.fleet-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+  color: #64748b;
+}

@@ -555,25 +555,31 @@ quality, test coverage, and design-doc alignment.
 
 ## 12. What's Built vs. What's Planned
 
-### Current State (Phase 2 — In Progress)
+### Current State (Phase 2 — Near-Complete)
 
 **What works right now:**
 
 - Upload a CSV of deliveries and get optimized routes back
-- Geocoding with Google Maps (results cached to save money)
+- Geocoding with Google Maps (results cached in PostGIS to save money)
+- PostGIS geocode cache with CachedGeocoder (decorator pattern, async Protocol)
 - Route optimization with VROOM + OSRM (68% better than manual routes!)
 - Full PostgreSQL database with PostGIS for GPS data
 - Driver PWA (mobile-friendly web app) showing routes
 - Real-time GPS telemetry tracking (drivers send position every 15s)
-- Operations dashboard with live map and route history
-- 144 automated tests covering all core functionality
+- Batch telemetry endpoint (POST /api/telemetry/batch) — reduces N+1 fetch overhead
+- Fleet management API (full CRUD for vehicles)
+- API key authentication on all write endpoints (X-API-Key header)
+- Rate limiting on write endpoints (slowapi — prevents abuse)
+- Operations dashboard with live map, route history, and fleet management
+- Batch scripts for importing orders and geocoding addresses (import_orders.py, geocode_batch.py)
+- 211 automated tests covering all core functionality + batch scripts
 - Docker Compose for one-command infrastructure startup
 
 **What's left in Phase 2:**
 
-- API authentication (currently no login required — security gap)
-- Wire the upload pipeline fully to database persistence
-- Offline-first sync for the driver app
+- Offline-first sync for the driver app (service worker + local DB)
+- Dashboard end-to-end tests (Playwright)
+- Drag-and-drop route editing in the dashboard
 
 ### Future Phases
 
@@ -585,14 +591,12 @@ quality, test coverage, and design-doc alignment.
 ### Open Items (From Session Journal)
 
 These are documented unresolved items:
-- Authentication: API key vs JWT decision needed
-- Batch telemetry endpoint to replace N+1 fetch pattern
 - Drag-and-drop route editing in the dashboard
 - Dashboard end-to-end tests (Playwright)
 - OSRM speed profile calibration with real GPS data
 - Offline-first driver app sync
-- Rate limiting on API endpoints
 - No real customer data yet (using 30 synthetic Kochi orders)
+- React component tests for FleetManagement (deferred to Playwright E2E)
 
 ---
 

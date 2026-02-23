@@ -23,7 +23,7 @@ import type { MapRef } from "react-map-gl/maplibre";
 import { StatsBar } from "../components/StatsBar";
 import { VehicleList } from "../components/VehicleList";
 import { RouteMap } from "../components/RouteMap";
-import { fetchRoutes, fetchRouteDetail, fetchTelemetry } from "../lib/api";
+import { fetchRoutes, fetchRouteDetail, fetchFleetTelemetry } from "../lib/api";
 import type {
   RouteSummary,
   RouteDetail,
@@ -97,29 +97,23 @@ export function LiveMap() {
   }, []);
 
   /**
-   * Fetch latest telemetry for all active vehicles.
+   * Fetch latest telemetry for all active vehicles in one request.
    *
-   * Why we fetch only 1 ping per vehicle (limit=1):
-   * For the live marker we only need the most recent position.
-   * This minimizes data transfer on the 15-second refresh cycle.
+   * Uses the batch fleet endpoint (GET /api/telemetry/fleet) which returns
+   * the latest ping per vehicle in a single DB query with DISTINCT ON.
+   * Replaces the old N+1 pattern (one HTTP request per vehicle).
    */
   const loadTelemetry = useCallback(async () => {
     if (routes.length === 0) return;
 
     try {
-      const telemetryResults = await Promise.allSettled(
-        routes.map((r) => fetchTelemetry(r.vehicle_id, 1))
-      );
-
+      const fleetData = await fetchFleetTelemetry();
       const newPings = new Map<string, TelemetryPing>();
-      telemetryResults.forEach((result, index) => {
-        if (
-          result.status === "fulfilled" &&
-          result.value.pings.length > 0
-        ) {
-          newPings.set(routes[index].vehicle_id, result.value.pings[0]);
-        }
-      });
+
+      // The fleet endpoint returns { vehicles: { "VEH-01": {...}, "VEH-02": {...} } }
+      for (const [vehicleId, ping] of Object.entries(fleetData.vehicles)) {
+        newPings.set(vehicleId, ping);
+      }
       setLatestPings(newPings);
     } catch {
       // Telemetry fetch failures are non-critical — don't show error

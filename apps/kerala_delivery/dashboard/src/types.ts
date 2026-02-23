@@ -65,7 +65,13 @@ export interface TelemetryPing {
   accuracy_m: number | null;
   /** Nullable — heading unavailable when vehicle is stationary. */
   heading: number | null;
-  recorded_at: string;
+  /**
+   * ISO 8601 timestamp of the GPS fix. Non-null for DB-sourced pings
+   * (recorded_at is NOT NULL in the schema), but the API serializes
+   * defensively with `if p.recorded_at else None`, so we allow null
+   * on the client to stay type-safe against edge cases.
+   */
+  recorded_at: string | null;
   /** True when speed exceeds 40 km/h in urban zone (Kerala MVD safety rule). */
   speed_alert: boolean;
 }
@@ -75,6 +81,35 @@ export interface TelemetryResponse {
   vehicle_id: string;
   count: number;
   pings: TelemetryPing[];
+}
+
+/** Response from GET /api/telemetry/fleet — latest ping per vehicle. */
+export interface FleetTelemetryResponse {
+  count: number;
+  vehicles: Record<string, TelemetryPing>;
+}
+
+// --- Vehicle / Fleet types ---
+
+/** A vehicle in the fleet. Mirrors _vehicle_to_dict() response from the API. */
+export interface Vehicle {
+  vehicle_id: string;
+  registration_no: string | null;
+  vehicle_type: "diesel" | "electric" | "cng";
+  max_weight_kg: number;
+  max_items: number;
+  depot_latitude: number | null;
+  depot_longitude: number | null;
+  speed_limit_kmh: number;
+  is_active: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** Response from GET /api/vehicles. */
+export interface VehiclesResponse {
+  count: number;
+  vehicles: Vehicle[];
 }
 
 // --- Optimization run types ---

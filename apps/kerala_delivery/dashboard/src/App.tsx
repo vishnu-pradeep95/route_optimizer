@@ -12,11 +12,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { LiveMap } from "./pages/LiveMap";
 import { RunHistory } from "./pages/RunHistory";
+import { FleetManagement } from "./pages/FleetManagement";
 import { fetchHealth } from "./lib/api";
 import "./App.css";
 
-/** The two pages available in the dashboard. */
-type Page = "live-map" | "run-history";
+/**
+ * Pages available in the dashboard.
+ * Using a union type instead of an enum because TypeScript's
+ * erasableSyntaxOnly setting forbids const enums.
+ */
+type Page = "live-map" | "run-history" | "fleet";
 
 function App() {
   const [activePage, setActivePage] = useState<Page>("live-map");
@@ -68,6 +73,12 @@ function App() {
           >
             📋 Run History
           </button>
+          <button
+            className={`nav-tab ${activePage === "fleet" ? "active" : ""}`}
+            onClick={() => setActivePage("fleet")}
+          >
+            🚛 Fleet
+          </button>
         </nav>
 
         {/* Health status indicator */}
@@ -95,6 +106,7 @@ function App() {
       <main className="app-main">
         {activePage === "live-map" && <LiveMap />}
         {activePage === "run-history" && <RunHistory />}
+        {activePage === "fleet" && <FleetManagement />}
       </main>
     </div>
   );

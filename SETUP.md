@@ -253,6 +253,8 @@ You should see version numbers for Python, Docker, and Git with no errors.
 | **Dashboard: dev server** | `cd apps/kerala_delivery/dashboard && npm run dev` → http://localhost:5173 |
 | **Dashboard: production build** | `cd apps/kerala_delivery/dashboard && npm run build` |
 | **Dashboard: type check** | `cd apps/kerala_delivery/dashboard && npx tsc --noEmit` |
+| **Batch: import orders** | `python scripts/import_orders.py data/sample_orders.csv --dry-run` |
+| **Batch: geocode addresses** | `python scripts/geocode_batch.py --from-csv data/sample_orders.csv --dry-run` |
 
 ---
 

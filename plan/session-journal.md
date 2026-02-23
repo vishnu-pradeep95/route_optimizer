@@ -265,3 +265,230 @@
 4. Phase 3: batch telemetry endpoint, drag-and-drop route editing, production deploy
 
 ---
+
+## 2026-02-23 — Phase 2: Batch Telemetry, Rate Limiting, Fleet CRUD, Window Enforcement + Code Reviews #7–8
+
+**Phase:** 2 (multi-vehicle + database — fleet management + hardening)
+**Tests:** 164 passing (144 → 164)
+
+**What happened:**
+
+### Review of prior session's OPEN items
+Two items listed as OPEN in the previous journal entry were already implemented:
+- "Authentication not implemented" → **Already done.** `verify_api_key()` dependency with `APIKeyHeader("X-API-Key")`, 5 auth tests, `.env.example` docs.
+- "Upload pipeline not fully wired" → **Already done.** `repo.save_optimization_run()` + `session.commit()` in upload endpoint, stores OrderDB/RouteDB/RouteStopDB.
+
+### Batch telemetry endpoint
+- Added `GET /api/telemetry/fleet` — returns latest GPS ping per vehicle in one query using PostgreSQL `DISTINCT ON(vehicle_id)` + `ORDER BY recorded_at DESC`. Replaces the N+1 pattern where dashboard called `/api/telemetry/{vehicle_id}?limit=1` once per vehicle. At 13 vehicles polling every 15s, this cuts 13 HTTP requests + 13 DB queries down to 1+1.
+- **Route ordering fix**: `/api/telemetry/fleet` **must** be defined before `/api/telemetry/{vehicle_id}` or FastAPI captures "fleet" as a vehicle_id.
+- Added `POST /api/telemetry/batch` — accepts up to 100 pings in one request via `TelemetryBatchRequest`. Validates, filters (accuracy >50m), checks speed alerts (>40 km/h), saves with `add_all()` batch insert.
+- Updated dashboard: `FleetTelemetryResponse` type, `fetchFleetTelemetry()` API function, rewrote `LiveMap.tsx` to use single batch call instead of N+1.
+- Repository: `get_fleet_latest_telemetry()`, `save_telemetry_batch()` with `add_all()` for batch performance.
+
+### Rate limiting (slowapi)
+- Installed `slowapi==0.1.9` with `Limiter(key_func=get_remote_address)`.
+- Per-endpoint limits: upload=10/min, telemetry single=120/min, telemetry batch=20/min, status update=60/min, fleet CRUD write=20/min, fleet delete=10/min.
+- `RATE_LIMIT_ENABLED` env var toggle — defaults to `true`, set `false` in tests.
+- Test fixture disables limiter via `limiter.enabled = False` to avoid 429s in test suite.
+
+### Fleet management CRUD
+- 7 new endpoints: `GET/POST /api/vehicles`, `GET/PUT/DELETE /api/vehicles/{vehicle_id}`
+- Repository functions: `get_all_vehicles()`, `get_vehicle_by_vehicle_id()`, `create_vehicle()` (with depot PostGIS geometry), `update_vehicle()` (field whitelist pattern), `deactivate_vehicle()` (soft-delete).
+- `_vehicle_to_dict(v: "VehicleDB")` helper centralizes PostGIS→JSON conversion.
+- `vehicle_type` validated via `Literal["diesel", "electric", "cng"]` on `VehicleCreate`/`VehicleUpdate`.
+
+### MIN_DELIVERY_WINDOW enforcement
+- Step 1b in upload endpoint: detects windows shorter than `MIN_DELIVERY_WINDOW_MINUTES` (30 min) and **widens** them by extending `window_end` rather than rejecting orders. Handles midnight crossing. Logs count of widened windows.
+- Updated `config.py` to reference enforcement location.
+
+### Code Review #7 (1C, 4W, 6I) — all resolved
+| Finding | Fix |
+|---|---|
+| C1: CORS allow_methods missing PUT/DELETE | Added `["GET", "POST", "PUT", "DELETE"]` with comment |
+| W1: save_telemetry_batch per-ping add() | Changed to `add_all()` batch |
+| W2: TS TelemetryPing.recorded_at not nullable | Changed to `string \| null` with JSDoc |
+| W3: Fleet telemetry no auth | Added TODO Phase 3 comment about read-scoped auth |
+| W4: vehicle_type not validated | `Literal["diesel", "electric", "cng"]` |
+| I2: _vehicle_to_dict missing type hint | Added `TYPE_CHECKING` import + `"VehicleDB"` annotation |
+
+### Code Review #8 (re-review: 0C, 1W, 2I) — resolved
+| Finding | Fix |
+|---|---|
+| W1: create_vehicle docstring omitted "cng" | Updated to `'diesel', 'electric', 'cng'` |
+| I1: No test for invalid vehicle_type | Added `test_create_vehicle_rejects_invalid_type` (422) |
+| I2: allow_headers=["*"] could tighten | Noted, low-risk — deferred |
+
+### Tests added (20 new, 164 total)
+| Class | Tests | What they verify |
+|---|---|---|
+| TestFleetTelemetry | 2 | Fleet dict response, empty fleet returns zero |
+| TestTelemetryBatch | 4 | Multi-ping save, discard/alerts count, >100 rejection, empty batch |
+| TestFleetManagement | 9 | List all, active_only, details, 404, create, duplicate 409, update, delete, **invalid type 422** |
+| TestDeliveryWindowEnforcement | 2 | 10-min window widened to 30, valid 60-min unchanged |
+| TestRateLimiting | 1 | Rate limit hit returns 429 |
+
+**Files changed (8):**
+| Area | Files |
+|---|---|
+| Backend | `apps/kerala_delivery/api/main.py` (batch telemetry, rate limiting, fleet CRUD, window enforcement, CORS fix, Literal validation, TYPE_CHECKING import) |
+| Repository | `core/database/repository.py` (fleet telemetry, fleet CRUD, batch add_all) |
+| Config | `apps/kerala_delivery/config.py` (TODO removed, enforcement reference) |
+| Dashboard | `apps/kerala_delivery/dashboard/src/{types.ts, lib/api.ts, pages/LiveMap.tsx}` (FleetTelemetryResponse, batch fetch) |
+| Tests | `tests/apps/kerala_delivery/api/test_api.py` (20 new tests, rate limiter fixture) |
+| Deps | `requirements.txt` (slowapi), `.env.example` (RATE_LIMIT_ENABLED) |
+
+**DECIDED:** Rate limiting uses slowapi + get_remote_address — simple, works behind reverse proxy with X-Forwarded-For
+**DECIDED:** Rate limiter disabled in tests via `limiter.enabled = False` + env var
+**DECIDED:** Fleet telemetry uses PostgreSQL DISTINCT ON — single query for all vehicles
+**DECIDED:** Vehicle soft-delete (is_active=False) rather than hard delete
+**DECIDED:** Vehicle update uses field whitelist pattern — prevents arbitrary column injection
+**DECIDED:** Delivery window widening over rejection — more operationally friendly
+**DECIDED:** vehicle_type limited to Literal["diesel", "electric", "cng"] per design doc Section 4
+**DECIDED (resolves OPEN):** N+1 telemetry fetch replaced with batch endpoint
+**DECIDED (resolves OPEN):** Rate limiting implemented on all write endpoints
+**DECIDED (resolves OPEN):** MIN_DELIVERY_WINDOW enforcement wired into upload pipeline
+**DECIDED (resolves OPEN):** Authentication was already implemented (APIKeyHeader + verify_api_key)
+**DECIDED (resolves OPEN):** Upload pipeline was already wired to DB persistence
+
+**OPEN:** Read-level auth for fleet telemetry (TODO Phase 3 — fleet-wide location data is sensitive)
+**OPEN:** CORS allow_headers=["*"] could be tightened to specific headers (low priority)
+**OPEN:** Drag-and-drop route adjustment not implemented (Phase 3)
+**OPEN:** No dashboard tests (deferred to Phase 3)
+**OPEN:** Offline-first PWA sync not implemented
+**OPEN:** OSRM speed profile not yet calibrated with real GPS data
+**OPEN:** No real customer data loaded — using sample_orders.csv with 30 synthetic Kochi orders
+
+**Next steps:**
+1. Dashboard E2E tests (Playwright)
+2. Phase 3: production deployment (Docker Compose on VPS)
+3. Read-scoped auth for fleet-wide endpoints
+4. OSRM speed profile calibration with real GPS data
+5. Offline-first driver PWA
+
+---
+## 2025-07-18 — Phase 2 Completion: Fleet UI + Geocoding Cache + Batch Scripts
+
+**Phase:** Phase 2 (Multi-Vehicle + Dashboard) — near-complete
+**Tests:** 180 passing (164 → 180, +16 new)
+**TypeScript:** 0 errors
+
+### What happened:
+1. **Fleet Management dashboard page** (FleetManagement.tsx, 750 lines)
+   - Full CRUD UI: vehicle table with inline add/edit, deactivate/reactivate
+   - Validation: speed limit capped at 40 km/h (MVD rule), weight capped at 496 kg
+   - Default weight corrected to 446 kg (496 × 0.9 safety factor per design doc)
+   - Added `Vehicle`, `VehiclesResponse` types; `apiWrite` + fleet API functions
+   - Added 🚛 Fleet nav tab in App.tsx
+
+2. **PostGIS geocoding cache** (core/geocoding/cache.py, ~300 lines)
+   - CachedGeocoder: Decorator pattern wrapping upstream Geocoder
+   - Cache-first strategy: PostGIS lookup → upstream API → save to cache
+   - Driver-verified saves with confidence=0.95
+   - Graceful degradation: cache failures fall through to upstream
+   - Stats tracking (hits/misses/errors) with summary formatting
+
+3. **AsyncGeocoder protocol** added to core/geocoding/interfaces.py
+   - Async variant for DB-backed implementations (CachedGeocoder)
+   - Sync Geocoder protocol unchanged for GoogleGeocoder
+
+4. **Batch scripts** (scripts/)
+   - `import_orders.py`: CSV → DB import with optional geocoding, dry-run mode
+   - `geocode_batch.py`: Batch geocoding with cache-first, cost estimation, dry-run
+
+5. **Tests** (tests/core/geocoding/test_cache.py, 16 tests)
+   - Cache hits, misses, error handling, driver-verified saves, batch, stats
+   - All mocking repository layer — no real DB needed
+
+6. **Code Review #9** — found 2 CRITICAL (speed/weight validation missing), 6 WARNING, 8 INFO
+   - All issues fixed in same session, re-review confirmed 0 CRITICAL
+
+### Files created:
+- `apps/kerala_delivery/dashboard/src/pages/FleetManagement.tsx` (750 lines)
+- `apps/kerala_delivery/dashboard/src/pages/FleetManagement.css` (312 lines)
+- `core/geocoding/cache.py` (~300 lines)
+- `scripts/import_orders.py` (~260 lines)
+- `scripts/geocode_batch.py` (~345 lines)
+- `tests/core/geocoding/test_cache.py` (~350 lines)
+
+### Files modified:
+- `apps/kerala_delivery/dashboard/src/types.ts` (Vehicle, VehiclesResponse)
+- `apps/kerala_delivery/dashboard/src/lib/api.ts` (apiWrite, fleet functions, DEV warning)
+- `apps/kerala_delivery/dashboard/src/App.tsx` (fleet page + nav)
+- `core/geocoding/interfaces.py` (AsyncGeocoder protocol)
+- `requirements.txt` (pytest-asyncio==1.3.0)
+
+**DECIDED:** Fleet Management uses inline forms (not modals) — maintains spatial context
+**DECIDED:** CachedGeocoder is Decorator pattern — wraps any upstream Geocoder
+**DECIDED:** AsyncGeocoder is a separate Protocol from sync Geocoder
+**DECIDED:** import_orders.py creates an "imported" optimization run (OrderDB requires run_id FK)
+**DECIDED:** DEFAULT_MAX_WEIGHT_KG = 446 (was 500, corrected to match design doc: 496 × 0.9)
+**DECIDED:** MAX_SPEED_LIMIT_KMH = 40 enforced in UI validation + HTML input attrs
+**DECIDED:** MAX_RATED_PAYLOAD_KG = 496 enforced in UI validation + HTML input attrs
+**DECIDED:** Single asyncio.run() in batch scripts (avoids orphaned DB connections)
+**DECIDED:** apiWrite warns in DEV mode when VITE_API_KEY is missing
+
+**OPEN:** No tests for import_orders.py or geocode_batch.py (scripts/)
+**OPEN:** No React component tests for FleetManagement (Playwright E2E deferred)
+**OPEN:** geocode_batch.py has no rate limiting between Google API calls (INFO)
+**OPEN:** repository.get_cached_geocode() drops cached address_text (INFO)
+**OPEN:** Read-level auth for fleet telemetry (Phase 3)
+**OPEN:** Offline-first PWA sync not implemented
+**OPEN:** OSRM speed profile not yet calibrated with real GPS data
+
+**Next steps:**
+1. Script tests (import_orders.py, geocode_batch.py)
+2. Dashboard E2E tests (Playwright)
+3. Phase 3: production deployment (Docker Compose on VPS)
+4. Read-scoped auth for fleet-wide endpoints
+5. OSRM speed profile calibration with real GPS data
+6. Offline-first driver PWA
+
+---
+
+## Session 2025-07-19 — Bug Fixes, Script Tests, Doc Updates
+
+**Phase:** Phase 2 near-complete, all docs updated
+
+### Bug Fixes
+- DECIDED: `repository.get_cached_geocode()` now passes `address_text=row.address_raw` to `_point_to_location()` — cache hits preserve address text
+- DECIDED: Fixed `import_orders.py` — 4 occurrences of `order.address` → `order.address_raw` (Order model uses `address_raw`)
+- DECIDED: Fixed `geocode_batch.py` `read_addresses_from_db()` — `OrderDB.address` → `OrderDB.address_raw`
+
+### Rate Limiting
+- DECIDED: `geocode_batch.py` uses `await asyncio.sleep(0.05)` between Google API calls (20 req/s, within 50 QPS limit)
+- DECIDED: `import_orders.py` uses `time.sleep(0.05)` in geocoding loop (synchronous script context)
+- Named constant `GOOGLE_API_RATE_LIMIT_SECONDS = 0.05` in both scripts
+
+### New Tests (31 total new tests, 211 total)
+- `tests/scripts/test_import_orders.py` — 16 tests: CSV parsing, dry-run, geocoding flow, failure counting, CLI args, stats display
+- `tests/scripts/test_geocode_batch.py` — 15 tests: CSV reading, dedup, custom columns, cache-first strategy, dry-run, API failures, rate limiting, CLI args, DB address reading
+
+### Documentation Updates
+- README.md: test count 144→211, added 8 API endpoints, added scripts/FleetManagement/cache.py to project tree, Phase 2 "Near-Complete", auth note, ROUTEOPT_API_KEY env var
+- GUIDE.md: Section 12 updated — "What works" expanded, resolved items removed from "What's left" and "Open Items"
+- SETUP.md: Added batch script commands to quick reference table
+
+### Code Reviews
+- Review #10: 1 CRITICAL (OrderDB.address bug in geocode_batch.py read_from_db), 2 WARNING, 5 INFO
+- Review #10 re-review: 0 CRITICAL, 0 WARNING, 1 INFO — all findings resolved
+
+**Tests:** 211 passing (pytest, 2.4s)
+
+**RESOLVED:** repository.get_cached_geocode() drops cached address_text
+**RESOLVED:** geocode_batch.py has no rate limiting between Google API calls
+**RESOLVED:** No tests for import_orders.py or geocode_batch.py
+
+**OPEN:** No React component tests for FleetManagement (Playwright E2E deferred)
+**OPEN:** Read-level auth for fleet telemetry (Phase 3)
+**OPEN:** Offline-first PWA sync not implemented
+**OPEN:** OSRM speed profile not yet calibrated with real GPS data
+**OPEN:** scripts/ import from apps/kerala_delivery/config (W1 — Kerala-specific coupling, low urgency)
+
+**Next steps:**
+1. Dashboard E2E tests (Playwright)
+2. Phase 3: production deployment (Docker Compose on VPS)
+3. Read-scoped auth for fleet-wide endpoints
+4. OSRM speed profile calibration with real GPS data
+5. Offline-first driver PWA
+
+---

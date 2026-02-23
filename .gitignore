@@ -7,8 +7,9 @@ __pycache__/
 dist/
 build/
 
-# Environment
+# Environment — NEVER commit files with real secrets
 .env
+.env.production
 
 # Data files (too large for git, may contain PII in cache)
 data/kerala.osm.pbf
@@ -37,3 +38,7 @@ infra/vroom-conf/access.log
 # Node.js (dashboard frontend)
 node_modules/
 apps/kerala_delivery/dashboard/dist/
+
+# Backups (large binary files, stored on host not in git)
+backups/
+*.sql.gz

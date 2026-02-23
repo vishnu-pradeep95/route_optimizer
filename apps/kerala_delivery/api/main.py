@@ -19,13 +19,20 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from core.database.models import VehicleDB
 
 from apps.kerala_delivery import config
 from core.data_import.csv_importer import CsvImporter, ColumnMapping
@@ -77,6 +84,16 @@ async def lifespan(app: FastAPI):
     logger.info("Shutdown — DB engine pool disposed")
 
 
+# SECURITY: Disable Swagger UI and OpenAPI schema in production.
+# FastAPI's /docs endpoint exposes every endpoint, parameter schema, and error
+# format to unauthenticated users — giving attackers a complete API map.
+# In development, /docs is invaluable for testing. In production, disable it.
+# Access API docs in production by SSHing to the server and running:
+#   curl http://localhost:8000/docs  (internal-only, not exposed through Caddy)
+_env_name = os.environ.get("ENVIRONMENT", "development")
+_docs_url = "/docs" if _env_name != "production" else None
+_openapi_url = "/openapi.json" if _env_name != "production" else None
+
 app = FastAPI(
     title="Kerala LPG Delivery Route Optimizer",
     description=(
@@ -86,7 +103,37 @@ app = FastAPI(
     ),
     version="0.2.0",
     lifespan=lifespan,
+    docs_url=_docs_url,
+    openapi_url=_openapi_url,
 )
+
+# =============================================================================
+# Rate limiting — prevent abuse of expensive endpoints
+# =============================================================================
+# Why rate limiting?
+# - Upload/optimize is CPU-intensive (VROOM solve) and triggers Google API calls
+# - Telemetry POST is called frequently from all driver devices
+# - Without limits, a misconfigured client or attacker can exhaust resources
+#
+# Why slowapi?
+# - Built on top of the proven `limits` library
+# - Integrates cleanly with FastAPI as a Starlette extension
+# - In-memory storage is fine for single-instance Phase 2; switch to Redis
+#   for multi-instance in Phase 3+
+# See: https://github.com/laurentS/slowapi
+#
+# Rate limits are based on client IP. Override with X-Forwarded-For
+# header if behind a reverse proxy (configure in production).
+limiter = Limiter(
+    key_func=get_remote_address,
+    # Default limit: 60 requests/minute for all endpoints.
+    # Individual endpoints override this with @limiter.limit() decorator.
+    default_limits=["60/minute"],
+    # RATE_LIMIT_ENABLED env var allows disabling in tests/CI
+    enabled=os.environ.get("RATE_LIMIT_ENABLED", "true").lower() != "false",
+)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS: restrict origins to known frontends.
 # SECURITY: never use allow_origins=["*"] in production — it lets any website
@@ -96,7 +143,9 @@ _allowed_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "http://localhost:8000
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in _allowed_origins],
-    allow_methods=["GET", "POST"],
+    # PUT and DELETE needed for fleet management CRUD endpoints.
+    # Phase 2 added vehicle CRUD — browser preflight checks these.
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -238,7 +287,9 @@ async def health_check():
 
 
 @app.post("/api/upload-orders", response_model=OptimizationSummary, dependencies=[Depends(verify_api_key)])
+@limiter.limit("10/minute")
 async def upload_and_optimize(
+    request: Request,
     file: UploadFile = File(...),
     session: AsyncSession = SessionDep,
 ):
@@ -292,6 +343,42 @@ async def upload_and_optimize(
 
         if not orders:
             raise HTTPException(status_code=400, detail="No valid orders found in file")
+
+        # Step 1b: Enforce minimum delivery window (Kerala MVD compliance)
+        # Non-negotiable: no delivery window shorter than 30 minutes.
+        # This prevents "10-minute delivery" promises that pressure drivers.
+        # Rather than rejecting orders, we WIDEN narrow windows to the minimum.
+        # The original window_end is extended; window_start stays as-is.
+        # See: plan/kerala_delivery_route_system_design.md (Safety Constraints)
+        min_window = config.MIN_DELIVERY_WINDOW_MINUTES
+        widened_count = 0
+        for order in orders:
+            if order.delivery_window_start and order.delivery_window_end:
+                # Calculate window duration in minutes
+                start_mins = order.delivery_window_start.hour * 60 + order.delivery_window_start.minute
+                end_mins = order.delivery_window_end.hour * 60 + order.delivery_window_end.minute
+                # Handle midnight crossing (e.g., 23:00 → 01:00)
+                if end_mins <= start_mins:
+                    end_mins += 24 * 60
+                window_mins = end_mins - start_mins
+
+                if window_mins < min_window:
+                    # Widen by extending end time to meet minimum
+                    new_end_mins = start_mins + min_window
+                    # Wrap around midnight if needed
+                    new_end_mins = new_end_mins % (24 * 60)
+                    new_end_hour = new_end_mins // 60
+                    new_end_minute = new_end_mins % 60
+                    from datetime import time as dt_time
+                    order.delivery_window_end = dt_time(new_end_hour, new_end_minute)
+                    widened_count += 1
+
+        if widened_count > 0:
+            logger.info(
+                "Widened %d delivery window(s) to minimum %d minutes (MVD compliance)",
+                widened_count,
+                min_window,
+            )
 
         # Step 2: Geocode orders that don't have coordinates
         # First check the database geocode cache (free!), then fall back to Google API.
@@ -506,7 +593,9 @@ class StatusUpdate(BaseModel):
 
 
 @app.post("/api/routes/{vehicle_id}/stops/{order_id}/status", dependencies=[Depends(verify_api_key)])
+@limiter.limit("60/minute")
 async def update_stop_status(
+    request: Request,
     vehicle_id: str,
     order_id: str,
     body: StatusUpdate,
@@ -598,7 +687,9 @@ class TelemetryResponse(BaseModel):
 
 
 @app.post("/api/telemetry", response_model=TelemetryResponse, dependencies=[Depends(verify_api_key)])
+@limiter.limit("120/minute")
 async def submit_telemetry(
+    request: Request,
     ping: TelemetryPing,
     session: AsyncSession = SessionDep,
 ):
@@ -651,6 +742,120 @@ async def submit_telemetry(
     )
 
 
+@app.get("/api/telemetry/fleet")
+async def get_fleet_telemetry(
+    session: AsyncSession = SessionDep,
+):
+    """Get the latest GPS ping for every vehicle in one request.
+
+    Replaces the N+1 pattern where the dashboard calls
+    GET /api/telemetry/{vehicle_id}?limit=1 once per vehicle.
+    At 13 vehicles polling every 15 seconds, that's 13 HTTP requests
+    and 13 DB queries per cycle. This endpoint does it in 1+1.
+
+    Uses PostgreSQL's DISTINCT ON to pick the most recent ping per
+    vehicle_id in a single query. The idx_telemetry_vehicle_time index
+    makes this efficient even with millions of rows.
+
+    IMPORTANT: This route is defined BEFORE /api/telemetry/{vehicle_id}
+    because FastAPI matches routes top-to-bottom. If {vehicle_id} came
+    first, the literal "fleet" would be captured as a vehicle_id.
+
+    TODO Phase 3: Add read-level auth (e.g., viewer API key) — this endpoint
+    exposes real-time positions of the entire fleet. Currently follows the
+    "GET endpoints are open" pattern from session-journal DECIDED entries,
+    but fleet-wide location data is more sensitive than single-vehicle queries.
+
+    Returns:
+        Dict with vehicle_id → latest ping mapping and total count.
+    """
+    pings = await repo.get_fleet_latest_telemetry(session)
+
+    return {
+        "count": len(pings),
+        "vehicles": {
+            p.vehicle_id: {
+                "latitude": to_shape(p.location).y if p.location else None,  # type: ignore[union-attr]
+                "longitude": to_shape(p.location).x if p.location else None,  # type: ignore[union-attr]
+                "speed_kmh": p.speed_kmh,
+                "accuracy_m": p.accuracy_m,
+                "heading": p.heading,
+                "recorded_at": p.recorded_at.isoformat() if p.recorded_at else None,
+                "speed_alert": p.speed_alert,
+            }
+            for p in pings
+        },
+    }
+
+
+class TelemetryBatchRequest(BaseModel):
+    """Batch of GPS pings from a driver's device.
+
+    The driver app queues pings while offline (patchy Kerala mobile data)
+    and sends them all at once when connectivity returns. This endpoint
+    processes the entire batch in one transaction instead of N separate
+    POST /api/telemetry calls.
+
+    Max 100 pings per batch — roughly 50 minutes of 30-second interval data.
+    """
+
+    pings: list[TelemetryPing] = Field(
+        ...,
+        max_length=100,
+        description="Array of GPS pings (max 100 per batch)",
+    )
+
+
+@app.post("/api/telemetry/batch", dependencies=[Depends(verify_api_key)])
+@limiter.limit("20/minute")
+async def submit_telemetry_batch(
+    request: Request,
+    body: TelemetryBatchRequest,
+    session: AsyncSession = SessionDep,
+):
+    """Submit a batch of GPS telemetry pings.
+
+    Used by the driver app to replay queued pings after coming back online.
+    Each ping is validated and saved individually — low-accuracy pings are
+    discarded, speed alerts are flagged, but the overall batch succeeds.
+
+    Returns a summary: how many pings were saved, discarded, and alerted.
+    """
+    ping_dicts = [
+        {
+            "vehicle_id": p.vehicle_id,
+            "latitude": p.latitude,
+            "longitude": p.longitude,
+            "speed_kmh": p.speed_kmh,
+            "accuracy_m": p.accuracy_m,
+            "heading": p.heading,
+            "recorded_at": p.recorded_at,
+            "driver_name": p.driver_name,
+        }
+        for p in body.pings
+    ]
+
+    results = await repo.save_telemetry_batch(
+        session=session,
+        pings=ping_dicts,
+        speed_limit_kmh=config.SPEED_LIMIT_KMH,
+        accuracy_threshold_m=config.GPS_ACCURACY_THRESHOLD_M,
+    )
+    await session.commit()
+
+    saved = sum(1 for tid, _ in results if tid is not None)
+    discarded = sum(1 for tid, _ in results if tid is None)
+    alerts = sum(1 for _, alert in results if alert)
+
+    return {
+        "total": len(body.pings),
+        "saved": saved,
+        "discarded": discarded,
+        "speed_alerts": alerts,
+        "message": f"{saved} pings saved, {discarded} discarded (low accuracy), {alerts} speed alerts",
+    }
+
+
 @app.get("/api/telemetry/{vehicle_id}")
 async def get_vehicle_telemetry(
     vehicle_id: str,
@@ -685,6 +890,197 @@ async def get_vehicle_telemetry(
             for p in pings
         ],
     }
+
+
+# =============================================================================
+# Fleet Management (Phase 2)
+# =============================================================================
+# CRUD endpoints for managing the vehicle fleet.
+# Previously, vehicles were hardcoded in config.py. Now dispatchers can
+# add/edit/deactivate vehicles via API. The optimizer reads from the DB
+# (falling back to config if the fleet table is empty).
+
+
+class VehicleCreate(BaseModel):
+    """Request body for creating a new vehicle."""
+
+    vehicle_id: str = Field(
+        ..., min_length=1, max_length=20,
+        description="Unique vehicle identifier (e.g., 'VEH-14')",
+    )
+    depot_latitude: float = Field(..., ge=-90, le=90, description="Depot latitude")
+    depot_longitude: float = Field(..., ge=-180, le=180, description="Depot longitude")
+    max_weight_kg: float = Field(default=446.0, gt=0, description="Payload capacity (kg)")
+    max_items: int = Field(default=30, gt=0, description="Max items per trip")
+    registration_no: str | None = Field(default=None, max_length=20, description="Registration number")
+    # Why Literal instead of free string: prevents garbage like vehicle_type="banana"
+    # from being persisted. Design doc specifies diesel, electric, and CNG variants.
+    vehicle_type: Literal["diesel", "electric", "cng"] = Field(
+        default="diesel", description="Vehicle fuel type"
+    )
+    speed_limit_kmh: float = Field(default=40.0, gt=0, description="Speed limit for safety alerts (km/h)")
+
+
+class VehicleUpdate(BaseModel):
+    """Request body for updating an existing vehicle. Only provided fields are updated."""
+
+    max_weight_kg: float | None = Field(default=None, gt=0)
+    max_items: int | None = Field(default=None, gt=0)
+    registration_no: str | None = Field(default=None, max_length=20)
+    vehicle_type: Literal["diesel", "electric", "cng"] | None = Field(default=None)
+    speed_limit_kmh: float | None = Field(default=None, gt=0)
+    is_active: bool | None = Field(default=None)
+    depot_latitude: float | None = Field(default=None, ge=-90, le=90)
+    depot_longitude: float | None = Field(default=None, ge=-180, le=180)
+
+
+def _vehicle_to_dict(v: "VehicleDB") -> dict:
+    """Convert a VehicleDB to a JSON-serializable dict.
+
+    Centralizes the DB→JSON conversion for vehicle responses.
+    Extracts coordinates from PostGIS geometry and formats timestamps.
+    """
+    depot = to_shape(v.depot_location) if v.depot_location else None
+    return {
+        "vehicle_id": v.vehicle_id,
+        "registration_no": v.registration_no,
+        "vehicle_type": v.vehicle_type,
+        "max_weight_kg": v.max_weight_kg,
+        "max_items": v.max_items,
+        "depot_latitude": depot.y if depot else None,
+        "depot_longitude": depot.x if depot else None,
+        "speed_limit_kmh": v.speed_limit_kmh,
+        "is_active": v.is_active,
+        "created_at": v.created_at.isoformat() if v.created_at else None,
+        "updated_at": v.updated_at.isoformat() if v.updated_at else None,
+    }
+
+
+@app.get("/api/vehicles")
+async def list_vehicles(
+    active_only: bool = Query(default=False, description="If true, return only active vehicles"),
+    session: AsyncSession = SessionDep,
+):
+    """List all vehicles in the fleet.
+
+    Used by the dashboard fleet management page. Returns all vehicles
+    by default; pass ?active_only=true for optimizer-relevant vehicles.
+    """
+    if active_only:
+        vehicles = await repo.get_active_vehicles(session)
+    else:
+        vehicles = await repo.get_all_vehicles(session)
+
+    return {
+        "count": len(vehicles),
+        "vehicles": [_vehicle_to_dict(v) for v in vehicles],
+    }
+
+
+@app.get("/api/vehicles/{vehicle_id}")
+async def get_vehicle(
+    vehicle_id: str,
+    session: AsyncSession = SessionDep,
+):
+    """Get details for a specific vehicle."""
+    vehicle = await repo.get_vehicle_by_vehicle_id(session, vehicle_id)
+    if not vehicle:
+        raise HTTPException(status_code=404, detail=f"Vehicle {vehicle_id} not found")
+    return _vehicle_to_dict(vehicle)
+
+
+@app.post("/api/vehicles", dependencies=[Depends(verify_api_key)])
+@limiter.limit("20/minute")
+async def create_vehicle(
+    request: Request,
+    body: VehicleCreate,
+    session: AsyncSession = SessionDep,
+):
+    """Add a new vehicle to the fleet.
+
+    The vehicle will be immediately available for the next optimization run.
+    Requires API key authentication.
+    """
+    # Check for duplicate vehicle_id
+    existing = await repo.get_vehicle_by_vehicle_id(session, body.vehicle_id)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Vehicle {body.vehicle_id} already exists",
+        )
+
+    depot = Location(latitude=body.depot_latitude, longitude=body.depot_longitude)
+    vehicle = await repo.create_vehicle(
+        session=session,
+        vehicle_id=body.vehicle_id,
+        depot_location=depot,
+        max_weight_kg=body.max_weight_kg,
+        max_items=body.max_items,
+        registration_no=body.registration_no,
+        vehicle_type=body.vehicle_type,
+        speed_limit_kmh=body.speed_limit_kmh,
+    )
+    await session.commit()
+
+    return {"message": f"Vehicle {body.vehicle_id} created", "vehicle": _vehicle_to_dict(vehicle)}
+
+
+@app.put("/api/vehicles/{vehicle_id}", dependencies=[Depends(verify_api_key)])
+@limiter.limit("20/minute")
+async def update_vehicle(
+    request: Request,
+    vehicle_id: str,
+    body: VehicleUpdate,
+    session: AsyncSession = SessionDep,
+):
+    """Update an existing vehicle's properties.
+
+    Only provided (non-null) fields are updated. Use is_active=false
+    to soft-delete a vehicle (it stays in history but is excluded from
+    future optimization runs).
+    """
+    updates = body.model_dump(exclude_none=True)
+
+    # Handle depot coordinates — convert to Location for PostGIS
+    if body.depot_latitude is not None and body.depot_longitude is not None:
+        updates["depot_location"] = {
+            "latitude": body.depot_latitude,
+            "longitude": body.depot_longitude,
+        }
+    # Remove the flat lat/lon keys — repo expects depot_location dict
+    updates.pop("depot_latitude", None)
+    updates.pop("depot_longitude", None)
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    updated = await repo.update_vehicle(session, vehicle_id, updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail=f"Vehicle {vehicle_id} not found")
+
+    await session.commit()
+    return {"message": f"Vehicle {vehicle_id} updated"}
+
+
+@app.delete("/api/vehicles/{vehicle_id}", dependencies=[Depends(verify_api_key)])
+@limiter.limit("10/minute")
+async def delete_vehicle(
+    request: Request,
+    vehicle_id: str,
+    session: AsyncSession = SessionDep,
+):
+    """Soft-delete a vehicle (set is_active=false).
+
+    Why soft-delete: historical routes reference this vehicle. Hard delete
+    would break foreign key constraints and lose audit trail data.
+    The vehicle can be reactivated with PUT is_active=true.
+    """
+    deactivated = await repo.deactivate_vehicle(session, vehicle_id)
+    if not deactivated:
+        raise HTTPException(status_code=404, detail=f"Vehicle {vehicle_id} not found")
+
+    await session.commit()
+    return {"message": f"Vehicle {vehicle_id} deactivated"}
 
 
 # =============================================================================

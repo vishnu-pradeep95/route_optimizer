@@ -1,0 +1,134 @@
+# =============================================================================
+# Caddyfile — Reverse proxy + auto-TLS for the Kerala Delivery Route Optimizer
+# =============================================================================
+# Caddy handles:
+# 1. Automatic HTTPS via Let's Encrypt (zero config, auto-renewing)
+# 2. Reverse proxy: routes /api/* and /driver/* to the FastAPI backend
+# 3. Static file serving: serves the ops dashboard at /
+# 4. Security headers (HSTS, X-Frame-Options, etc.)
+# 5. Gzip compression for faster page loads on Kerala's patchy mobile data
+#
+# How auto-TLS works:
+# When you set a real domain name (e.g., delivery.example.com), Caddy
+# automatically obtains a Let's Encrypt certificate and renews it before
+# expiry. No certbot, no cron jobs, no manual renewal.
+# See: https://caddyserver.com/docs/automatic-https
+#
+# For local/dev testing, replace the domain with :80 or localhost:443
+# to skip certificate issuance.
+#
+# Usage:
+#   Production: Set DOMAIN env var in .env.production (e.g., delivery.example.com)
+#   Local test: Use `localhost` as the domain (Caddy uses a local CA)
+# =============================================================================
+
+# The {$DOMAIN} placeholder is replaced by the DOMAIN env var.
+# Caddy reads environment variables in the Caddyfile natively.
+# See: https://caddyserver.com/docs/caddyfile/concepts#environment-variables
+{$DOMAIN:localhost} {
+
+    # ── Security Headers ──────────────────────────────────────────────────
+    # Applied to ALL responses. These protect against common web attacks.
+    header {
+        # HSTS: tell browsers to always use HTTPS for this domain.
+        # max-age=31536000 = 1 year. includeSubDomains covers *.example.com.
+        # Only effective after the first HTTPS visit (TOFU model).
+        # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+        # Prevent the page from being embedded in iframes (clickjacking defense).
+        # SAMEORIGIN: only this domain can iframe itself (needed for PWA).
+        X-Frame-Options "SAMEORIGIN"
+
+        # Prevent browsers from MIME-sniffing the Content-Type header.
+        # Without this, a browser might execute a .txt file as JavaScript.
+        X-Content-Type-Options "nosniff"
+
+        # Referrer-Policy: don't leak full URLs to external sites.
+        # strict-origin-when-cross-origin: sends origin only, not full path.
+        Referrer-Policy "strict-origin-when-cross-origin"
+
+        # Remove the Server header — don't advertise what software we run.
+        -Server
+
+        # Content Security Policy: restrict what resources the browser can load.
+        # This prevents XSS attacks by controlling which scripts, styles, and
+        # images the browser is allowed to execute/load.
+        # - default-src 'self': only load resources from the same origin
+        # - script-src 'self': no inline scripts, no external script sources
+        # - style-src 'self' 'unsafe-inline': allow inline styles (React libs need this)
+        # - img-src: allow map tiles from OSM and Maptiler, plus data URIs for icons
+        # - connect-src 'self': XHR/fetch only to our own API
+        # - font-src 'self': only load fonts from same origin
+        # Adjust img-src if you switch map tile providers.
+        # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://api.maptiler.com; connect-src 'self'; font-src 'self'"
+    }
+
+    # ── Compression ───────────────────────────────────────────────────────
+    # Gzip/zstd compress responses. Critical for Kerala's patchy mobile data.
+    # A typical API JSON response goes from ~15 KB → ~3 KB with gzip.
+    # Dashboard JS bundle (~300 KB) → ~80 KB compressed.
+    encode gzip zstd
+
+    # ── API reverse proxy ─────────────────────────────────────────────────
+    # All /api/* requests go to the FastAPI backend container.
+    # "api" is the Docker Compose service name — Docker's internal DNS resolves it.
+    # Why port 8000? That's what uvicorn listens on inside the container.
+    #
+    # header_up X-Real-IP: passes the real client IP to FastAPI so rate limiting
+    # (slowapi) sees actual IPs, not Docker's internal 172.x.x.x addresses.
+    handle /api/* {
+        reverse_proxy api:8000 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # ── Health check proxy ────────────────────────────────────────────────
+    # Expose the API's /health endpoint through the reverse proxy.
+    # Used by monitoring tools and the deploy script to verify the stack is up.
+    handle /health {
+        reverse_proxy api:8000
+    }
+
+    # ── Driver PWA ────────────────────────────────────────────────────────
+    # The driver app is served by FastAPI as static files at /driver/*.
+    # Proxy these through to the API container too.
+    handle /driver/* {
+        reverse_proxy api:8000
+    }
+
+    # ── OpenAPI docs ──────────────────────────────────────────────────────
+    # Proxy passes through to FastAPI, which disables /docs and /openapi.json
+    # in production (docs_url=None). These routes only serve content in dev.
+    # Keeping the proxy rules avoids a hard Caddy 404 vs FastAPI's cleaner response.
+    handle /docs {
+        reverse_proxy api:8000
+    }
+    handle /openapi.json {
+        reverse_proxy api:8000
+    }
+
+    # ── Dashboard (default) ───────────────────────────────────────────────
+    # Serve the React dashboard's static files from /srv/dashboard.
+    # try_files: if the requested file doesn't exist, serve index.html.
+    # This is required for client-side routing (React Router) — when a user
+    # navigates to /fleet or /history, the browser requests that path from
+    # the server. Without try_files, Caddy would return 404. With it, Caddy
+    # serves index.html and React Router handles the path client-side.
+    handle {
+        root * /srv/dashboard
+        try_files {path} /index.html
+        file_server
+    }
+
+    # ── Logging ───────────────────────────────────────────────────────────
+    # Structured JSON access logs — parseable by Grafana Loki, ELK, etc.
+    # Rotated by Docker's json-file log driver (configured in compose).
+    log {
+        output stdout
+        format json
+        level INFO
+    }
+}

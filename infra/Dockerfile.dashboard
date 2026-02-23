@@ -1,0 +1,72 @@
+# =============================================================================
+# Multi-stage Dockerfile for the Kerala Delivery Ops Dashboard
+# =============================================================================
+# Stage 1: Build the React/TypeScript dashboard with Vite
+# Stage 2: Serve the static bundle from a minimal Caddy image
+#
+# Why Caddy instead of Nginx for static serving?
+# - Caddy has automatic HTTPS (Let's Encrypt) built in
+# - Zero-config TLS — no certbot cron jobs, no renewal scripts
+# - Clean, readable Caddyfile config (vs Nginx's arcane syntax)
+# - SPA fallback (try_files) is a one-liner
+# - For this project, Caddy also serves as the reverse proxy (see Caddyfile)
+#   so using it here too keeps the stack consistent.
+# See: https://caddyserver.com/docs/
+#
+# The Caddy image in the production compose handles BOTH:
+# 1. Serving the dashboard static files
+# 2. Reverse-proxying /api/* and /driver/* to the FastAPI backend
+# This Dockerfile is used to build dashboard assets that get copied to Caddy.
+# =============================================================================
+
+# ── Stage 1: Build ───────────────────────────────────────────────────────────
+# Node.js builds the TypeScript/React app into static HTML/CSS/JS.
+FROM node:22-slim AS builder
+
+WORKDIR /build
+
+# Copy package files first for layer caching.
+# Docker caches each layer. If package.json hasn't changed, npm install
+# is skipped on rebuild — saving 30-60 seconds per build.
+COPY apps/kerala_delivery/dashboard/package.json \
+     apps/kerala_delivery/dashboard/package-lock.json ./
+
+# Install dependencies (ci = clean install, faster + deterministic in CI).
+# Why --ignore-scripts? Prevents post-install scripts from running arbitrary
+# code during the Docker build. Most are not needed for production builds.
+RUN npm ci --ignore-scripts
+
+# Copy the rest of the dashboard source.
+# This layer only rebuilds when source files change (not when deps change).
+COPY apps/kerala_delivery/dashboard/ .
+
+# Build arguments for API URL configuration.
+# In production behind Caddy, the dashboard and API share the same origin,
+# so VITE_API_URL defaults to "" (same-origin requests).
+# Override this ARG if the API is on a different domain.
+ARG VITE_API_URL=""
+
+# Build the production bundle.
+# Vite outputs optimized, minified, code-split files to dist/.
+# TypeScript is compiled and tree-shaken. Unused code is removed.
+RUN npm run build
+
+
+# ── Stage 2: Static assets output ───────────────────────────────────────────
+# We use a minimal image just to hold the built files.
+# The production docker-compose copies these into the Caddy container via
+# a shared volume or multi-stage COPY in the compose build.
+FROM alpine:3.20 AS assets
+
+# SECURITY: Run as non-root user, consistent with the API Dockerfile.
+RUN adduser -D -u 1001 appuser
+
+# Copy the built dashboard files.
+# These will be served by Caddy at the root path (/).
+COPY --from=builder /build/dist /srv/dashboard
+
+USER appuser
+
+# This stage exists purely as an artifact source.
+# In docker-compose.prod.yml, Caddy mounts these files via a volume.
+CMD ["echo", "Dashboard assets built. Copy from /srv/dashboard."]

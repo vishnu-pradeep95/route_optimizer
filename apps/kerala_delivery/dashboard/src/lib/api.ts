@@ -17,8 +17,11 @@ import type {
   RoutesResponse,
   RouteDetail,
   TelemetryResponse,
+  FleetTelemetryResponse,
   RunsResponse,
   HealthResponse,
+  Vehicle,
+  VehiclesResponse,
 } from "../types";
 
 /**
@@ -62,6 +65,85 @@ async function apiFetch<T>(path: string): Promise<T> {
   }
 }
 
+/**
+ * Helper for authenticated write requests (POST, PUT, DELETE).
+ *
+ * The backend requires an X-API-Key header on all mutating endpoints.
+ * The dashboard reads the key from a VITE_API_KEY env var.
+ * In development, the key can be set in .env.local.
+ *
+ * Why a separate helper instead of extending apiFetch:
+ * Read-only fetches don't need auth headers or request bodies.
+ * Keeping them separate follows the Command-Query Separation principle.
+ * See: https://martinfowler.com/bliki/CommandQuerySeparation.html
+ */
+async function apiWrite<T>(path: string, method: string, body?: unknown): Promise<T> {
+  const url = `${BASE_URL}${path}`;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  // Read the API key from Vite's env. Only VITE_-prefixed vars are
+  // exposed to client code: https://vite.dev/guide/env-and-mode
+  const apiKey = import.meta.env.VITE_API_KEY;
+  if (apiKey) {
+    headers["X-API-Key"] = apiKey;
+  } else if (import.meta.env.DEV) {
+    console.warn(
+      "[api] VITE_API_KEY not set — mutations may be rejected by the backend. " +
+      "Set VITE_API_KEY in your .env file."
+    );
+  }
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`API error ${response.status}: ${errorBody || response.statusText}`);
+  }
+
+  return (await response.json()) as T;
+}
+
+// --- Fleet / Vehicle endpoints ---
+
+/** Fetch all vehicles in the fleet. */
+export async function fetchVehicles(activeOnly: boolean = false): Promise<VehiclesResponse> {
+  const qs = activeOnly ? "?active_only=true" : "";
+  return apiFetch<VehiclesResponse>(`/api/vehicles${qs}`);
+}
+
+/** Create a new vehicle. */
+export async function createVehicle(data: {
+  vehicle_id: string;
+  depot_latitude: number;
+  depot_longitude: number;
+  max_weight_kg?: number;
+  max_items?: number;
+  registration_no?: string;
+  vehicle_type?: "diesel" | "electric" | "cng";
+  speed_limit_kmh?: number;
+}): Promise<{ message: string; vehicle: Vehicle }> {
+  return apiWrite(`/api/vehicles`, "POST", data);
+}
+
+/** Update a vehicle's fields. */
+export async function updateVehicle(
+  vehicleId: string,
+  data: Record<string, unknown>
+): Promise<{ message: string }> {
+  return apiWrite(`/api/vehicles/${encodeURIComponent(vehicleId)}`, "PUT", data);
+}
+
+/** Soft-delete (deactivate) a vehicle. */
+export async function deleteVehicle(vehicleId: string): Promise<{ message: string }> {
+  return apiWrite(`/api/vehicles/${encodeURIComponent(vehicleId)}`, "DELETE");
+}
+
 // --- Route endpoints ---
 
 /** Fetch routes for the latest optimization run. */
@@ -91,6 +173,17 @@ export async function fetchTelemetry(
   return apiFetch<TelemetryResponse>(
     `/api/telemetry/${encodeURIComponent(vehicleId)}?limit=${limit}`
   );
+}
+
+/**
+ * Fetch latest GPS ping for every vehicle in one request.
+ *
+ * Replaces the N+1 pattern of calling fetchTelemetry per vehicle.
+ * At 13 vehicles polling every 15s, this reduces 13 HTTP requests
+ * and 13 DB queries down to 1+1.
+ */
+export async function fetchFleetTelemetry(): Promise<FleetTelemetryResponse> {
+  return apiFetch<FleetTelemetryResponse>("/api/telemetry/fleet");
 }
 
 // --- Optimization run endpoints ---

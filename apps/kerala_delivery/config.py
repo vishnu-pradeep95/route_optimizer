@@ -99,8 +99,9 @@ MAX_DELIVERIES_PER_DRIVER = 44
 
 # Minimum delivery window — no "instant delivery" promises
 # Kerala MVD directive: no time-pressure delivery
-# TODO: Enforce in ETA display when Phase 2 adds customer-facing time windows.
-# Currently no violation since the driver app doesn't display ETAs to customers.
+# Enforced in upload_and_optimize endpoint: windows narrower than this
+# are automatically widened (end time extended) before optimization.
+# See: apps/kerala_delivery/api/main.py, Step 1b
 MIN_DELIVERY_WINDOW_MINUTES = 30
 
 # Operating hours — 24-hour operations

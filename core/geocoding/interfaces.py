@@ -67,3 +67,36 @@ class Geocoder(Protocol):
         Implementations may override for batch efficiency.
         """
         ...
+
+
+@runtime_checkable
+class AsyncGeocoder(Protocol):
+    """Async variant of the Geocoder protocol for DB-backed implementations.
+
+    Why a separate async protocol?
+    CachedGeocoder uses SQLAlchemy's async session for PostGIS lookups,
+    which requires ``await``. Callers that work with CachedGeocoder must
+    be async-aware (``await geocoder.geocode(...)``), while callers using
+    GoogleGeocoder can stay synchronous.
+
+    Structural subtyping: any class with matching async methods satisfies
+    this protocol — no inheritance required.
+
+    Implementations:
+    - CachedGeocoder: PostGIS-backed cache + upstream delegation
+    """
+
+    async def geocode(self, address: str) -> GeocodingResult:
+        """Async geocode an address.
+
+        Args:
+            address: Free-text address string.
+
+        Returns:
+            GeocodingResult with location (if found) and confidence score.
+        """
+        ...
+
+    async def geocode_batch(self, addresses: list[str]) -> list[GeocodingResult]:
+        """Async geocode multiple addresses."""
+        ...

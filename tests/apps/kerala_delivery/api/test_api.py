@@ -58,13 +58,27 @@ def client(mock_session):
     - No real database connection is attempted
     - Repository functions still need to be mocked individually
     - The session mock captures any direct session calls for assertions
+
+    Rate limiting is disabled via RATE_LIMIT_ENABLED=false to prevent
+    429 responses during rapid test execution. Real rate limits are
+    tested in a dedicated TestRateLimiting class.
     """
     async def override_get_session():
         yield mock_session
 
-    app.dependency_overrides[get_session] = override_get_session
-    yield TestClient(app)
-    app.dependency_overrides.clear()
+    with patch.dict(os.environ, {"RATE_LIMIT_ENABLED": "false"}):
+        # Re-apply the enabled flag on the limiter instance.
+        # slowapi reads the enabled flag at init time, so we must
+        # toggle it directly for the test session.
+        from apps.kerala_delivery.api.main import limiter
+        limiter.enabled = False
+
+        app.dependency_overrides[get_session] = override_get_session
+        yield TestClient(app)
+        app.dependency_overrides.clear()
+
+        # Restore limiter state for other test modules
+        limiter.enabled = True
 
 
 # =============================================================================
@@ -1009,3 +1023,526 @@ class TestQueryBoundsValidation:
         """limit=101 on /api/runs should fail (le=100)."""
         resp = client.get("/api/runs?limit=101")
         assert resp.status_code == 422
+
+
+# =============================================================================
+# Fleet Telemetry Batch Endpoint Tests
+# =============================================================================
+
+
+class TestFleetTelemetry:
+    """Tests for GET /api/telemetry/fleet — batch fleet telemetry.
+
+    This endpoint replaces the N+1 pattern where the dashboard called
+    GET /api/telemetry/{vehicle_id}?limit=1 once per vehicle. It returns
+    the latest ping for every vehicle in a single DB query.
+    """
+
+    def test_fleet_telemetry_returns_vehicles_dict(self, client):
+        """Fleet telemetry should return a dict keyed by vehicle_id."""
+        # Mock the repo function to return telemetry pings
+        mock_pings = [
+            MagicMock(
+                vehicle_id="VEH-01",
+                location=MagicMock(),
+                speed_kmh=25.0,
+                accuracy_m=10.0,
+                heading=180.0,
+                recorded_at=datetime(2025, 6, 15, 10, 0, tzinfo=timezone.utc),
+                speed_alert=False,
+            ),
+            MagicMock(
+                vehicle_id="VEH-02",
+                location=MagicMock(),
+                speed_kmh=35.0,
+                accuracy_m=8.0,
+                heading=90.0,
+                recorded_at=datetime(2025, 6, 15, 10, 1, tzinfo=timezone.utc),
+                speed_alert=False,
+            ),
+        ]
+        # Mock to_shape to return Point-like objects
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
+             patch("apps.kerala_delivery.api.main.to_shape") as mock_to_shape:
+            mock_repo.get_fleet_latest_telemetry = AsyncMock(return_value=mock_pings)
+            mock_point = MagicMock(y=9.97, x=76.28)
+            mock_to_shape.return_value = mock_point
+
+            resp = client.get("/api/telemetry/fleet")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] == 2
+        assert "VEH-01" in data["vehicles"]
+        assert "VEH-02" in data["vehicles"]
+        assert data["vehicles"]["VEH-01"]["speed_kmh"] == 25.0
+
+    def test_fleet_telemetry_empty_returns_zero(self, client):
+        """If no telemetry exists, fleet endpoint returns empty dict."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_fleet_latest_telemetry = AsyncMock(return_value=[])
+            resp = client.get("/api/telemetry/fleet")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] == 0
+        assert data["vehicles"] == {}
+
+
+class TestTelemetryBatch:
+    """Tests for POST /api/telemetry/batch — batch ping submission.
+
+    The driver app queues GPS pings offline and submits them as a batch
+    when connectivity returns. The endpoint processes each ping individually,
+    discarding low-accuracy pings and flagging speed alerts.
+    """
+
+    def test_batch_saves_multiple_pings(self, client):
+        """Batch of 3 valid pings should all be saved."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            # All 3 pings saved successfully, no speed alerts
+            mock_repo.save_telemetry_batch = AsyncMock(
+                return_value=[
+                    (uuid.uuid4(), False),
+                    (uuid.uuid4(), False),
+                    (uuid.uuid4(), False),
+                ]
+            )
+            resp = client.post(
+                "/api/telemetry/batch",
+                json={
+                    "pings": [
+                        {"vehicle_id": "VEH-01", "latitude": 9.97, "longitude": 76.28},
+                        {"vehicle_id": "VEH-01", "latitude": 9.975, "longitude": 76.285},
+                        {"vehicle_id": "VEH-01", "latitude": 9.98, "longitude": 76.29},
+                    ]
+                },
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 3
+        assert data["saved"] == 3
+        assert data["discarded"] == 0
+        assert data["speed_alerts"] == 0
+
+    def test_batch_counts_discarded_and_alerts(self, client):
+        """Batch with mixed results: saved, discarded, and speed alert."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.save_telemetry_batch = AsyncMock(
+                return_value=[
+                    (uuid.uuid4(), False),   # saved, no alert
+                    (None, False),            # discarded (low accuracy)
+                    (uuid.uuid4(), True),     # saved, speed alert
+                ]
+            )
+            resp = client.post(
+                "/api/telemetry/batch",
+                json={
+                    "pings": [
+                        {"vehicle_id": "VEH-01", "latitude": 9.97, "longitude": 76.28},
+                        {"vehicle_id": "VEH-01", "latitude": 9.975, "longitude": 76.285, "accuracy_m": 100},
+                        {"vehicle_id": "VEH-01", "latitude": 9.98, "longitude": 76.29, "speed_kmh": 55},
+                    ]
+                },
+            )
+        data = resp.json()
+        assert data["saved"] == 2
+        assert data["discarded"] == 1
+        assert data["speed_alerts"] == 1
+
+    def test_batch_rejects_over_100_pings(self, client):
+        """Batch with >100 pings should return 422 (max_length=100)."""
+        pings = [
+            {"vehicle_id": "VEH-01", "latitude": 9.97, "longitude": 76.28}
+            for _ in range(101)
+        ]
+        resp = client.post("/api/telemetry/batch", json={"pings": pings})
+        assert resp.status_code == 422
+
+    def test_batch_empty_pings_returns_200(self, client):
+        """Batch with empty pings list should succeed (nothing to process)."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.save_telemetry_batch = AsyncMock(return_value=[])
+            resp = client.post("/api/telemetry/batch", json={"pings": []})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 0
+        assert data["saved"] == 0
+
+
+# =============================================================================
+# Fleet Management CRUD Tests
+# =============================================================================
+
+
+class TestFleetManagement:
+    """Tests for the fleet management CRUD endpoints.
+
+    Dispatchers use these endpoints to add, update, and deactivate vehicles.
+    The optimizer reads from the fleet table, falling back to hardcoded
+    config if the DB fleet is empty.
+    """
+
+    def test_list_vehicles_returns_all(self, client):
+        """GET /api/vehicles returns all vehicles."""
+        mock_vehicles = [
+            MagicMock(
+                vehicle_id="VEH-01",
+                registration_no="KL-07-AB-1234",
+                vehicle_type="diesel",
+                max_weight_kg=446.0,
+                max_items=30,
+                depot_location=MagicMock(),
+                speed_limit_kmh=40.0,
+                is_active=True,
+                created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            ),
+        ]
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
+             patch("apps.kerala_delivery.api.main.to_shape") as mock_to_shape:
+            mock_repo.get_all_vehicles = AsyncMock(return_value=mock_vehicles)
+            mock_to_shape.return_value = MagicMock(y=9.97, x=76.28)
+            resp = client.get("/api/vehicles")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] == 1
+        assert data["vehicles"][0]["vehicle_id"] == "VEH-01"
+
+    def test_list_vehicles_active_only(self, client):
+        """GET /api/vehicles?active_only=true filters inactive vehicles."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
+             patch("apps.kerala_delivery.api.main.to_shape") as mock_to_shape:
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[])
+            mock_to_shape.return_value = MagicMock(y=9.97, x=76.28)
+            resp = client.get("/api/vehicles?active_only=true")
+
+        assert resp.status_code == 200
+        assert resp.json()["count"] == 0
+        mock_repo.get_active_vehicles.assert_called_once()
+
+    def test_get_vehicle_returns_details(self, client):
+        """GET /api/vehicles/VEH-01 returns vehicle details."""
+        mock_v = MagicMock(
+            vehicle_id="VEH-01",
+            registration_no="KL-07-AB-1234",
+            vehicle_type="diesel",
+            max_weight_kg=446.0,
+            max_items=30,
+            depot_location=MagicMock(),
+            speed_limit_kmh=40.0,
+            is_active=True,
+            created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
+             patch("apps.kerala_delivery.api.main.to_shape") as mock_to_shape:
+            mock_repo.get_vehicle_by_vehicle_id = AsyncMock(return_value=mock_v)
+            mock_to_shape.return_value = MagicMock(y=9.97, x=76.28)
+            resp = client.get("/api/vehicles/VEH-01")
+
+        assert resp.status_code == 200
+        assert resp.json()["vehicle_id"] == "VEH-01"
+        assert resp.json()["max_weight_kg"] == 446.0
+
+    def test_get_vehicle_not_found(self, client):
+        """GET /api/vehicles/NONE should return 404."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_vehicle_by_vehicle_id = AsyncMock(return_value=None)
+            resp = client.get("/api/vehicles/NONE")
+
+        assert resp.status_code == 404
+
+    def test_create_vehicle_success(self, client):
+        """POST /api/vehicles creates a new vehicle."""
+        mock_v = MagicMock(
+            vehicle_id="VEH-14",
+            registration_no="KL-07-CD-9999",
+            vehicle_type="diesel",
+            max_weight_kg=446.0,
+            max_items=30,
+            depot_location=MagicMock(),
+            speed_limit_kmh=40.0,
+            is_active=True,
+            created_at=datetime(2025, 6, 15, tzinfo=timezone.utc),
+            updated_at=datetime(2025, 6, 15, tzinfo=timezone.utc),
+        )
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
+             patch("apps.kerala_delivery.api.main.to_shape") as mock_to_shape:
+            mock_repo.get_vehicle_by_vehicle_id = AsyncMock(return_value=None)
+            mock_repo.create_vehicle = AsyncMock(return_value=mock_v)
+            mock_to_shape.return_value = MagicMock(y=9.97, x=76.28)
+
+            resp = client.post(
+                "/api/vehicles",
+                json={
+                    "vehicle_id": "VEH-14",
+                    "depot_latitude": 9.97,
+                    "depot_longitude": 76.28,
+                    "registration_no": "KL-07-CD-9999",
+                },
+            )
+
+        assert resp.status_code == 200
+        assert "VEH-14" in resp.json()["message"]
+
+    def test_create_duplicate_vehicle_returns_409(self, client):
+        """Creating a vehicle with an existing ID should return 409 Conflict."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_vehicle_by_vehicle_id = AsyncMock(
+                return_value=MagicMock()  # existing vehicle
+            )
+            resp = client.post(
+                "/api/vehicles",
+                json={"vehicle_id": "VEH-01", "depot_latitude": 9.97, "depot_longitude": 76.28},
+            )
+
+        assert resp.status_code == 409
+
+    def test_update_vehicle_success(self, client):
+        """PUT /api/vehicles/VEH-01 updates vehicle properties."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.update_vehicle = AsyncMock(return_value=True)
+            resp = client.put(
+                "/api/vehicles/VEH-01",
+                json={"max_weight_kg": 400.0, "is_active": False},
+            )
+
+        assert resp.status_code == 200
+        assert "updated" in resp.json()["message"].lower()
+
+    def test_update_vehicle_not_found(self, client):
+        """PUT /api/vehicles/NONE should return 404."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.update_vehicle = AsyncMock(return_value=False)
+            resp = client.put(
+                "/api/vehicles/NONE",
+                json={"max_weight_kg": 400.0},
+            )
+
+        assert resp.status_code == 404
+
+    def test_delete_vehicle_soft_deletes(self, client):
+        """DELETE /api/vehicles/VEH-01 soft-deletes (deactivates) the vehicle."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.deactivate_vehicle = AsyncMock(return_value=True)
+            resp = client.delete("/api/vehicles/VEH-01")
+
+        assert resp.status_code == 200
+        assert "deactivated" in resp.json()["message"].lower()
+
+    def test_delete_vehicle_not_found(self, client):
+        """DELETE /api/vehicles/NONE should return 404."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.deactivate_vehicle = AsyncMock(return_value=False)
+            resp = client.delete("/api/vehicles/NONE")
+
+        assert resp.status_code == 404
+
+    def test_create_vehicle_rejects_invalid_type(self, client):
+        """Only diesel, electric, and cng vehicle types are accepted.
+
+        The Literal["diesel", "electric", "cng"] constraint on VehicleCreate
+        prevents garbage values from reaching the DB. Design doc Section 4
+        defines only these three Ape Xtra LDX variants for the Kerala fleet.
+        Pydantic returns 422 Unprocessable Entity for invalid literals.
+        """
+        resp = client.post(
+            "/api/vehicles",
+            json={
+                "vehicle_id": "VEH-99",
+                "depot_latitude": 9.9312,
+                "depot_longitude": 76.2673,
+                "vehicle_type": "banana",
+            },
+            headers={"X-API-Key": "test-key"},
+        )
+        assert resp.status_code == 422
+
+
+# =============================================================================
+# Delivery Window Enforcement Tests
+# =============================================================================
+
+
+class TestDeliveryWindowEnforcement:
+    """Tests for MIN_DELIVERY_WINDOW_MINUTES enforcement.
+
+    Non-negotiable Kerala MVD constraint: no delivery window shorter
+    than 30 minutes. The upload endpoint widens narrow windows rather
+    than rejecting orders — this is more operationally friendly.
+    No "10-minute delivery" promises.
+    """
+
+    def test_narrow_window_is_widened(self, client):
+        """A 10-minute delivery window should be widened to 30 minutes.
+
+        The system extends the window_end to meet the minimum.
+        This prevents drivers from being pressured into unrealistic
+        delivery deadlines.
+        """
+        from datetime import time as dt_time
+
+        # Create a mock order with a 10-minute window (09:00-09:10)
+        mock_order = MagicMock()
+        mock_order.is_geocoded = True
+        mock_order.delivery_window_start = dt_time(9, 0)
+        mock_order.delivery_window_end = dt_time(9, 10)
+        mock_order.order_id = "ORD-001"
+        mock_order.location = MagicMock(
+            latitude=9.97, longitude=76.28,
+            geocode_confidence=0.9, address_text="Test"
+        )
+        mock_order.weight_kg = 14.2
+        mock_order.quantity = 1
+        mock_order.customer_ref = None
+        mock_order.address_raw = "123 Test St"
+
+        with patch("apps.kerala_delivery.api.main.CsvImporter") as mock_importer_cls, \
+             patch("apps.kerala_delivery.api.main._get_geocoder", return_value=None), \
+             patch("apps.kerala_delivery.api.main.VroomAdapter") as mock_optimizer_cls, \
+             patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
+             patch("apps.kerala_delivery.api.main._build_fleet") as mock_fleet:
+
+            mock_importer = MagicMock()
+            mock_importer.import_orders.return_value = [mock_order]
+            mock_importer_cls.return_value = mock_importer
+
+            mock_optimizer = MagicMock()
+            mock_optimizer.optimize.return_value = MagicMock(
+                assignment_id="test",
+                total_orders_assigned=1,
+                unassigned_order_ids=[],
+                vehicles_used=1,
+                optimization_time_ms=10.0,
+                routes=[],
+                created_at=datetime.now(timezone.utc),
+            )
+            mock_optimizer_cls.return_value = mock_optimizer
+
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[])
+            mock_repo.save_optimization_run = AsyncMock(return_value=uuid.uuid4())
+            mock_fleet.return_value = []
+
+            resp = client.post(
+                "/api/upload-orders",
+                files={"file": ("orders.csv", b"dummy", "text/csv")},
+            )
+
+        # The window should have been widened: 09:00 → 09:30
+        assert mock_order.delivery_window_end == dt_time(9, 30)
+
+    def test_valid_window_is_not_modified(self, client):
+        """A 60-minute window should not be modified (already >= 30 min)."""
+        from datetime import time as dt_time
+
+        mock_order = MagicMock()
+        mock_order.is_geocoded = True
+        mock_order.delivery_window_start = dt_time(9, 0)
+        mock_order.delivery_window_end = dt_time(10, 0)  # 60 min — valid
+        mock_order.order_id = "ORD-001"
+        mock_order.location = MagicMock(
+            latitude=9.97, longitude=76.28,
+            geocode_confidence=0.9, address_text="Test"
+        )
+        mock_order.weight_kg = 14.2
+        mock_order.quantity = 1
+        mock_order.customer_ref = None
+        mock_order.address_raw = "123 Test St"
+
+        with patch("apps.kerala_delivery.api.main.CsvImporter") as mock_importer_cls, \
+             patch("apps.kerala_delivery.api.main._get_geocoder", return_value=None), \
+             patch("apps.kerala_delivery.api.main.VroomAdapter") as mock_optimizer_cls, \
+             patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
+             patch("apps.kerala_delivery.api.main._build_fleet") as mock_fleet:
+
+            mock_importer = MagicMock()
+            mock_importer.import_orders.return_value = [mock_order]
+            mock_importer_cls.return_value = mock_importer
+
+            mock_optimizer = MagicMock()
+            mock_optimizer.optimize.return_value = MagicMock(
+                assignment_id="test",
+                total_orders_assigned=1,
+                unassigned_order_ids=[],
+                vehicles_used=1,
+                optimization_time_ms=10.0,
+                routes=[],
+                created_at=datetime.now(timezone.utc),
+            )
+            mock_optimizer_cls.return_value = mock_optimizer
+
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[])
+            mock_repo.save_optimization_run = AsyncMock(return_value=uuid.uuid4())
+            mock_fleet.return_value = []
+
+            client.post(
+                "/api/upload-orders",
+                files={"file": ("orders.csv", b"dummy", "text/csv")},
+            )
+
+        # Window should be unchanged — 60 min > 30 min minimum
+        assert mock_order.delivery_window_end == dt_time(10, 0)
+
+
+# =============================================================================
+# Rate Limiting Tests
+# =============================================================================
+
+
+class TestRateLimiting:
+    """Tests for rate limiting middleware (slowapi).
+
+    Rate limiting prevents abuse of expensive endpoints (upload triggers
+    VROOM optimization, telemetry writes to DB on every ping).
+    Uses a separate fixture with rate limiting ENABLED.
+    """
+
+    @pytest.fixture
+    def rate_limited_client(self, mock_session):
+        """TestClient with rate limiting ENABLED.
+
+        Unlike the main 'client' fixture which disables rate limiting,
+        this fixture keeps it active to verify that limits are enforced.
+        """
+        from apps.kerala_delivery.api.main import app, limiter
+
+        async def override_get_session():
+            yield mock_session
+
+        limiter.enabled = True
+        app.dependency_overrides[get_session] = override_get_session
+        yield TestClient(app)
+        app.dependency_overrides.clear()
+        # Disable again for other test classes
+        limiter.enabled = False
+
+    def test_upload_rate_limit_enforced(self, rate_limited_client):
+        """POST /api/upload-orders should be rate-limited to 10/minute.
+
+        The upload endpoint triggers CSV parsing, geocoding (potentially
+        Google API calls at $5/1000), and VROOM optimization. Rate limiting
+        prevents accidental or malicious excessive use.
+
+        We send requests with a bad file extension (returns 400 quickly)
+        to avoid actually running the optimizer pipeline. The rate limiter
+        fires BEFORE the endpoint logic, so even 400 responses count against
+        the limit.
+        """
+        # Send 11 requests with .txt files — each returns 400 fast
+        # but still counts against the rate limit
+        hit_429 = False
+        for i in range(15):
+            resp = rate_limited_client.post(
+                "/api/upload-orders",
+                files={"file": ("orders.txt", b"data", "text/plain")},
+            )
+            if resp.status_code == 429:
+                hit_429 = True
+                break
+
+        # We should hit the rate limit at some point (10/minute)
+        assert hit_429, "Rate limit was not enforced after 15 rapid requests"

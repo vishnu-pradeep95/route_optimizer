@@ -77,8 +77,9 @@ routing_opt/
 │   │   ├── interfaces.py          ← RouteOptimizer protocol
 │   │   └── vroom_adapter.py       ← VROOM implementation
 │   ├── geocoding/                 ← Geocoding adapters
-│   │   ├── interfaces.py          ← Geocoder protocol
-│   │   └── google_adapter.py      ← Google Maps + SHA256 file cache
+│   │   ├── interfaces.py          ← Geocoder + AsyncGeocoder protocols
+│   │   ├── google_adapter.py      ← Google Maps + SHA256 file cache
+│   │   └── cache.py               ← PostGIS geocode cache (CachedGeocoder)
 │   ├── database/                  ← PostgreSQL + PostGIS persistence
 │   │   ├── __init__.py            ← Package docs + architecture overview
 │   │   ├── connection.py          ← Async engine, session factory (asyncpg)
@@ -94,14 +95,16 @@ routing_opt/
 │       ├── api/main.py            ← FastAPI backend (upload, optimize, serve)
 │       ├── driver_app/            ← PWA (index.html, sw.js, manifest.json)
 │       └── dashboard/             ← Ops dashboard (React + Vite + MapLibre GL JS)
-│           ├── src/pages/         ← LiveMap (real-time tracking), RunHistory
+│           ├── src/pages/         ← LiveMap, RunHistory, FleetManagement
 │           ├── src/components/    ← RouteMap, VehicleList, StatsBar
 │           └── src/lib/api.ts     ← Typed fetch client for all API endpoints
 │
-├── tests/                         ← Mirrors source structure (144 tests)
+├── tests/                         ← Mirrors source structure (211 tests)
 │   ├── conftest.py                ← Shared fixtures (Kerala coordinates)
 │   ├── core/                      ← Unit tests for all core modules
-│   │   └── database/              ← 35 DB tests (models, repository, connection)
+│   │   ├── database/              ← 35 DB tests (models, repository, connection)
+│   │   └── geocoding/             ← Geocoder + PostGIS cache tests (16 cache tests)
+│   ├── scripts/                   ← Batch script tests (import_orders, geocode_batch)
 │   ├── apps/                      ← API endpoint tests
 │   └── integration/               ← End-to-end pipeline tests
 │
@@ -113,6 +116,10 @@ routing_opt/
 │   │   └── versions/              ← Migration scripts (3 so far)
 │   └── vroom-conf/                ← VROOM service configuration
 ├── docker-compose.yml             ← PostgreSQL + OSRM + VROOM + API stack
+├── scripts/
+│   ├── import_orders.py           ← Batch CSV import (parse + geocode + save to DB)
+│   └── geocode_batch.py           ← Batch geocode addresses (CSV or DB → PostGIS cache)
+│
 ├── data/
 │   └── sample_orders.csv          ← 30 example orders around Kochi
 │
@@ -154,10 +161,22 @@ Base URL: `http://localhost:8000`
 | `POST` | `/api/routes/{vehicle_id}/stops/{order_id}/status` | Update delivery status (`delivered` / `failed` / `pending`) |
 | `GET` | `/api/runs` | List recent optimization runs (newest first) |
 | `GET` | `/api/runs/{run_id}/routes` | All routes for a specific optimization run |
-| `POST` | `/api/telemetry` | Receive GPS telemetry pings from driver app |
+| `POST` | `/api/telemetry` | Receive a single GPS telemetry ping from driver app |
+| `POST` | `/api/telemetry/batch` | Receive multiple GPS pings in one request (reduces N+1 overhead) |
+| `GET` | `/api/telemetry/fleet` | Latest position of every active vehicle |
+| `GET` | `/api/telemetry/{vehicle_id}` | GPS history for a specific vehicle |
+| `GET` | `/api/vehicles` | List all fleet vehicles |
+| `GET` | `/api/vehicles/{vehicle_id}` | Get details for a specific vehicle |
+| `POST` | `/api/vehicles` | Register a new vehicle |
+| `PUT` | `/api/vehicles/{vehicle_id}` | Update vehicle details |
+| `DELETE` | `/api/vehicles/{vehicle_id}` | Remove a vehicle from the fleet |
 | `GET` | `/driver/` | Serves the driver PWA |
 
 ### Upload CSV Format
+
+> **Authentication:** Write endpoints (`POST`, `PUT`, `DELETE`) require an API key
+> in the `X-API-Key` header. Set `ROUTEOPT_API_KEY` in `.env`. Read endpoints (`GET`)
+> are open for driver app access without auth overhead.
 
 See [data/sample_orders.csv](data/sample_orders.csv) for a working example.
 
@@ -226,10 +245,10 @@ These are enforced by the system and cannot be bypassed:
 | **Optimizer** | VROOM (Docker, port 3000) | Vehicle routing problem solver (CVRP + Time Windows) |
 | **Backend** | Python 3.12 + FastAPI | API server, orchestration |
 | **Data models** | Pydantic v2 + SQLAlchemy ORM | Validation, serialization, persistence |
-| **Geocoding** | Google Maps API (PostGIS cache) | Address → GPS coordinates |
+| **Geocoding** | Google Maps API (PostGIS cache + CachedGeocoder) | Address → GPS coordinates |
 | **Driver app** | PWA (HTML/JS/Service Worker) | Mobile-friendly, offline-capable |
 | **Migrations** | Alembic (async) | Database schema versioning (3 migrations applied) |
-| **Ops Dashboard** | React 19 + Vite 7 + MapLibre GL JS 5 | Live vehicle tracking, route visualization, run history |
+| **Ops Dashboard** | React 19 + Vite 7 + MapLibre GL JS 5 | Live vehicle tracking, route visualization, run history, fleet management |
 | **Infrastructure** | Docker Compose | Single-command deployment |
 
 ---
@@ -241,14 +260,16 @@ source .venv/bin/activate
 pytest tests/ -v
 ```
 
-**144 tests** covering:
+**211 tests** covering:
 - Core models (location, order, vehicle, route validation)
 - OSRM adapter (travel time, distance matrix, safety multiplier)
 - VROOM adapter (route optimization, priority, unassigned handling)
 - Google geocoder (API calls, caching, geocode cache hits)
+- PostGIS geocode cache (CachedGeocoder — cache-first strategy, hit/miss, confidence)
 - CSV importer (standard/custom columns, coordinate passthrough, error recovery)
 - Database layer (35 tests: ORM models, repository CRUD, connection lifecycle, telemetry)
-- API endpoints (health, routes, status updates, upload pipeline, optimization runs, telemetry)
+- API endpoints (health, routes, status updates, upload pipeline, optimization runs, telemetry, fleet CRUD, rate limiting)
+- Batch scripts (import_orders.py, geocode_batch.py — parsing, geocoding, dry-run, stats)
 - Integration (end-to-end CSV → geocode → optimize → persist pipeline)
 
 All external services (OSRM, VROOM, Google Maps, PostgreSQL) are mocked in tests — no Docker required to run the test suite.
@@ -289,6 +310,7 @@ Copy `.env.example` → `.env` and configure:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GOOGLE_MAPS_API_KEY` | Yes (for geocoding) | Google Cloud API key with Geocoding API enabled |
+| `ROUTEOPT_API_KEY` | Yes (for write endpoints) | API key for authenticated `POST`/`PUT`/`DELETE` requests |
 | `OSRM_URL` | No | Defaults to `http://localhost:5000` |
 | `VROOM_URL` | No | Defaults to `http://localhost:3000` |
 | `POSTGRES_USER` | No | Defaults to `routeopt` |
@@ -304,7 +326,7 @@ Copy `.env.example` → `.env` and configure:
 |-------|--------|-------------|
 | **0: Baseline** | ✅ Complete | Core modules, data models, tests, API, driver PWA, Docker setup |
 | **1: Single-Vehicle** | ✅ Complete | Real OSRM Kerala data, speed profiles, 68% route improvement validated |
-| **2: Multi-Vehicle + DB** | 🔧 In Progress | PostgreSQL + PostGIS, time windows, GPS telemetry, optimization history |
+| **2: Multi-Vehicle + DB** | ✅ Near-Complete | PostgreSQL + PostGIS, time windows, GPS telemetry, optimization history, fleet management, API auth, batch scripts |
 | **3: Production** | Planned | Cloud deploy, monitoring, automated daily use |
 | **4: Advanced** | Planned | ML travel-time models, dynamic re-routing, notifications |
 

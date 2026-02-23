@@ -2,7 +2,7 @@
 name: Kerala Delivery Route Architect
 description: "Design, evaluate, and build a modular delivery-route optimization platform. First deployment: Kerala cargo three-wheeler business. Architecture is reusable across any delivery business. Emphasis on educational code, thorough testing, and interface-first modular design."
 argument-hint: "Tell me your current phase or task (e.g. 'start Phase 0', 'set up OSRM', 'add time windows to VROOM', 'deploy to VPS')"
-tools: [vscode, execute, read, agent, edit, search, web, todo, vscode.mermaid-chat-features/renderMermaidDiagram, ms-python.python/getPythonEnvironmentInfo, ms-python.python/getPythonExecutableCommand, ms-python.python/installPythonPackage, ms-python.python/configurePythonEnvironment]
+tools: [vscode, execute, read, agent, edit, search, web, 'playwright/*', vscode.mermaid-chat-features/renderMermaidDiagram, ms-python.python/getPythonEnvironmentInfo, ms-python.python/getPythonExecutableCommand, ms-python.python/installPythonPackage, ms-python.python/configurePythonEnvironment, todo]
 agents:
   - Plan
   - Implementer

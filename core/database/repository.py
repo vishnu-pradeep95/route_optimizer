@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from geoalchemy2.functions import ST_MakePoint, ST_SetSRID
 from geoalchemy2.shape import to_shape
 from shapely import Point
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -476,6 +476,97 @@ async def get_vehicle_telemetry(
     return list(result.scalars().all())
 
 
+async def get_fleet_latest_telemetry(
+    session: AsyncSession,
+) -> list[TelemetryDB]:
+    """Get the most recent telemetry ping for every vehicle (fleet-wide).
+
+    Used by the ops dashboard's LiveMap to show all driver positions
+    in a single HTTP request. Replaces the N+1 pattern where the frontend
+    calls GET /api/telemetry/{vehicle_id}?limit=1 once per vehicle.
+
+    SQL approach: DISTINCT ON (vehicle_id) ordered by recorded_at DESC.
+    PostgreSQL-specific syntax — not portable to SQLite, but we're committed
+    to PostgreSQL + PostGIS anyway.
+    See: https://www.postgresql.org/docs/current/sql-select.html#SQL-DISTINCT
+
+    Performance: the idx_telemetry_vehicle_time index (vehicle_id, recorded_at DESC)
+    makes this a fast index scan even with millions of telemetry rows.
+    """
+    # DISTINCT ON picks the first row per group after ORDER BY,
+    # giving us the latest ping per vehicle in a single query.
+    query = (
+        select(TelemetryDB)
+        .distinct(TelemetryDB.vehicle_id)
+        .order_by(TelemetryDB.vehicle_id, TelemetryDB.recorded_at.desc())
+    )
+    result = await session.execute(query)
+    return list(result.scalars().all())
+
+
+async def save_telemetry_batch(
+    session: AsyncSession,
+    pings: list[dict],
+    speed_limit_kmh: float = 40.0,
+    accuracy_threshold_m: float = 50.0,
+) -> list[tuple[uuid.UUID | None, bool]]:
+    """Save a batch of GPS telemetry pings in a single transaction.
+
+    The driver app may queue pings while offline and send them all at once
+    when connectivity returns. Processing them in a batch avoids N separate
+    round-trips to the database.
+
+    Args:
+        session: Async DB session (caller commits).
+        pings: List of dicts with keys matching TelemetryPing fields:
+            vehicle_id, latitude, longitude, speed_kmh, accuracy_m,
+            heading, recorded_at, driver_name.
+        speed_limit_kmh: Urban speed limit for safety alerts (default: 40).
+        accuracy_threshold_m: GPS pings worse than this are discarded (default: 50).
+
+    Returns:
+        List of (telemetry_id, speed_alert) tuples — one per input ping.
+        Discarded pings return (None, False).
+    """
+    results: list[tuple[uuid.UUID | None, bool]] = []
+    to_save: list[TelemetryDB] = []
+
+    for ping_data in pings:
+        accuracy = ping_data.get("accuracy_m")
+        if accuracy is not None and accuracy > accuracy_threshold_m:
+            results.append((None, False))
+            continue
+
+        speed = ping_data.get("speed_kmh")
+        speed_alert = speed is not None and speed > speed_limit_kmh
+
+        ping_id = uuid.uuid4()
+        location = Location(
+            latitude=ping_data["latitude"],
+            longitude=ping_data["longitude"],
+        )
+        ping = TelemetryDB(
+            id=ping_id,
+            vehicle_id=ping_data["vehicle_id"],
+            driver_name=ping_data.get("driver_name"),
+            location=_make_point(location),
+            speed_kmh=speed,
+            accuracy_m=accuracy,
+            heading=ping_data.get("heading"),
+            recorded_at=ping_data.get("recorded_at") or datetime.now(timezone.utc),
+            speed_alert=speed_alert,
+        )
+        to_save.append(ping)
+        results.append((ping_id, speed_alert))
+
+    # Batch insert — add_all() lets SQLAlchemy batch the INSERTs into
+    # fewer round-trips than individual session.add() calls. For 100 pings,
+    # this can be 3-5× faster depending on PostgreSQL's network latency.
+    session.add_all(to_save)
+    await session.flush()
+    return results
+
+
 # =============================================================================
 # Vehicles
 # =============================================================================
@@ -503,6 +594,131 @@ def vehicle_db_to_pydantic(vdb: VehicleDB) -> Vehicle:
         depot=depot if depot else Location(latitude=0, longitude=0),
         speed_limit_kmh=vdb.speed_limit_kmh or 40.0,
     )
+
+
+async def get_all_vehicles(session: AsyncSession) -> list[VehicleDB]:
+    """Get all vehicles in the fleet (active and inactive).
+
+    Used by the fleet management API to show the full inventory.
+    For optimization, use get_active_vehicles() instead (filters inactive).
+    """
+    result = await session.execute(
+        select(VehicleDB).order_by(VehicleDB.vehicle_id)
+    )
+    return list(result.scalars().all())
+
+
+async def get_vehicle_by_vehicle_id(
+    session: AsyncSession, vehicle_id: str
+) -> VehicleDB | None:
+    """Look up a vehicle by its human-readable vehicle_id (e.g., 'VEH-01').
+
+    Returns None if not found. Used for GET/PUT/DELETE on a specific vehicle.
+    """
+    result = await session.execute(
+        select(VehicleDB).where(VehicleDB.vehicle_id == vehicle_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def create_vehicle(
+    session: AsyncSession,
+    vehicle_id: str,
+    depot_location: Location,
+    max_weight_kg: float = 446.0,
+    max_items: int = 30,
+    registration_no: str | None = None,
+    vehicle_type: str = "diesel",
+    speed_limit_kmh: float = 40.0,
+) -> VehicleDB:
+    """Create a new vehicle in the fleet.
+
+    Args:
+        session: Async DB session (caller commits).
+        vehicle_id: Human-readable ID (e.g., 'VEH-14'). Must be unique.
+        depot_location: Where this vehicle starts/ends its route.
+        max_weight_kg: Payload capacity. Default 446 kg (Ape Xtra LDX @ 90%).
+        max_items: Max number of items (cylinders). Default 30.
+        registration_no: Vehicle registration number (optional).
+        vehicle_type: Fuel/power type (e.g., 'diesel', 'electric', 'cng'). Default 'diesel'.
+        speed_limit_kmh: Max speed for safety alerts. Default 40 km/h.
+
+    Returns:
+        The created VehicleDB ORM object.
+    """
+    vehicle = VehicleDB(
+        vehicle_id=vehicle_id,
+        registration_no=registration_no,
+        vehicle_type=vehicle_type,
+        max_weight_kg=max_weight_kg,
+        max_items=max_items,
+        depot_location=_make_point(depot_location),
+        speed_limit_kmh=speed_limit_kmh,
+        is_active=True,
+    )
+    session.add(vehicle)
+    await session.flush()
+    return vehicle
+
+
+async def update_vehicle(
+    session: AsyncSession,
+    vehicle_id: str,
+    updates: dict,
+) -> bool:
+    """Update fields on an existing vehicle.
+
+    Args:
+        session: Async DB session.
+        vehicle_id: The human-readable vehicle_id to update.
+        updates: Dict of field→value to change. Only known fields are applied.
+
+    Returns:
+        True if the vehicle was found and updated, False if not found.
+    """
+    # Whitelist of updatable fields — prevents injection of arbitrary columns
+    allowed_fields = {
+        "registration_no", "vehicle_type", "max_weight_kg", "max_items",
+        "speed_limit_kmh", "is_active",
+    }
+    safe_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+
+    # Handle depot_location separately (needs PostGIS conversion)
+    if "depot_location" in updates and updates["depot_location"] is not None:
+        loc = updates["depot_location"]
+        if isinstance(loc, dict):
+            loc = Location(latitude=loc["latitude"], longitude=loc["longitude"])
+        safe_updates["depot_location"] = _make_point(loc)
+
+    if not safe_updates:
+        return False
+
+    result = await session.execute(
+        update(VehicleDB)
+        .where(VehicleDB.vehicle_id == vehicle_id)
+        .values(**safe_updates)
+    )
+    rows_updated: int = result.rowcount  # type: ignore[attr-defined]
+    await session.flush()
+    return rows_updated > 0
+
+
+async def deactivate_vehicle(session: AsyncSession, vehicle_id: str) -> bool:
+    """Soft-delete a vehicle by setting is_active=False.
+
+    Why soft-delete instead of hard-delete?
+    - Historical routes reference this vehicle — hard delete would break FKs
+    - The vehicle might come back (temporary maintenance, driver change)
+    - Audit trail: we can see which vehicles were active when
+    """
+    result = await session.execute(
+        update(VehicleDB)
+        .where(VehicleDB.vehicle_id == vehicle_id)
+        .values(is_active=False)
+    )
+    rows_updated: int = result.rowcount  # type: ignore[attr-defined]
+    await session.flush()
+    return rows_updated > 0
 
 
 # =============================================================================
@@ -543,7 +759,12 @@ async def get_cached_geocode(
         )
     )
 
-    return _point_to_location(row.location, confidence=row.confidence)
+    # Pass address_raw so cache hits preserve the original address text.
+    # Without this, cached geocode results lose address_text — callers get
+    # a Location with coordinates but no human-readable address string.
+    return _point_to_location(
+        row.location, address_text=row.address_raw, confidence=row.confidence
+    )
 
 
 async def save_geocode_cache(
