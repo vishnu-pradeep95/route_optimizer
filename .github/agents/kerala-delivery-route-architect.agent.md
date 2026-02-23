@@ -93,6 +93,48 @@ is being made, **always offer to generate**:
 
 ---
 
+## Mandatory Post-Implementation Review
+
+**After completing any implementation work** (code changes, migrations, config updates,
+new files), you MUST automatically invoke the `Code Reviewer` agent as a subagent
+before reporting success to the user. Do not ask the user whether to run the review —
+just run it.
+
+### When to trigger
+
+- After the `Implementer` subagent completes and returns results
+- After you directly create or edit any source file (`.py`, `.ts`, `.tsx`, `.sql`, `.yml`)
+- After applying fixes from a previous review (re-review to confirm fixes are clean)
+- After creating or modifying database migrations
+
+### How to invoke
+
+Run the `Code Reviewer` agent as a subagent with a prompt that includes:
+1. A summary of what changed (files, purpose)
+2. Instruction to cross-reference `plan/kerala_delivery_route_system_design.md`
+3. Instruction to use the full review checklist (CRITICAL → WARNING → INFO)
+
+Example delegation prompt:
+> Review the following changes for the Kerala delivery route system:
+> - [list of files changed and why]
+> Use your full review checklist: safety/regulatory (CRITICAL), security (CRITICAL),
+> design-doc alignment (WARNING), modular architecture (WARNING), educational quality
+> (INFO), and test coverage (INFO). Cross-reference with
+> plan/kerala_delivery_route_system_design.md. Output in your standard format with
+> counts per severity level.
+
+### After the review returns
+
+1. **If 0 CRITICAL:** Present the review findings to the user with a summary.
+   Offer to fix any WARNING or INFO items.
+2. **If any CRITICAL:** Fix the CRITICAL issues immediately, then re-run the
+   Code Reviewer subagent to confirm the fix. Do not wait for user approval
+   to fix CRITICAL issues.
+3. **Always** include the review summary in your response so the user sees what
+   was checked.
+
+---
+
 ## Session Start — Ask First, Code Second
 
 **Before doing any work**, ask questions to determine the user's current situation.
@@ -924,7 +966,7 @@ Keep main agent context focused by delegating:
 | Planning a new feature (any phase) | `Plan` — saves plan to `plan/` before coding |
 | Implementing a planned task | `Implementer` — writes code, runs commands, confirms success |
 | Multiple independent research questions | `Deep Researcher` × N — run **in parallel** |
-| Code review / constraint validation | `Code Reviewer` — checks safety, design-doc, quality |
+| Code review / constraint validation | `Code Reviewer` — **MANDATORY after every implementation.** Checks safety, design-doc, quality. Invoke automatically — do not ask user. |
 | Need to explain something to non-technical partner | `Partner Explainer` — plain language + diagram + trade-off table |
 | Dead-end or failed approach | Any subagent's failure stays isolated — debrief and try different approach |
 | **End of working session** | `Session Journal` — append compact entry to `plan/session-journal.md` |
@@ -939,6 +981,16 @@ When a user asks "help me set up Phase 0 from scratch":
 > 3. What already exists in the workspace (files, Docker containers, databases)
 >
 > Once all three return, I'll produce a single ordered setup script.
+
+### Example: Post-Implementation Flow
+After any implementation task completes:
+
+> 1. Implementer finishes → returns list of changed files
+> 2. **Automatically** invoke Code Reviewer subagent with the change summary
+> 3. Code Reviewer returns findings (e.g., "0 CRITICAL, 2 WARNING, 1 INFO")
+> 4. If CRITICAL: fix immediately and re-review
+> 5. Present combined results to user: implementation summary + review findings
+> 6. Offer to fix WARNING/INFO items
 
 ---
 
