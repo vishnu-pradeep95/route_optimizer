@@ -366,7 +366,56 @@ Two items listed as OPEN in the previous journal entry were already implemented:
 5. Offline-first driver PWA
 
 ---
-## 2025-07-18 — Phase 2 Completion: Fleet UI + Geocoding Cache + Batch Scripts
+
+## Session 2025-07-20 — Phase 3 Production Deployment + Read-Scoped Auth
+
+**Phase:** Phase 3 (production deployment complete)
+
+### Phase 3 Production Deployment (committed 3209c60, 34 files, +6165/-60)
+- DECIDED: Multi-stage Dockerfile for API (builder + runtime), 2 workers, proxy-headers, healthcheck
+- DECIDED: Multi-stage Dockerfile.dashboard (Node 22 build → Alpine static assets, non-root user)
+- DECIDED: Caddy reverse proxy with auto-TLS (Let's Encrypt), security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy)
+- DECIDED: docker-compose.prod.yml — 6 services (db, osrm, vroom, api, dashboard-build, caddy), resource limits, log rotation, healthchecks
+- DECIDED: OSRM pinned to v5.27.1 in production compose
+- DECIDED: deploy.sh — one-command deploy with preflight checks, backup, Alembic migration, health check
+- DECIDED: backup_db.sh — pg_dump with rotation, uses grep (not source) for env security
+- DECIDED: GitHub Actions CI — 3 jobs (Python pytest, dashboard npm build, Docker smoke test)
+- DECIDED: OpenAPI docs disabled in production (docs_url=None when ENVIRONMENT=production)
+
+### Read-Scoped Auth for Fleet Endpoints
+- DECIDED: `verify_read_key` dependency on 4 sensitive GET endpoints: fleet telemetry, vehicle telemetry, vehicles list, vehicle detail
+- DECIDED: Same API key as writes (one key to manage), extracted shared `_check_api_key()` helper to eliminate duplication
+- DECIDED: Dashboard `apiFetch` sends X-API-Key on ALL requests (not just writes)
+- DECIDED: Non-sensitive GETs (/api/routes, /api/runs, /health) remain open
+
+### Code Reviews
+- Review #11 (Phase 3): 3 CRITICAL, 5 WARNING, 8 INFO → all fixed → re-review: 0 CRITICAL, 0 WARNING
+- Review #12 (Read auth): 0 CRITICAL, 2 WARNING (stale docstrings, stale log messages), 4 INFO → all fixed
+
+### New Tests (10 new, 220 total)
+- 4 tests: fleet telemetry, vehicle telemetry, vehicles list, vehicle detail — reject missing API key (401)
+- 4 tests: same endpoints accept correct API key (200)
+- 1 test: wrong key rejected on read endpoints
+- 1 test: updated docstring for open-without-key test
+
+**Tests:** 220 passing (pytest, 2.42s)
+
+**RESOLVED:** Read-level auth for fleet telemetry (Phase 3) — now protected via verify_read_key
+**RESOLVED:** Phase 3 production deployment — full infrastructure implemented
+
+**OPEN:** No React component tests for FleetManagement (Playwright E2E deferred)
+**OPEN:** Offline-first PWA sync not implemented
+**OPEN:** OSRM speed profile not yet calibrated with real GPS data
+**OPEN:** scripts/ import from apps/kerala_delivery/config (W1 — Kerala-specific coupling, low urgency)
+**OPEN:** Drag-and-drop route editing for dashboard
+
+**Next steps:**
+1. Dashboard E2E tests (Playwright)
+2. OSRM speed profile calibration with real GPS data
+3. Offline-first driver PWA
+4. Drag-and-drop route editing
+
+---## 2025-07-18 — Phase 2 Completion: Fleet UI + Geocoding Cache + Batch Scripts
 
 **Phase:** Phase 2 (Multi-Vehicle + Dashboard) — near-complete
 **Tests:** 180 passing (164 → 180, +16 new)

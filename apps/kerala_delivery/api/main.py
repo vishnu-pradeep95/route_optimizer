@@ -71,11 +71,12 @@ async def lifespan(app: FastAPI):
     if not api_key and env != "development":
         logger.warning(
             "⚠️  API_KEY is not set and ENVIRONMENT=%s. "
-            "All POST endpoints are UNPROTECTED. Set API_KEY in production.",
+            "All protected endpoints (POST + sensitive GET) are UNPROTECTED. "
+            "Set API_KEY in production.",
             env,
         )
     elif api_key:
-        logger.info("API key authentication enabled for POST endpoints")
+        logger.info("API key authentication enabled for POST and sensitive GET endpoints")
 
     logger.info("Starting up — DB engine pool initialized")
     yield
@@ -173,19 +174,16 @@ _api_key_scheme = APIKeyHeader(name="X-API-Key", auto_error=False)
 MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
-async def verify_api_key(
-    api_key: str | None = Depends(_api_key_scheme),
-) -> None:
-    """Verify the X-API-Key header on mutating (POST) endpoints.
+def _check_api_key(api_key: str | None) -> None:
+    """Shared API key verification logic.
 
-    Security model:
-    - If API_KEY env var is empty/unset: all requests allowed (dev mode).
-      This lets developers run locally without configuring a key.
-    - If API_KEY is set: every POST request must include a matching
-      X-API-Key header or receive 401 Unauthorized.
+    Why a helper instead of duplicating in each dependency?
+    Both verify_api_key and verify_read_key use the same key and logic.
+    Extracting the check means a future security fix (e.g., switching to
+    hmac.compare_digest for timing-safe comparison) only needs one change.
 
-    Usage: add ``dependencies=[Depends(verify_api_key)]`` to @app.post().
-    GET endpoints remain unauthenticated (read-only, non-sensitive).
+    Raises HTTPException(401) if API_KEY is set and the provided key
+    doesn't match. No-ops in dev mode (API_KEY unset).
     """
     expected_key = os.environ.get("API_KEY", "")
     if not expected_key:
@@ -195,6 +193,49 @@ async def verify_api_key(
             status_code=401,
             detail="Invalid or missing API key. Include X-API-Key header.",
         )
+
+
+async def verify_api_key(
+    api_key: str | None = Depends(_api_key_scheme),
+) -> None:
+    """Verify the X-API-Key header on mutating (POST/PUT/DELETE) endpoints.
+
+    Security model:
+    - If API_KEY env var is empty/unset: all requests allowed (dev mode).
+      This lets developers run locally without configuring a key.
+    - If API_KEY is set: every mutating request must include a matching
+      X-API-Key header or receive 401 Unauthorized.
+
+    Usage: add ``dependencies=[Depends(verify_api_key)]`` to @app.post().
+    """
+    _check_api_key(api_key)
+
+
+async def verify_read_key(
+    api_key: str | None = Depends(_api_key_scheme),
+) -> None:
+    """Verify the X-API-Key header on sensitive GET endpoints.
+
+    Why protect some GET endpoints?
+    Fleet telemetry exposes real-time GPS locations of all drivers —
+    this is personally sensitive data (driver tracking). Vehicle details
+    include registration numbers and depot locations. Unlike route
+    summaries or optimization run history, this data has privacy
+    implications if exposed publicly.
+
+    Uses the SAME API key as verify_api_key — no separate "read key".
+    This keeps the auth model simple (one key to manage) while closing
+    the gap where fleet-wide location data was publicly accessible.
+
+    Protected endpoints:
+    - GET /api/telemetry/fleet  (all driver locations)
+    - GET /api/telemetry/{vehicle_id}  (driver GPS history)
+    - GET /api/vehicles  (fleet details, registration numbers)
+    - GET /api/vehicles/{vehicle_id}  (individual vehicle details)
+
+    Usage: add ``dependencies=[Depends(verify_read_key)]`` to @app.get().
+    """
+    _check_api_key(api_key)
 
 
 # =============================================================================
@@ -742,7 +783,7 @@ async def submit_telemetry(
     )
 
 
-@app.get("/api/telemetry/fleet")
+@app.get("/api/telemetry/fleet", dependencies=[Depends(verify_read_key)])
 async def get_fleet_telemetry(
     session: AsyncSession = SessionDep,
 ):
@@ -761,10 +802,8 @@ async def get_fleet_telemetry(
     because FastAPI matches routes top-to-bottom. If {vehicle_id} came
     first, the literal "fleet" would be captured as a vehicle_id.
 
-    TODO Phase 3: Add read-level auth (e.g., viewer API key) — this endpoint
-    exposes real-time positions of the entire fleet. Currently follows the
-    "GET endpoints are open" pattern from session-journal DECIDED entries,
-    but fleet-wide location data is more sensitive than single-vehicle queries.
+    Requires API key authentication — fleet-wide location data is sensitive
+    (real-time GPS positions of all drivers). See verify_read_key.
 
     Returns:
         Dict with vehicle_id → latest ping mapping and total count.
@@ -856,7 +895,7 @@ async def submit_telemetry_batch(
     }
 
 
-@app.get("/api/telemetry/{vehicle_id}")
+@app.get("/api/telemetry/{vehicle_id}", dependencies=[Depends(verify_read_key)])
 async def get_vehicle_telemetry(
     vehicle_id: str,
     limit: int = Query(default=100, ge=1, le=1000, description="Max pings to return"),
@@ -956,7 +995,7 @@ def _vehicle_to_dict(v: "VehicleDB") -> dict:
     }
 
 
-@app.get("/api/vehicles")
+@app.get("/api/vehicles", dependencies=[Depends(verify_read_key)])
 async def list_vehicles(
     active_only: bool = Query(default=False, description="If true, return only active vehicles"),
     session: AsyncSession = SessionDep,
@@ -977,7 +1016,7 @@ async def list_vehicles(
     }
 
 
-@app.get("/api/vehicles/{vehicle_id}")
+@app.get("/api/vehicles/{vehicle_id}", dependencies=[Depends(verify_read_key)])
 async def get_vehicle(
     vehicle_id: str,
     session: AsyncSession = SessionDep,

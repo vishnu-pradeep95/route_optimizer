@@ -837,13 +837,19 @@ class TestGeocodeCacheHit:
 
 
 class TestAuthentication:
-    """Tests for API key authentication on mutating endpoints.
+    """Tests for API key authentication on protected endpoints.
 
-    When the API_KEY environment variable is set, all POST endpoints
-    must include a valid X-API-Key header. GET endpoints remain open
-    (read-only, non-sensitive data for the dashboard).
+    When the API_KEY environment variable is set:
+    - All POST endpoints must include a valid X-API-Key header.
+    - Sensitive GET endpoints (fleet telemetry, vehicle details) also
+      require the API key — these expose driver GPS locations and
+      vehicle registration numbers, which are privacy-sensitive.
+    - Non-sensitive GET endpoints (routes, optimization runs) remain
+      open for easy dashboard access.
 
-    Security requirement from Code Review #6 — Critical finding C1.
+    Security requirements:
+    - Code Review #6, Critical C1: POST endpoints need auth.
+    - Code Review #7+: Fleet telemetry/vehicle GETs need read auth.
     """
 
     @pytest.fixture
@@ -903,15 +909,123 @@ class TestAuthentication:
         assert resp.status_code == 401
 
     def test_get_endpoints_open_without_key(self, auth_client):
-        """GET endpoints should work without API key even when API_KEY is set.
+        """Non-sensitive GET endpoints work without API key even when API_KEY is set.
 
-        GET /api/routes returns 404 (no routes), not 401 — proving that
-        authentication was not enforced on the read-only endpoint.
+        GET /api/routes is a non-sensitive read endpoint (route summaries,
+        no PII). It returns 404 (no routes exist) rather than 401, proving
+        that authentication was NOT enforced on this particular endpoint.
+
+        Contrast with sensitive endpoints tested below — fleet telemetry and
+        vehicle details DO require auth because they expose driver GPS
+        locations and vehicle registration numbers.
         """
         with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
             mock_repo.get_latest_run = AsyncMock(return_value=None)
             resp = auth_client.get("/api/routes")
         assert resp.status_code == 404  # No routes, but auth passed
+
+    # -----------------------------------------------------------------
+    # Read-scoped auth: sensitive GET endpoints require API key
+    # -----------------------------------------------------------------
+
+    def test_fleet_telemetry_rejects_missing_key(self, auth_client):
+        """GET /api/telemetry/fleet without API key returns 401.
+
+        Fleet telemetry exposes real-time GPS coordinates of all drivers.
+        This is personally sensitive data — anyone with the URL could
+        track all delivery drivers in real time if unprotected.
+        """
+        resp = auth_client.get("/api/telemetry/fleet")
+        assert resp.status_code == 401
+        assert "API key" in resp.json()["detail"]
+
+    def test_vehicle_telemetry_rejects_missing_key(self, auth_client):
+        """GET /api/telemetry/{vehicle_id} without API key returns 401.
+
+        Individual vehicle GPS history — same privacy concern as fleet
+        telemetry but for a single driver.
+        """
+        resp = auth_client.get("/api/telemetry/VEH-01")
+        assert resp.status_code == 401
+        assert "API key" in resp.json()["detail"]
+
+    def test_list_vehicles_rejects_missing_key(self, auth_client):
+        """GET /api/vehicles without API key returns 401.
+
+        Vehicle list includes registration numbers and depot locations —
+        sensitive operational data that shouldn't be publicly accessible.
+        """
+        resp = auth_client.get("/api/vehicles")
+        assert resp.status_code == 401
+        assert "API key" in resp.json()["detail"]
+
+    def test_get_vehicle_rejects_missing_key(self, auth_client):
+        """GET /api/vehicles/{vehicle_id} without API key returns 401."""
+        resp = auth_client.get("/api/vehicles/VEH-01")
+        assert resp.status_code == 401
+        assert "API key" in resp.json()["detail"]
+
+    def test_fleet_telemetry_accepts_correct_key(self, auth_client):
+        """GET /api/telemetry/fleet with correct API key succeeds."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_fleet_latest_telemetry = AsyncMock(return_value=[])
+            resp = auth_client.get(
+                "/api/telemetry/fleet",
+                headers={"X-API-Key": "test-secret-key-123"},
+            )
+        assert resp.status_code == 200
+
+    def test_vehicle_telemetry_accepts_correct_key(self, auth_client):
+        """GET /api/telemetry/{vehicle_id} with correct API key succeeds."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_vehicle_telemetry = AsyncMock(return_value=[])
+            resp = auth_client.get(
+                "/api/telemetry/VEH-01",
+                headers={"X-API-Key": "test-secret-key-123"},
+            )
+        assert resp.status_code == 200
+
+    def test_list_vehicles_accepts_correct_key(self, auth_client):
+        """GET /api/vehicles with correct API key succeeds."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_all_vehicles = AsyncMock(return_value=[])
+            resp = auth_client.get(
+                "/api/vehicles",
+                headers={"X-API-Key": "test-secret-key-123"},
+            )
+        assert resp.status_code == 200
+
+    def test_get_vehicle_accepts_correct_key(self, auth_client):
+        """GET /api/vehicles/{vehicle_id} with correct API key succeeds."""
+        mock_v = MagicMock(
+            vehicle_id="VEH-01",
+            registration_no="KL-07-AB-1234",
+            vehicle_type="diesel",
+            max_weight_kg=446.0,
+            max_items=30,
+            depot_location=MagicMock(),
+            speed_limit_kmh=40.0,
+            is_active=True,
+            created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
+             patch("apps.kerala_delivery.api.main.to_shape") as mock_to_shape:
+            mock_repo.get_vehicle_by_vehicle_id = AsyncMock(return_value=mock_v)
+            mock_to_shape.return_value = MagicMock(y=9.97, x=76.28)
+            resp = auth_client.get(
+                "/api/vehicles/VEH-01",
+                headers={"X-API-Key": "test-secret-key-123"},
+            )
+        assert resp.status_code == 200
+
+    def test_read_endpoints_reject_wrong_key(self, auth_client):
+        """Sensitive GET endpoints reject incorrect API key — same as POST."""
+        resp = auth_client.get(
+            "/api/telemetry/fleet",
+            headers={"X-API-Key": "wrong-key-456"},
+        )
+        assert resp.status_code == 401
 
     def test_upload_accepts_correct_key(
         self, auth_client, sample_csv_file, mock_vroom_2_orders, mock_run_id

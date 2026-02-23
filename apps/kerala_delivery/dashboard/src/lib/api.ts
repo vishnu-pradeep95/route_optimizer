@@ -32,18 +32,36 @@ import type {
 const BASE_URL: string = import.meta.env.VITE_API_URL ?? "";
 
 /**
- * Generic fetch wrapper with error handling.
+ * Generic fetch wrapper with error handling and optional auth.
  *
  * Why a custom wrapper instead of raw fetch everywhere:
- * 1. Centralizes error handling — one place to add auth headers later
+ * 1. Centralizes error handling — one place to manage auth headers
  * 2. Parses JSON and checks HTTP status in one step
  * 3. Throws user-friendly errors instead of opaque fetch failures
+ *
+ * Auth: Sends the X-API-Key header on ALL requests (reads & writes).
+ * The backend requires it on sensitive GET endpoints (fleet telemetry,
+ * vehicles) and all POST/PUT/DELETE endpoints. For public endpoints
+ * like /health, the backend ignores the header if present.
  */
 async function apiFetch<T>(path: string): Promise<T> {
   const url = `${BASE_URL}${path}`;
+  const headers: Record<string, string> = {};
+
+  // Include API key on all requests — the backend requires it for
+  // sensitive reads (fleet telemetry, vehicle details) and all writes.
+  const apiKey = import.meta.env.VITE_API_KEY;
+  if (apiKey) {
+    headers["X-API-Key"] = apiKey;
+  } else if (import.meta.env.DEV) {
+    console.warn(
+      "[api] VITE_API_KEY not set — protected GET endpoints (fleet telemetry, vehicles) " +
+      "may return 401. Set VITE_API_KEY in your .env file."
+    );
+  }
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { headers });
 
     if (!response.ok) {
       // Extract error detail from FastAPI's standard error format if available
@@ -72,9 +90,10 @@ async function apiFetch<T>(path: string): Promise<T> {
  * The dashboard reads the key from a VITE_API_KEY env var.
  * In development, the key can be set in .env.local.
  *
- * Why a separate helper instead of extending apiFetch:
- * Read-only fetches don't need auth headers or request bodies.
- * Keeping them separate follows the Command-Query Separation principle.
+ * Why a separate helper instead of adding method/body params to apiFetch:
+ * Both helpers send the API key, but writes also need a Content-Type header
+ * and JSON-serialized request body. Keeping them separate follows the
+ * Command-Query Separation principle — reads and writes have different shapes.
  * See: https://martinfowler.com/bliki/CommandQuerySeparation.html
  */
 async function apiWrite<T>(path: string, method: string, body?: unknown): Promise<T> {
