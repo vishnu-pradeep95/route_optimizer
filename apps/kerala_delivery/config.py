@@ -139,3 +139,11 @@ GPS_ACCURACY_THRESHOLD_M = 50.0
 # (lat_min, lat_max, lon_min, lon_max) — covers all of India.
 # Lives here (not in core/) because bounds are region-specific.
 INDIA_COORDINATE_BOUNDS = (6.0, 37.0, 68.0, 97.5)
+
+# =============================================================================
+# CDCMS PREPROCESSOR CONFIG
+# =============================================================================
+# Appended to every CDCMS address for geocoding context.
+# CDCMS addresses rarely mention city/state — geocoders need this context.
+# Change this when deploying for a different distributor's delivery zone.
+CDCMS_AREA_SUFFIX = ", Vatakara, Kozhikode, Kerala"
