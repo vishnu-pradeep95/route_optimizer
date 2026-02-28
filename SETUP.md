@@ -3,6 +3,8 @@
 > Follow these steps on a fresh Ubuntu machine (or WSL2 on Windows) to get a
 > working development environment for the Routing Optimization project.
 > Estimated time: 15–20 minutes.
+>
+> **Not a developer?** See [DEPLOY.md](DEPLOY.md) for the employee deployment guide instead.
 
 ---
 
@@ -283,3 +285,111 @@ ModuleNotFoundError: No module named 'fastapi'
 OSError: [Errno 98] Address already in use
 ```
 **Fix:** Find and kill the process: `lsof -i :8000` then `kill <PID>`.
+
+---
+
+## Step 9: OSRM Data Preparation
+
+OSRM needs preprocessed Kerala map data before it can calculate routes.
+
+```bash
+# Create the OSRM data directory
+mkdir -p data/osrm
+
+# Download Kerala OpenStreetMap data (~100 MB)
+wget -O data/osrm/kerala-latest.osm.pbf \
+  https://download.openstreetmap.fr/extracts/asia/india/kerala.osm.pbf
+
+# Preprocess the map data (3 steps — takes 5–10 minutes)
+# 1. Extract road network
+docker run --rm -v $(pwd)/data/osrm:/data \
+  osrm/osrm-backend:latest \
+  osrm-extract -p /opt/car.lua /data/kerala-latest.osm.pbf
+
+# 2. Partition the graph
+docker run --rm -v $(pwd)/data/osrm:/data \
+  osrm/osrm-backend:latest \
+  osrm-partition /data/kerala-latest.osrm
+
+# 3. Customize the graph
+docker run --rm -v $(pwd)/data/osrm:/data \
+  osrm/osrm-backend:latest \
+  osrm-customize /data/kerala-latest.osrm
+```
+
+After preprocessing, `data/osrm/` will contain ~15 files. You can now start OSRM:
+```bash
+docker compose up -d osrm
+curl http://localhost:5000/health  # Should return {"status":"ok"}
+```
+
+---
+
+## Step 10: Database Migrations
+
+After starting the database:
+
+```bash
+docker compose up -d db    # Start PostgreSQL
+alembic upgrade head       # Apply all migrations
+```
+
+To check migration status:
+```bash
+alembic current            # Shows current revision
+alembic history            # Shows all migrations
+```
+
+---
+
+## Step 11: CDCMS Data Workflow
+
+If importing from HPCL's CDCMS system:
+
+```bash
+# 1. Preprocess the CDCMS export (filter by driver, clean addresses)
+python -c "
+from core.data_import.cdcms_preprocessor import preprocess_cdcms
+from apps.kerala_delivery.config import CDCMS_AREA_SUFFIX
+
+df = preprocess_cdcms(
+    'data/cdcms_export.csv',
+    filter_delivery_man='GIREESHAN ( C )',
+    area_suffix=CDCMS_AREA_SUFFIX,
+)
+df.to_csv('data/today_deliveries.csv', index=False)
+print(f'Preprocessed {len(df)} orders')
+"
+
+# 2. Import and geocode
+python scripts/import_orders.py data/today_deliveries.csv --geocode
+
+# 3. Or upload via the API (replace YOUR_KEY with the API_KEY from .env)
+curl -X POST http://localhost:8000/api/upload-orders \
+  -H "X-API-Key: YOUR_KEY" \
+  -F "file=@data/today_deliveries.csv"
+```
+
+---
+
+## Deploying on a New Laptop
+
+Quick checklist to get the system running on a fresh laptop:
+
+1. **Install Ubuntu/WSL2** — Ubuntu 22.04+ required
+2. **Run Steps 1–8** above in order (takes ~20 minutes)
+3. **Run Step 9** — OSRM data prep (takes ~10 minutes, one-time only)
+4. **Run Step 10** — Database migrations
+5. **Start all services:** `docker compose up -d`
+6. **Verify:** `curl http://localhost:8000/health`
+7. **Open browser:** `http://localhost:8000/driver/`
+
+Common new-laptop issues:
+- **WSL2 memory limit:** If Docker is slow, increase WSL memory in `%UserProfile%\.wslconfig`:
+  ```ini
+  [wsl2]
+  memory=8GB
+  swap=4GB
+  ```
+- **Docker not starting:** On WSL2, Docker needs manual start: `sudo service docker start`
+- **Git clone auth:** Use SSH key or personal access token for private repos

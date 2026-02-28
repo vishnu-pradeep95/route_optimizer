@@ -1,8 +1,10 @@
 # Routing Optimization Platform
 
-A modular delivery-route optimization system. First deployment: **Kerala LPG cylinder delivery** (HPCL distributor with 13 three-wheelers, 30–50 deliveries/day, 5 km radius from depot in Kochi).
+A modular delivery-route optimization system. First deployment: **Kerala LPG cylinder delivery** (HPCL distributor with 13 three-wheelers, 30–50 deliveries/day, 5 km radius from depot in Vatakara, Kozhikode).
 
 The architecture is designed to be **reusable across any delivery business** — the Kerala LPG app is the first consumer, not the only one.
+
+> **Employee?** If you're setting up this system at the office, skip to the [Employee Deployment Guide (DEPLOY.md)](DEPLOY.md) — no programming knowledge required.
 
 ---
 
@@ -41,21 +43,22 @@ pytest tests/ -v
 ## How It Works
 
 ```
-CSV Upload → Geocoding → Route Optimization → Database → Driver PWA
-     │            │              │                │            │
- CDCMS export  Google Maps   VROOM + OSRM    PostgreSQL   Mobile-friendly
- (30 orders)   API (cached)  (milliseconds)  + PostGIS    offline-capable
-                                                │
-                                           GPS Telemetry
-                                           + Delivery Status
+CDCMS Export → Preprocess → Geocode → Optimize → Database → Driver PWA
+     │            │            │           │          │           │
+ HPCL tab-    Clean addr,   Google     VROOM +   PostgreSQL  Mobile-friendly
+ separated    filter by     Maps API   OSRM       + PostGIS   offline-capable
+ (19 cols)    driver/area   (cached)   (ms solve)    │
+                                                GPS Telemetry
+                                                + Delivery Status
 ```
 
-1. **Upload** a CSV of today's delivery orders (from HPCL CDCMS system or manual entry)
-2. **Geocode** addresses to GPS coordinates (Google Maps API, results cached in PostGIS geocode_cache table)
-3. **Optimize** routes using VROOM (CVRP with Time Windows) with OSRM travel times
-4. **Persist** optimization results, routes, and stops to PostgreSQL + PostGIS
-5. **Serve** optimized routes to drivers via a Progressive Web App (PWA) they open in Chrome
-6. **Track** GPS telemetry and delivery status updates in real time
+1. **Export** today's delivery list from HPCL's CDCMS system (tab-separated file with 19 columns)
+2. **Preprocess** the raw CDCMS data — filter by driver/area, clean messy Kerala addresses, extract needed columns
+3. **Geocode** cleaned addresses to GPS coordinates (Google Maps API, results permanently cached)
+4. **Optimize** routes using VROOM (CVRP with Time Windows) with OSRM travel times
+5. **Persist** optimization results, routes, and stops to PostgreSQL + PostGIS
+6. **Serve** optimized routes to drivers via a Progressive Web App (PWA) they open in Chrome
+7. **Track** GPS telemetry and delivery status updates in real time
 
 ---
 
@@ -87,7 +90,8 @@ routing_opt/
 │   │   └── repository.py          ← Data access layer (async CRUD operations)
 │   └── data_import/               ← Data ingestion
 │       ├── interfaces.py          ← DataImporter protocol
-│       └── csv_importer.py        ← CSV/Excel CDCMS import
+│       ├── csv_importer.py        ← Generic CSV/Excel import
+│       └── cdcms_preprocessor.py  ← HPCL CDCMS export converter
 │
 ├── apps/
 │   └── kerala_delivery/           ← FIRST APP: Kerala LPG business logic
@@ -99,7 +103,7 @@ routing_opt/
 │           ├── src/components/    ← RouteMap, VehicleList, StatsBar
 │           └── src/lib/api.ts     ← Typed fetch client for all API endpoints
 │
-├── tests/                         ← Mirrors source structure (211 tests)
+├── tests/                         ← Mirrors source structure (253 tests)
 │   ├── conftest.py                ← Shared fixtures (Kerala coordinates)
 │   ├── core/                      ← Unit tests for all core modules
 │   │   ├── database/              ← 35 DB tests (models, repository, connection)
@@ -121,7 +125,8 @@ routing_opt/
 │   └── geocode_batch.py           ← Batch geocode addresses (CSV or DB → PostGIS cache)
 │
 ├── data/
-│   └── sample_orders.csv          ← 30 example orders around Kochi
+│   ├── sample_orders.csv          ← 30 example orders (generic CSV format)
+│   └── sample_cdcms_export.csv    ← 27-row CDCMS tab-separated sample (Vatakara area)
 │
 ├── plan/                          ← Design docs & session memory
 │   ├── kerala_delivery_route_system_design.md   ← Authoritative design doc
@@ -130,6 +135,7 @@ routing_opt/
 ├── .env.example                   ← Template for environment vars
 ├── requirements.txt               ← Pinned Python packages
 ├── SETUP.md                       ← Complete new-developer setup guide
+├── DEPLOY.md                      ← Employee deployment guide (no coding required)
 └── .github/
     ├── copilot-instructions.md    ← Always-on AI context
     └── agents/                    ← Copilot agent definitions
@@ -172,13 +178,66 @@ Base URL: `http://localhost:8000`
 | `DELETE` | `/api/vehicles/{vehicle_id}` | Remove a vehicle from the fleet |
 | `GET` | `/driver/` | Serves the driver PWA |
 
-### Upload CSV Format
+### Input Data: CDCMS Export Format
+
+The primary input is the **HPCL CDCMS export** — a tab-separated file with 19 columns exported from the Cylinder Delivery & Customer Management System.
 
 > **Authentication:** Write endpoints (`POST`, `PUT`, `DELETE`) require an API key
 > in the `X-API-Key` header. Set `ROUTEOPT_API_KEY` in `.env`. Read endpoints (`GET`)
 > are open for driver app access without auth overhead.
 
-See [data/sample_orders.csv](data/sample_orders.csv) for a working example.
+See [data/sample_cdcms_export.csv](data/sample_cdcms_export.csv) for a CDCMS format sample, or [data/sample_orders.csv](data/sample_orders.csv) for a generic CSV example.
+
+#### CDCMS Columns (19 total)
+
+| Column | Used | Purpose |
+|--------|------|---------|
+| `OrderNo` | ✅ | Unique order ID — becomes `order_id` |
+| `OrderStatus` | ✅ | Filter: only "Allocated-Printed" orders are processed |
+| `ConsumerAddress` | ✅ | Delivery address (messy — cleaned by preprocessor) |
+| `OrderQuantity` | ✅ | Number of cylinders |
+| `AreaName` | ✅ | CDCMS area grouping (e.g., VALLIKKADU, RAYARANGOTH) |
+| `DeliveryMan` | ✅ | Used to filter for a specific driver |
+| `MobileNo` | ❌ | Not imported (privacy — stays in CDCMS) |
+| Other 12 columns | ❌ | Ignored (OrderDate, CashMemoNo, etc.) |
+
+#### Address Preprocessing Pipeline
+
+CDCMS addresses are messy — fields concatenated without separators, phone numbers mixed in, inconsistent abbreviations. The `cdcms_preprocessor.py` module applies a 10-step cleaning pipeline:
+
+| Step | What It Does | Example |
+|------|--------------|---------|
+| 1 | Remove embedded phone numbers | `(H) 9847862734KURUPAL` → `(H) KURUPAL` |
+| 2 | Remove CDCMS artifacts (PH:, reference numbers) | `/ PH: 2511259` → removed |
+| 3 | Remove backtick/quote markers | `` ``THANAL`` `` → `THANAL` |
+| 4 | Expand abbreviations (NR., PO., (H)) | `NR.` → `Near`, `(H)` → `House` |
+| 5 | Handle concatenated PO names | `KUNIYILPO.` → `KUNIYIL P.O.` |
+| 6 | Add spaces between stuck number+text | `4/146AMINAS` → `4/146 AMINAS` |
+| 7 | Collapse multiple spaces | `KAINATTY   VATAKARA` → `KAINATTY VATAKARA` |
+| 8 | Strip dangling punctuation | Leading/trailing `;:-+` removed |
+| 9 | Title case + fix artifacts | `KSEB` preserved, `P.O.` preserved |
+| 10 | Append area suffix | `..., Vatakara, Kozhikode, Kerala` for geocoding |
+
+#### Preprocessing Usage
+
+```python
+from core.data_import.cdcms_preprocessor import preprocess_cdcms
+from apps.kerala_delivery.config import CDCMS_AREA_SUFFIX
+
+# Read CDCMS export, filter for one driver, clean addresses
+df = preprocess_cdcms(
+    "data/cdcms_export.csv",
+    filter_delivery_man="GIREESHAN ( C )",
+    area_suffix=CDCMS_AREA_SUFFIX,
+)
+
+# Output: DataFrame with columns: order_id, address, quantity, area_name, delivery_man
+df.to_csv("data/today_deliveries.csv", index=False)
+```
+
+#### Generic CSV Upload Format
+
+If not using CDCMS, you can upload a standard CSV directly:
 
 **Required columns:**
 
@@ -208,7 +267,7 @@ All business-specific values live in [`apps/kerala_delivery/config.py`](apps/ker
 
 | Parameter | Value | Source |
 |-----------|-------|--------|
-| Depot location | 9.9716°N, 76.2846°E (Kochi) | HPCL godown |
+| Depot location | 9.9716°N, 76.2846°E (Kochi) — **placeholder** | Update to actual Vatakara godown coords before production |
 | Vehicles | 13 × Piaggio Ape Xtra LDX | Fleet data |
 | Max payload | 446 kg (90% of 496 kg rated) | Safety margin |
 | Max cylinders/load | 30 domestic | Cargo bed volume |
@@ -260,13 +319,14 @@ source .venv/bin/activate
 pytest tests/ -v
 ```
 
-**211 tests** covering:
+**253 tests** covering:
 - Core models (location, order, vehicle, route validation)
 - OSRM adapter (travel time, distance matrix, safety multiplier)
 - VROOM adapter (route optimization, priority, unassigned handling)
 - Google geocoder (API calls, caching, geocode cache hits)
 - PostGIS geocode cache (CachedGeocoder — cache-first strategy, hit/miss, confidence)
 - CSV importer (standard/custom columns, coordinate passthrough, error recovery)
+- CDCMS preprocessor (33 tests: TSV reading, address cleaning, filtering, abbreviation handling)
 - Database layer (35 tests: ORM models, repository CRUD, connection lifecycle, telemetry)
 - API endpoints (health, routes, status updates, upload pipeline, optimization runs, telemetry, fleet CRUD, rate limiting)
 - Batch scripts (import_orders.py, geocode_batch.py — parsing, geocoding, dry-run, stats)
@@ -310,10 +370,10 @@ Copy `.env.example` → `.env` and configure:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GOOGLE_MAPS_API_KEY` | Yes (for geocoding) | Google Cloud API key with Geocoding API enabled |
-| `ROUTEOPT_API_KEY` | Yes (for write endpoints) | API key for authenticated `POST`/`PUT`/`DELETE` requests |
+| `API_KEY` | Yes (for write endpoints) | API key for authenticated `POST`/`PUT`/`DELETE` requests |
 | `OSRM_URL` | No | Defaults to `http://localhost:5000` |
 | `VROOM_URL` | No | Defaults to `http://localhost:3000` |
-| `POSTGRES_USER` | No | Defaults to `routeopt` |
+| `POSTGRES_USER` | No | Defaults to `routing` |
 | `POSTGRES_PASSWORD` | **Yes** | Database password — set any strong value |
 | `POSTGRES_DB` | No | Defaults to `routeopt` |
 | `DATABASE_URL` | No | Auto-built from above; override for remote DB |
@@ -326,9 +386,9 @@ Copy `.env.example` → `.env` and configure:
 |-------|--------|-------------|
 | **0: Baseline** | ✅ Complete | Core modules, data models, tests, API, driver PWA, Docker setup |
 | **1: Single-Vehicle** | ✅ Complete | Real OSRM Kerala data, speed profiles, 68% route improvement validated |
-| **2: Multi-Vehicle + DB** | ✅ Near-Complete | PostgreSQL + PostGIS, time windows, GPS telemetry, optimization history, fleet management, API auth, batch scripts |
-| **3: Production** | Planned | Cloud deploy, monitoring, automated daily use |
-| **4: Advanced** | Planned | ML travel-time models, dynamic re-routing, notifications |
+| **2: Multi-Vehicle + DB** | ✅ Complete | PostgreSQL + PostGIS, time windows, GPS telemetry, optimization history, fleet management, API auth, batch scripts |
+| **3: Production** | ✅ Complete | Docker Compose prod config, CDCMS preprocessor, read-scoped auth, 253 tests. *Note: monitoring, re-optimization, and proof-of-delivery from the design doc's original Phase 3 scope moved to Phase 4.* |
+| **4: Advanced** | Planned | ML travel-time models, dynamic re-routing, notifications, monitoring (Grafana), mid-shift re-optimization, proof-of-delivery |
 
 ---
 
