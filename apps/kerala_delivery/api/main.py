@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 
 from apps.kerala_delivery import config
 from core.data_import.csv_importer import CsvImporter, ColumnMapping
+from core.data_import.cdcms_preprocessor import preprocess_cdcms, get_cdcms_column_mapping, CDCMS_COL_ORDER_NO, CDCMS_COL_ADDRESS
 from core.database.connection import engine, get_session
 from core.database import repository as repo
 from core.geocoding.google_adapter import GoogleGeocoder
@@ -264,6 +265,34 @@ def _get_geocoder() -> GoogleGeocoder | None:
     return _geocoder_instance
 
 
+def _is_cdcms_format(file_path: str) -> bool:
+    """Detect whether a file is a raw CDCMS tab-separated export.
+
+    Checks the first line of the file for CDCMS-specific column names
+    (OrderNo, ConsumerAddress) separated by tabs. This lets the upload
+    endpoint auto-detect the format and run the preprocessor when needed,
+    so employees can upload CDCMS exports directly without manual conversion.
+
+    Why check for tabs AND column names?
+    A regular CSV could coincidentally have tabs, so we check for at least
+    two CDCMS-specific column names to be sure. If someone already pre-
+    processed the file (has 'order_id' and 'address' columns), we skip
+    preprocessing and let CsvImporter handle it directly.
+    """
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            header_line = f.readline().strip()
+        # CDCMS exports are tab-separated with specific column names
+        if "\t" not in header_line:
+            return False
+        columns = [col.strip() for col in header_line.split("\t")]
+        # Check for at least two CDCMS-specific columns
+        cdcms_markers = {CDCMS_COL_ORDER_NO, CDCMS_COL_ADDRESS}
+        return cdcms_markers.issubset(set(columns))
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
 # =============================================================================
 # Database session dependency
 # =============================================================================
@@ -360,6 +389,7 @@ async def upload_and_optimize(
 
     suffix = ".csv" if filename.lower().endswith(".csv") else ".xlsx"
     tmp_path: str | None = None
+    preprocessed_path: str | None = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             content = await file.read()
@@ -373,14 +403,51 @@ async def upload_and_optimize(
             tmp.write(content)
             tmp_path = tmp.name
         # Step 1: Import orders from CSV/Excel
-        # Pass Kerala-specific cylinder weight lookup from config.
-        # Another business would pass their own weight table (or none).
-        importer = CsvImporter(
-            default_cylinder_weight_kg=config.DEFAULT_CYLINDER_KG,
-            cylinder_weight_lookup=config.CYLINDER_WEIGHTS,
-            coordinate_bounds=config.INDIA_COORDINATE_BOUNDS,
-        )
-        orders = importer.import_orders(tmp_path)
+        # Auto-detect CDCMS format: if the file is tab-separated with CDCMS
+        # column names (OrderNo, ConsumerAddress), run the preprocessor first
+        # to clean addresses and extract relevant columns. Otherwise, treat
+        # as a standard CSV with our expected column names.
+        #
+        # Why auto-detect instead of a separate endpoint?
+        # The employee workflow is: export from CDCMS → upload here. Adding
+        # a preprocessing step would confuse non-technical users. The system
+        # should "just work" with whatever file they upload.
+        is_cdcms = _is_cdcms_format(tmp_path)
+
+        if is_cdcms:
+            logger.info("Detected CDCMS tab-separated format — running preprocessor")
+            preprocessed_df = preprocess_cdcms(
+                tmp_path,
+                area_suffix=config.CDCMS_AREA_SUFFIX,
+            )
+            if preprocessed_df.empty:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No 'Allocated-Printed' orders found in CDCMS export. "
+                    "Check that the file has orders with status 'Allocated-Printed'.",
+                )
+            # Save preprocessed data to a temp CSV for CsvImporter
+            preprocessed_path = tmp_path + ".preprocessed.csv"
+            preprocessed_df.to_csv(preprocessed_path, index=False)
+            importer = CsvImporter(
+                column_mapping=get_cdcms_column_mapping(),
+                default_cylinder_weight_kg=config.DEFAULT_CYLINDER_KG,
+                cylinder_weight_lookup=config.CYLINDER_WEIGHTS,
+                coordinate_bounds=config.INDIA_COORDINATE_BOUNDS,
+            )
+            orders = importer.import_orders(preprocessed_path)
+            # Clean up the intermediate preprocessed file immediately.
+            # Also cleaned in finally block in case import_orders() throws.
+            os.unlink(preprocessed_path)
+            preprocessed_path = None  # Mark as cleaned
+        else:
+            # Standard CSV format (order_id, address, etc.)
+            importer = CsvImporter(
+                default_cylinder_weight_kg=config.DEFAULT_CYLINDER_KG,
+                cylinder_weight_lookup=config.CYLINDER_WEIGHTS,
+                coordinate_bounds=config.INDIA_COORDINATE_BOUNDS,
+            )
+            orders = importer.import_orders(tmp_path)
 
         if not orders:
             raise HTTPException(status_code=400, detail="No valid orders found in file")
@@ -449,21 +516,46 @@ async def upload_and_optimize(
                             confidence=result.location.geocode_confidence or 0.5,
                         )
                     else:
+                        # Log the raw Google API response for debugging.
+                        # Common causes: API key not enabled, billing not set up,
+                        # or address too ambiguous for Google to resolve.
+                        raw = getattr(result, "raw_response", {})
+                        error_msg = raw.get("error_message", "")
+                        status = raw.get("status", "UNKNOWN")
                         logger.warning(
-                            "Could not geocode order %s: %s",
+                            "Could not geocode order %s: %s (API status: %s%s)",
                             order.order_id,
                             order.address_raw,
+                            status,
+                            f" — {error_msg}" if error_msg else "",
                         )
 
         # Check how many orders are geocoded
         geocoded = [o for o in orders if o.is_geocoded]
         if not geocoded:
+            # Try to surface the actual reason from the last geocoding attempt.
+            # The most common cause is the Geocoding API not being enabled in
+            # Google Cloud Console — the error message from Google tells the
+            # user exactly what to fix.
+            api_hint = ""
+            if geocoder:
+                # Test with a known-good address to get the API error
+                test_result = geocoder.geocode("Kerala, India")
+                raw = getattr(test_result, "raw_response", {})
+                api_status = raw.get("status", "")
+                api_error = raw.get("error_message", "")
+                if api_status == "REQUEST_DENIED" and api_error:
+                    api_hint = f" Google API error: {api_error}"
+                elif api_status == "OVER_QUERY_LIMIT":
+                    api_hint = " Google API quota exceeded. Check billing."
+
             raise HTTPException(
                 status_code=400,
                 detail=(
                     "No orders could be geocoded. Ensure addresses are valid "
                     "or provide latitude/longitude columns in the CSV. "
                     "Set GOOGLE_MAPS_API_KEY env variable for geocoding."
+                    f"{api_hint}"
                 ),
             )
 
@@ -514,9 +606,13 @@ async def upload_and_optimize(
         )
 
     finally:
-        # Clean up temp file — only if it was created successfully
+        # Clean up temp files — only if they were created and not yet removed.
+        # preprocessed_path is set to None after successful cleanup above,
+        # so this only fires if an exception prevented normal cleanup.
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
+        if preprocessed_path and os.path.exists(preprocessed_path):
+            os.unlink(preprocessed_path)
 
 
 @app.get("/api/routes")

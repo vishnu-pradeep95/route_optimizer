@@ -307,10 +307,11 @@ def _read_cdcms_file(path: Path) -> pd.DataFrame:
     # Why try tab first? CDCMS exports are tab-separated, but if someone
     # re-saves in Excel it might become comma-separated.
     # CDCMS exports have 19 columns. If tab-separated parsing produces
-    # fewer than 10, the file is likely comma-separated and all data
-    # ended up in a single column. 10 is a conservative threshold —
-    # well under 19 but above 1.
-    CDCMS_MIN_EXPECTED_COLUMNS = 10
+    # very few columns, the file is likely comma-separated and all data
+    # ended up in a single column. We use 5 as the threshold — the bare
+    # minimum CDCMS columns we need are OrderNo, OrderStatus,
+    # ConsumerAddress, ProductDesc, and Quantity.
+    CDCMS_MIN_EXPECTED_COLUMNS = 5
     try:
         df = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=False)
         if len(df.columns) >= CDCMS_MIN_EXPECTED_COLUMNS:

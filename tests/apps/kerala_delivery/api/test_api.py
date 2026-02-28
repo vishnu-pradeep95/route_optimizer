@@ -1660,3 +1660,228 @@ class TestRateLimiting:
 
         # We should hit the rate limit at some point (10/minute)
         assert hit_429, "Rate limit was not enforced after 15 rapid requests"
+
+
+# =============================================================================
+# CDCMS Auto-Detection Tests
+# =============================================================================
+
+
+class TestCdcmsAutoDetection:
+    """Tests for CDCMS tab-separated file auto-detection in the upload endpoint.
+
+    The upload endpoint auto-detects raw CDCMS exports (tab-separated with
+    columns like OrderNo, ConsumerAddress) and runs the preprocessor before
+    passing data to CsvImporter. This allows employees to upload CDCMS exports
+    directly without manual conversion.
+
+    Tests verify:
+    1. CDCMS format is detected and preprocessed correctly
+    2. Standard CSV files are NOT treated as CDCMS
+    3. _is_cdcms_format() helper handles edge cases
+    """
+
+    def test_cdcms_file_detected_and_preprocessed(
+        self, client, mock_run_id
+    ):
+        """A raw CDCMS tab-separated file should be auto-detected and preprocessed.
+
+        The preprocessor extracts 'Allocated-Printed' orders, cleans addresses,
+        and converts to our standard CSV format before CsvImporter handles it.
+        """
+        # Minimal CDCMS tab-separated export with 1 Allocated-Printed order.
+        # Must include all columns the preprocessor accesses: OrderNo,
+        # OrderStatus, ConsumerAddress, OrderQuantity, AreaName, DeliveryMan.
+        cdcms_content = (
+            "OrderNo\tOrderStatus\tConsumerAddress\tConsumerName\t"
+            "ProductDesc\tOrderQuantity\tRegion\tAreaName\tDistrict\t"
+            "DeliveryMan\tMobileNo\n"
+            "517827\tAllocated-Printed\t"
+            "4/146 AMINAS VALIYA PARAMBATH NR VALLIKKADU SARAMBI PALLIVATAKARA\t"
+            "CUSTOMER A\tINDN LPG DOMESTIC 14.2\t1\tREGION1\tVATAKARA\tKozhikode\t"
+            "DRIVER1\t9876543210\n"
+        )
+        # VROOM mock for a single order
+        vroom_1_order = {
+            "code": 0,
+            "routes": [
+                {
+                    "vehicle": 0,
+                    "distance": 1500,
+                    "duration": 200,
+                    "steps": [
+                        {"type": "start", "location": [76.2846, 9.9716],
+                         "arrival": 0, "distance": 0, "duration": 0},
+                        {"type": "job", "id": 0, "location": [75.6853, 11.7050],
+                         "arrival": 200, "duration": 200, "distance": 1500, "service": 300},
+                        {"type": "end", "location": [76.2846, 9.9716],
+                         "arrival": 400, "distance": 3000, "duration": 400},
+                    ],
+                },
+            ],
+            "unassigned": [],
+        }
+        with (
+            patch("core.optimizer.vroom_adapter.httpx.post") as mock_post,
+            patch("apps.kerala_delivery.api.main.repo") as mock_repo,
+            patch("apps.kerala_delivery.api.main._get_geocoder") as mock_geocoder_fn,
+        ):
+            mock_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: vroom_1_order,
+                raise_for_status=lambda: None,
+            )
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[])
+            mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
+
+            # Mock geocoder to return a valid location
+            mock_geocoder = MagicMock()
+            mock_geocoder.geocode.return_value = MagicMock(
+                success=True,
+                location=Location(
+                    latitude=11.7050,
+                    longitude=75.6853,
+                    address_text="Pallivatakara, Vatakara, Kerala",
+                    geocode_confidence=0.8,
+                ),
+                formatted_address="Pallivatakara, Vatakara, Kerala",
+                confidence=0.8,
+                raw_response={},
+            )
+            mock_geocoder_fn.return_value = mock_geocoder
+            mock_repo.save_geocode_cache = AsyncMock()
+
+            resp = client.post(
+                "/api/upload-orders",
+                files={"file": ("cdcms_export.csv", cdcms_content.encode(), "text/csv")},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_orders"] >= 1
+
+    def test_cdcms_no_allocated_printed_returns_400(self, client):
+        """CDCMS file with no 'Allocated-Printed' orders should return 400.
+
+        The preprocessor filters by status — if there are no printable orders,
+        we return a clear error rather than silently producing empty routes.
+        """
+        cdcms_no_matching = (
+            "OrderNo\tOrderStatus\tConsumerAddress\tConsumerName\t"
+            "ProductDesc\tOrderQuantity\tRegion\tAreaName\tDistrict\t"
+            "DeliveryMan\tMobileNo\n"
+            "517827\tCancelled\t"
+            "SOME ADDRESS\tCUSTOMER A\tINDN LPG DOMESTIC 14.2\t1\tREGION1\tAREA1\t"
+            "District1\tDRIVER1\t9876543210\n"
+        )
+        resp = client.post(
+            "/api/upload-orders",
+            files={"file": ("cdcms.csv", cdcms_no_matching.encode(), "text/csv")},
+        )
+        assert resp.status_code == 400
+        assert "allocated-printed" in resp.json()["detail"].lower()
+
+    def test_standard_csv_not_treated_as_cdcms(
+        self, client, sample_csv_file, mock_vroom_2_orders, mock_run_id
+    ):
+        """A standard CSV (comma-separated, our column names) should NOT invoke the CDCMS preprocessor.
+
+        Ensures the auto-detection only triggers for tab-separated files with
+        CDCMS-specific column names (OrderNo, ConsumerAddress).
+        """
+        with (
+            patch("core.optimizer.vroom_adapter.httpx.post") as mock_post,
+            patch("apps.kerala_delivery.api.main.repo") as mock_repo,
+            patch("apps.kerala_delivery.api.main.preprocess_cdcms") as mock_preprocess,
+        ):
+            mock_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: mock_vroom_2_orders,
+                raise_for_status=lambda: None,
+            )
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[])
+            mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
+
+            resp = client.post(
+                "/api/upload-orders",
+                files={"file": ("orders.csv", sample_csv_file, "text/csv")},
+            )
+
+        assert resp.status_code == 200
+        # preprocess_cdcms should NOT have been called for a standard CSV
+        mock_preprocess.assert_not_called()
+
+
+class TestIsCdcmsFormat:
+    """Unit tests for the _is_cdcms_format() helper function.
+
+    Tests the heuristic that detects CDCMS tab-separated exports by checking
+    for tab separators and CDCMS-specific column names (OrderNo, ConsumerAddress).
+    """
+
+    def test_detects_cdcms_tab_separated(self, tmp_path):
+        """Tab-separated file with CDCMS columns should be detected."""
+        from apps.kerala_delivery.api.main import _is_cdcms_format
+
+        cdcms_file = tmp_path / "cdcms.csv"
+        cdcms_file.write_text(
+            "OrderNo\tOrderStatus\tConsumerAddress\tConsumerName\n"
+            "12345\tAllocated-Printed\tSome Address\tCustomer\n"
+        )
+        assert _is_cdcms_format(str(cdcms_file)) is True
+
+    def test_rejects_standard_csv(self, tmp_path):
+        """Comma-separated file with our column names should NOT be detected as CDCMS."""
+        from apps.kerala_delivery.api.main import _is_cdcms_format
+
+        csv_file = tmp_path / "standard.csv"
+        csv_file.write_text(
+            "order_id,address,customer_id,weight_kg\n"
+            "ORD-001,Some Place,CUST-001,14.2\n"
+        )
+        assert _is_cdcms_format(str(csv_file)) is False
+
+    def test_rejects_tab_file_without_cdcms_columns(self, tmp_path):
+        """Tab-separated file WITHOUT CDCMS column names should NOT be detected.
+
+        Prevents false positives on generic TSV files.
+        """
+        from apps.kerala_delivery.api.main import _is_cdcms_format
+
+        tsv_file = tmp_path / "generic.tsv"
+        tsv_file.write_text(
+            "id\tname\tvalue\n"
+            "1\ttest\t42\n"
+        )
+        assert _is_cdcms_format(str(tsv_file)) is False
+
+    def test_handles_nonexistent_file(self):
+        """Non-existent file should return False, not raise."""
+        from apps.kerala_delivery.api.main import _is_cdcms_format
+
+        assert _is_cdcms_format("/nonexistent/path/file.csv") is False
+
+    def test_handles_empty_file(self, tmp_path):
+        """Empty file should return False."""
+        from apps.kerala_delivery.api.main import _is_cdcms_format
+
+        empty_file = tmp_path / "empty.csv"
+        empty_file.write_text("")
+        assert _is_cdcms_format(str(empty_file)) is False
+
+    def test_detects_cdcms_with_extra_columns(self, tmp_path):
+        """CDCMS file with extra/unexpected columns should still be detected.
+
+        Real CDCMS exports may have additional columns beyond what we use.
+        Detection only requires OrderNo and ConsumerAddress to be present.
+        """
+        from apps.kerala_delivery.api.main import _is_cdcms_format
+
+        cdcms_file = tmp_path / "cdcms_extra.csv"
+        cdcms_file.write_text(
+            "OrderNo\tOrderStatus\tConsumerAddress\tExtraCol1\tExtraCol2\n"
+            "12345\tAllocated-Printed\tSome Address\tval1\tval2\n"
+        )
+        assert _is_cdcms_format(str(cdcms_file)) is True

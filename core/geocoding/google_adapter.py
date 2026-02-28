@@ -127,6 +127,19 @@ class GoogleGeocoder:
             data = response.json()
 
             if data["status"] != "OK" or not data.get("results"):
+                # Log actionable details for common Google API errors:
+                # - REQUEST_DENIED: API key invalid, Geocoding API not enabled,
+                #   or billing not set up in Google Cloud Console.
+                # - OVER_QUERY_LIMIT: billing cap hit or too many requests/sec.
+                # - ZERO_RESULTS: valid request but no match for this address.
+                # Passing raw_response through so callers can inspect the reason.
+                if data.get("error_message"):
+                    logger.warning(
+                        "Google Geocoding API error for '%s': %s — %s",
+                        address[:60],
+                        data["status"],
+                        data["error_message"],
+                    )
                 return GeocodingResult(
                     location=None,
                     confidence=0.0,
@@ -210,8 +223,21 @@ class GoogleGeocoder:
         a corrupt/partial JSON file. Writing to a temp file first and then
         renaming ensures the cache is either fully written or absent.
         On POSIX systems, rename() is atomic within the same filesystem.
+
+        Why catch PermissionError?
+        In Docker, the data/ directory is bind-mounted from the host and may
+        have different ownership than the container user. Cache is a
+        nice-to-have optimization — a write failure should never crash the
+        geocoding pipeline. We log a warning and continue.
         """
-        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self.cache_path.with_suffix(".tmp")
-        tmp_path.write_text(json.dumps(self._cache, indent=2))
-        tmp_path.rename(self.cache_path)
+        try:
+            self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self.cache_path.with_suffix(".tmp")
+            tmp_path.write_text(json.dumps(self._cache, indent=2))
+            tmp_path.rename(self.cache_path)
+        except (PermissionError, OSError) as e:
+            logger.warning(
+                "Could not save geocode cache to %s: %s. "
+                "Geocoding continues without caching.",
+                self.cache_path, e,
+            )

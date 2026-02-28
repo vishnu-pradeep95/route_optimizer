@@ -19,10 +19,13 @@ Why VROOM over OR-Tools?
 Trade-off: less control over custom constraints than OR-Tools.
 """
 
+import logging
 import uuid
 from datetime import datetime
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 from core.models.location import Location
 from core.models.order import Order
@@ -88,13 +91,30 @@ class VroomAdapter:
         request_body = self._build_request(orders, vehicles)
 
         # Call VROOM API
+        # Log request summary for debugging without dumping entire payload.
+        # VROOM's fast (millisecond) solves, so a 60-second timeout is generous
+        # and only protects against network issues.
+        logger.info(
+            "Sending VROOM request: %d jobs, %d vehicles",
+            len(request_body.get("jobs", [])),
+            len(request_body.get("vehicles", [])),
+        )
         start_time = datetime.now()
         response = httpx.post(
             self.vroom_url,
             json=request_body,
             timeout=60.0,
         )
-        response.raise_for_status()
+        # Capture the response body BEFORE raise_for_status() so that
+        # error details from VROOM are not lost. VROOM returns JSON with
+        # an error description on 500s (e.g. "no matching road found").
+        if response.status_code != 200:
+            logger.error(
+                "VROOM returned %d: %s",
+                response.status_code,
+                response.text[:500],
+            )
+            response.raise_for_status()
         solve_ms = (datetime.now() - start_time).total_seconds() * 1000
 
         vroom_result = response.json()
