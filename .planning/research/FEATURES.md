@@ -1,173 +1,228 @@
 # Feature Research
 
-**Domain:** Logistics SaaS — Delivery Route Optimization Dashboard + Driver PWA
+**Domain:** Logistics dashboard UI redesign, driver delivery PWA refresh, geocoding cache management
 **Researched:** 2026-03-01
-**Confidence:** MEDIUM (UI patterns and CSV import UX are well-established; security headers are HIGH from OWASP docs; driver PWA patterns are MEDIUM from industry guides)
+**Confidence:** HIGH (codebase thoroughly analyzed; industry patterns well-established; geocoding cache issue root-caused from code)
 
 ---
 
-## Context: What Already Exists
+## Context: What Already Exists (v1.0 Complete)
 
-This is an improvement milestone on a working system. The app already has:
-- CSV file upload with drag-and-drop, file type validation, and size limit checks
-- Upload workflow state machine (idle → selected → uploading → success → error)
-- Route results cards per vehicle with stop counts, distance, duration, weight
-- QR code generation and print sheet
-- StatsBar with six KPI tiles (total, completed, pending, failed, active vehicles, unassigned)
-- Leaflet map (LiveMap page), run history page, fleet management page
-- API key authentication with `hmac.compare_digest()`, rate limiting via slowapi
-- Driver PWA (dark-first, 48px touch targets, offline via service worker)
+This is a v1.1 Polish & Reliability milestone on a working system. These features are ALREADY SHIPPED and should NOT be rebuilt:
 
-The gap: the UI looks prototype-quality, geocoding failures are silent (orders disappear), error details never reach the user, and security headers are missing.
+- CSV upload with drag-and-drop, file validation, and row-level validation
+- Import summary UI with success/partial/zero states and expandable failure tables
+- Geocoding failure reporting with per-row reasons (validation + geocoding stages)
+- Route optimization via VROOM/OSRM for 13-vehicle fleet
+- QR code generation for route sharing + printable QR sheet
+- Driver PWA with dark-first design, Leaflet maps, offline support, and 48px+ touch targets
+- React dashboard with 4 pages: UploadRoutes, LiveMap, RunHistory, FleetManagement
+- Collapsible sidebar with emoji icons, API health indicator
+- Telemetry ingestion and fleet telemetry batch endpoint
+- HTTP security headers (CSP, CORS hardening, Permissions-Policy)
+- DaisyUI 5 with tw- collision-safe prefix installed
+- API key auth with timing-safe comparison
+
+**The gap for v1.1:** Dashboard looks prototype-quality (emoji icons, mixed CSS approaches, no loading/empty states). Driver PWA lacks next-stop prominence and progress visibility. Geocoding has dual-cache normalization bug causing duplicate map locations. No cost transparency for geocoding API usage.
 
 ---
 
 ## Feature Landscape
 
-### Table Stakes — UI/UX (Users Expect These)
+### Domain 1: Dashboard UI Overhaul
 
-Features any logistics SaaS operator dashboard has. Missing = product feels like a hackathon demo.
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **Consistent design system** | Every professional SaaS tool has visual coherence: same spacing, color tokens, type scale. Mixing ad-hoc CSS with different button styles signals "not production." | LOW | Tailwind + DaisyUI already decided. Apply systematically, not piecemeal. |
-| **Clear status hierarchy** | Colors must mean the same thing everywhere: green=good, amber=warning, red=error, blue=info. Operators scan dashboards visually — inconsistency causes errors. | LOW | Design tokens already partially in StatsBar (`--color-success`, `--color-danger`). Must propagate to all components. |
-| **Import success/failure summary** | After CSV upload, user must immediately know: how many rows processed, how many succeeded, how many failed, and why. The current "No valid orders" single-string error is not acceptable in any logistics tool. | MEDIUM | This is the critical missing feature. Every import SaaS (HubSpot, Salesforce, Routific) shows a per-row breakdown. |
-| **Geocoding failure reporting** | When an address can't be geocoded, the order silently disappears. Users must see a list of failed addresses with the reason, not a smaller number of pins. | MEDIUM | Root cause: `GoogleGeocoder.batch()` drops failed results; UI never receives the drop count. Backend must track and surface this. |
-| **Actionable error messages** | Errors like "Upload failed. Please try again." or "Invalid CSV format" leave users guessing. Messages must say what went wrong, which row, and what to do next. | LOW | Pattern from OWASP/UX research: specificity over brevity. |
-| **Loading state with progress steps** | Multi-step processing (upload → geocode → optimize → persist) needs per-step progress, not just a spinner. 3-5 second operations feel broken without feedback. | LOW | The `uploadProgress` string already exists in UploadRoutes.tsx; needs to map to step indicators, not free-form text. |
-| **Toast/notification system** | Non-blocking feedback for actions: "Routes generated", "Vehicle updated", "Fleet saved". Modal dialogs for minor confirmations are outdated logistics UX. | LOW | DaisyUI `toast` + `alert` components. One global notification provider. |
-| **Empty states** | All pages need meaningful empty states (not blank). "No routes yet — upload a CDCMS file to begin" with a CTA is standard. | LOW | Maps page with no data, run history with no runs, fleet with no vehicles. |
-| **Keyboard and screen reader basics** | ARIA labels on icon-only buttons, focus rings visible, form labels associated with inputs. Not full WCAG 2.1 AA, but enough that a keyboard user can navigate. | LOW | Applies especially to the upload zone and vehicle CRUD forms. |
-| **Responsive layout (breakpoints)** | Dashboard runs on office desktops and laptops. Must not break below 1280px. The driver PWA already handles mobile. | LOW | Sidebar collapse at 1024px, card grid wrapping. |
-
-### Table Stakes — Security (Expected in Any Production Web App)
+#### Table Stakes (Users Expect These)
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| **HTTP security headers** | OWASP requires: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Content-Security-Policy`, `Strict-Transport-Security` (HTTPS), `Permissions-Policy`. Missing = instant fail on any security scan. | LOW | Add as FastAPI middleware. One-time setup. Source: [OWASP HTTP Headers Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html) |
-| **CORS origin whitelist** | `CORSMiddleware` currently likely uses a broad origin. Production must whitelist known dashboard origin(s) only. Wildcard `*` with credentials is broken behavior. | LOW | Update env var to list allowed origins explicitly. |
-| **Remove information-disclosure headers** | `Server`, `X-Powered-By` headers expose stack details. FastAPI/uvicorn often send these by default. | LOW | Middleware to strip. |
-| **Input validation on file upload** | File extension check exists in frontend. Backend must also validate: MIME type, max size, CSV column schema. Never trust client validation. | LOW | Backend already has a 10MB limit. Add column-presence check before geocoding. |
-| **XSS prevention on address rendering** | Driver PWA Leaflet popups render address text. Raw address strings from database could contain injected content if input wasn't escaped at storage time. | LOW | Already partially fixed (commit ad4f52e). Audit all innerHTML usages. |
-| **Dependency security scan** | Production apps must know if any dependency has known CVEs. | LOW | `pip-audit` for Python, `npm audit` for dashboard. Run in CI. |
-| **API docs locked in production** | FastAPI auto-generates `/docs` and `/redoc`. These should be disabled or auth-gated in production. | LOW | Env-flag: `if not settings.DEBUG: app.openapi_url = None` |
+| **Consistent DaisyUI styling across all 4 pages** | Current mix of raw CSS classes (`.upload-btn`, `.route-card`) alongside DaisyUI `tw-alert` components looks inconsistent. Every professional logistics SaaS has unified visual language. | MEDIUM | Migrate UploadRoutes, LiveMap, RunHistory, FleetManagement to DaisyUI component vocabulary. The tw- prefix approach is already installed. Largest effort is LiveMap (3-panel layout) and UploadRoutes (most complex page). |
+| **SVG icons replacing emoji nav items** | Sidebar uses emoji (fire, truck, clipboard, map). Professional dashboards use clean SVG icon sets. Emoji render differently across OS/browser. | LOW | Replace with Heroicons or Lucide React. 4 icons total: upload, map, history, truck. Keep DaisyUI menu component for nav structure. |
+| **Typography hierarchy with data fonts** | Dashboard renders distances, weights, durations in same font as labels. Numeric data needs monospace or tabular-number font for column alignment and scannability. | LOW | Use DaisyUI prose for text. Apply `font-variant-numeric: tabular-nums` or a monospace font (like JetBrains Mono, already used in driver PWA) for numeric values in route cards, stats, tables. |
+| **Loading and empty states for all pages** | RunHistory with no runs and FleetManagement with no vehicles show blank content areas. Users think the page is broken. LiveMap has a spinner but other pages do not. | LOW | DaisyUI skeleton component for loading. Illustrated empty states with CTA: "No routes generated today -- upload a CDCMS file" with link to Upload page. 4 pages x 2 states = 8 small components. |
+| **Color-coded status badges on route cards** | Route cards show text-only metadata ("12 stops, 8.3 km"). Logistics dashboards use colored chips/badges for status (green=all delivered, amber=in progress, red=issues). | LOW | DaisyUI badge component with semantic colors. Data already exists: `orders_assigned`, `orders_unassigned` determine status. |
+| **Responsive sidebar behavior** | Current sidebar collapses on hover (64px to 220px). On screens below 1280px this causes content reflow. Standard pattern: sidebar collapses to icons permanently on small screens, uses DaisyUI drawer on mobile. | LOW | DaisyUI drawer component for mobile breakpoint. Keep hover-expand for desktop. Add a pin/unpin toggle for sidebar. |
+| **Print-friendly QR sheet styling** | QR sheet endpoint exists (`/api/qr-sheet`) but relies on server-rendered HTML. Office staff print this daily. Needs clean layout with vehicle name, driver name, and large QR codes. | LOW | CSS `@media print` rules. Already functional but not polished. Ensure QR codes are large enough to scan from printed paper at arm's length. |
 
-### Table Stakes — Developer Experience
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **One-command setup** | `docker-compose up` with working OSRM data, seeded DB, and working API. Missing = onboarding friction, support burden. | MEDIUM | Requires downloading Kerala OSM data automatically or providing in repo. |
-| **Environment variable validation** | App should fail loudly on startup if `GOOGLE_MAPS_API_KEY` or `API_KEY` is missing, not silently fail at first use. | LOW | Pydantic `BaseSettings` with required fields and helpful error messages. |
-| **Test coverage for edge cases** | Tests that cover: geocoding failure paths, VROOM timeout, unassigned orders, malformed CSV rows. Currently coverage may be shallow on failure paths. | MEDIUM | Write tests for the failure paths, not just happy paths. |
-
----
-
-### Differentiators — CSV Import Quality
-
-Features that distinguish a well-engineered import from a basic upload.
+#### Differentiators (Competitive Advantage)
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| **Row-level import report** | After processing, show a table: `Row | Address | Status | Reason` — green for geocoded, amber for partial match, red for failed. Users can see exactly which deliveries won't happen today. | MEDIUM | Backend must accumulate per-row geocoding results and return them in the upload response. New `geocoding_report` field in `OptimizationSummary`. |
-| **Geocoding confidence display** | Show geocoding confidence score per stop (HIGH/MEDIUM/LOW). Operators can spot low-confidence geocodes before drivers head out to wrong locations. | MEDIUM | `GeocodeCacheDB` already stores confidence. Surface it in the route stop card. |
-| **Failed row download** | "Download failed rows as CSV" button — users can fix addresses offline and re-upload just the failures. Saves time on large CSV batches. | LOW | Subset of original CSV rows filtered by failed status. Pure frontend if backend returns row data. |
-| **Partial import with confirmation** | If 3 of 150 orders fail geocoding, ask "Proceed with 147 orders?" instead of failing silently or blocking. User explicitly acknowledges the gap. | MEDIUM | Two-step API call: first returns preview with failures, second confirms and optimizes. Or simpler: immediate optimization + prominent warning. |
+| **DaisyUI theme switcher (light/dark)** | Office staff work indoors (light preferred for readability). Late shift operations benefit from dark mode. Most logistics tools are light-only. | LOW | DaisyUI has built-in multi-theme support. Use "corporate" or "nord" for light, "business" for dark. Theme toggle in sidebar footer. Store preference in localStorage. |
+| **Geocoding cost indicator on upload results** | After upload, show "42 cache hits (free) + 8 API calls ($0.04)". Office staff gain transparency into geocoding costs. No competitor in this niche exposes this. | LOW | Backend upload endpoint already has the cache-hit vs API-call code branch. Add two counters. Return as new fields in OptimizationSummary. Display as info badge in ImportSummary component. |
+| **At-a-glance daily summary card** | First thing office staff see on Upload page when routes exist: "Today: 47 deliveries across 11 vehicles, 2 geocoding failures, estimated 127 km total". Quick situational awareness before printing QR sheet. | MEDIUM | Aggregate existing route data. Can compute from current `/api/routes` response. New component on UploadRoutes success state above route cards. |
+| **Per-vehicle capacity utilization bar** | Show weight used vs 446 kg max as a horizontal bar on each route card. Operators see at a glance if loads are balanced or if one vehicle is overloaded. | LOW | Data already in `route.total_weight_kg`. Simple DaisyUI progress bar. Width = `(total_weight_kg / 446) * 100%`. Color: green <70%, amber 70-90%, red >90%. |
 
-### Differentiators — Dashboard Operational Quality
+#### Anti-Features (Do NOT Build)
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **Per-vehicle capacity utilization bar** | Show weight used vs 446 kg max as a horizontal bar on each route card. Operators see at a glance if loads are balanced. | LOW | Data already in `route.total_weight_kg`. Simple CSS width calculation. |
-| **Unassigned order detail** | When unassigned count > 0, show which orders weren't assigned and why (over capacity, no geocode). Currently just a number. | MEDIUM | Requires backend to return unassigned order IDs + reason. `RouteAssignment.unassigned_orders` already exists. |
-| **Driver PWA dark mode outdoor readability** | Existing dark-first design is good. Add high-contrast mode toggle for very bright outdoor conditions (white background, black text). | LOW | CSS `prefers-contrast` media query + manual toggle. Important for Kerala sun. |
-| **ETA display in driver list view** | Driver app shows sequence numbers but not ETAs. Showing estimated arrival time per stop lets drivers explain delays to customers. | LOW | `route_stop.duration_from_prev_minutes` is already computed. Sum from depot departure to display running ETA. |
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| **Drag-and-drop route reordering** | "Let me manually adjust stop order" | Undermines VROOM optimizer. Manual overrides create sub-optimal routes. Complex React DnD implementation. Operators are not routing experts. | Show optimizer output as read-only. If a stop needs moving, re-run optimization. Add "pin stop to position" as a constraint input in v2+ if ever needed. |
+| **Real-time auto-refresh on all pages** | "I want to see live data everywhere" | Polling every 5s across 4 pages wastes bandwidth, creates flicker. LiveMap already polls telemetry at 15s which matches GPS ping frequency. | Poll only on LiveMap (already done). Other pages show point-in-time data with a visible "Refresh" button and "Last updated: 2 min ago" timestamp. |
+| **Complex role-based dashboard views** | "Managers see different data than operators" | Single office with 2-3 users. Role-based access adds auth complexity (login, sessions, permissions) for zero value at this scale. | Single view for all users. If needed later, simple feature flags per config, not a full RBAC system. |
+| **Multi-tab panel layout** | "Map + routes side-by-side" | Responsive layout complexity. 4-page app with 1366px typical screen doesn't need panel management. LiveMap already has sidebar + map two-panel layout which is sufficient. | Keep single-page-at-a-time. LiveMap's two-panel layout is the exception that proves the rule. |
+| **Dark mode for dashboard (as P1)** | "Make it match the driver app" | Risks destabilizing CSS during the overhaul. Get consistent DaisyUI styling working first in one theme, then adding a second theme is trivial. | Ship light-mode-first dashboard. Theme switcher is a P2 differentiator once consistency is proven. |
 
 ---
 
-### Anti-Features — Do NOT Build in This Milestone
+### Domain 2: Driver PWA Refresh
 
-Features that seem logical but are out of scope, create risk, or should be deliberately deferred.
+#### Table Stakes (Users Expect These)
 
-| Anti-Feature | Why Requested | Why Problematic | What to Do Instead |
-|--------------|---------------|-----------------|-------------------|
-| **Real-time driver location tracking on dispatch map** | LiveMap exists; showing live GPS seems obvious | Requires persistent WebSocket or polling; telemetry data is already ingested but building a smooth live map layer is a week of work. Out of scope for this milestone. | Keep existing Leaflet map. Show last-known position from telemetry on page load. |
-| **Customer-facing delivery tracking page** | "Where is my cylinder?" is a common request | Multi-tenant auth, privacy concerns, SMS/notification system — entirely new vertical. PROJECT.md marks this as out of scope. | Explicitly out of scope. Not this milestone. |
-| **AI/ML address suggestions for failed geocodes** | "Just suggest the right address automatically" | Would require a secondary geocoding provider, fuzzy matching, manual review UI, and operator training. 3x scope of the actual fix. | Show failure reason clearly. Let the operator correct the CSV manually and re-upload. |
-| **Automated re-geocoding queue** | "Retry failed addresses with fallback providers" | Multiple geocoding provider integration adds API key management, billing risk, and code complexity. Not needed — the real fix is surfacing failures so humans can correct them. | Show which rows failed. Human corrects address. Re-upload. Simple. |
-| **Drag-and-drop route reordering in UI** | Dispatchers might want to manually reorder stops | VROOM's output is already optimal. Manual override introduces errors. Complex drag-and-drop with persist-to-DB is high effort for low value. | Trust the optimizer. Provide a notes field for stop-level overrides at most. |
-| **Multi-file batch upload** | "Upload multiple days at once" | Batching logic, run tagging, date filtering, result merging — significant scope increase. | One CSV per day. The CDCMS workflow already produces one daily export. |
-| **Browser push notifications** | "Alert me when optimization completes" | Current optimization is synchronous (under 30s). Push requires service worker notification permission, backend subscription management. | Progress steps in-UI are sufficient. The operation is fast. |
-| **Dark mode for dispatch dashboard** | "Make it dark like the driver app" | Cosmetic scope that risks destabilizing CSS during the UI overhaul. Driver PWA is dark because outdoor readability requires it; office dispatchers work indoors. | Light mode only for dashboard. Add to future backlog if requested. |
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| **Prominent "next stop" card** | Drivers need instant answer to "where am I going?" without scrolling. DispatchTrack, Routific, and every delivery app puts next stop front-and-center. Current PWA shows a flat list where all stops have equal visual weight. | MEDIUM | New hero card at top of stop list: large address text, distance/weight, and prominent "Navigate" button. Separate from scrollable list below. Key UX pattern: the answer to the driver's most frequent question must be visible without ANY interaction. |
+| **Visual delivery progress indicator** | "7 of 23 delivered" as a progress bar in header. Drivers are motivated by visible progress. Standard in every delivery app (Amazon Flex, DoorDash driver, DispatchTrack). | LOW | DaisyUI progress bar or simple filled bar. Count delivered+failed stops / total stops. Use success green fill. Display in header alongside existing stats. |
+| **Pull-to-refresh or manual refresh** | Drivers need to reload if office re-runs optimization mid-day. Current PWA has no visible refresh mechanism beyond browser pull-to-refresh (which is not discoverable). | LOW | Add visible "Refresh Route" button in header area. Show "Last updated: 10:42 AM" timestamp so driver knows data freshness. Simple: re-fetch route data from API and update DOM. |
+| **60px+ touch targets for primary actions (audit)** | Kerala conditions: rain, gloves, one-handed operation on three-wheeler. Current PWA specifies 48px minimum, 60px for primary actions. Need to verify all interactive elements meet this. | LOW | Audit existing buttons. "Delivered" / "Failed" buttons, "Navigate" button, "Call office" -- all must be 60px+ height. Fix any that are smaller. DaisyUI btn-lg is 48px by default; may need custom sizing. |
+| **High-contrast text verification** | Current PWA has WCAG AAA design intent (7:1 contrast). Need to verify every text/background combination actually meets this. Some secondary text (#9897B0 on #0B0B0F) may be borderline. | LOW | Run contrast checker on all color pairs in the CSS custom properties. Fix any that fall below 7:1 for body text or 4.5:1 for large text. Particularly check: `--color-text-secondary` and `--color-text-muted` against `--color-bg`. |
+| **Offline route persistence verification** | Kerala has patchy mobile data. Route MUST work offline once loaded. Current PWA stores route in localStorage and service worker caches app shell. Need to verify this works end-to-end after PWA refresh changes. | LOW | Test: (1) Load route with network, (2) go offline, (3) refresh page, (4) verify route data still visible, (5) mark a stop delivered, (6) verify status queued in localStorage, (7) go online, (8) verify queued updates sync. |
+
+#### Differentiators (Competitive Advantage)
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| **"Focus mode" -- next-stop-only view** | Instead of showing all 20+ stops, show ONLY the current stop as a full-screen card with navigate button. Toggle between "focus" and "full list" view. Reduces cognitive load in the field. | MEDIUM | New view mode. Full-screen card: address (large), quantity, weight, "Navigate in Google Maps" button (60px), "Delivered" / "Failed" buttons. Swipe or tap arrow to peek at next stop. |
+| **Auto-advance after delivery confirmation** | When driver marks stop as delivered, automatically scroll list to next undelivered stop or update focus mode card. Removes one tap from the repetitive workflow (mark delivered -> find next -> tap -> navigate). | LOW | After status update (API call or localStorage queue), programmatically scroll to next stop with `pending` status. In focus mode, swap card content to next stop. |
+| **Offline sync queue indicator** | Show "3 updates pending sync" badge when offline. Drivers need confidence that delivery confirmations aren't lost. Green checkmark when all synced. | MEDIUM | Already partially exists (localStorage queue for status updates). Add visible UI indicator: pending count badge on header, retry logic on `navigator.onLine` event. Show last sync timestamp. |
+| **Haptic feedback on delivery confirmation** | Brief vibration when marking a stop delivered/failed. Confirms the action without looking at screen. Important for one-handed outdoor operation. | LOW | `navigator.vibrate(50)` on button tap. Single line of JS. Graceful degradation if vibration API not available. |
+
+#### Anti-Features (Do NOT Build)
+
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| **Turn-by-turn navigation in-app** | "Don't make me open Google Maps" | Building navigation requires a routing engine, voice guidance, lane guidance, and massive map tile caching. Google Maps is free and already installed on every phone. Leaflet cannot do turn-by-turn. | Deep-link to Google Maps with destination coordinates (already implemented). One-tap "Navigate" button per stop. Google handles the routing. |
+| **Photo proof-of-delivery** | "Prove the cylinder was delivered" | Camera API complexity, image upload on spotty Kerala networks (each photo 1-3MB), storage costs, privacy concerns photographing customer homes. Overkill for LPG where delivery is confirmed by receipt signature. | GPS-verified delivery (driver GPS at stop location = proof). Already captures coordinates with status updates. Add distance-from-stop validation if needed. |
+| **Countdown timers for delivery windows** | "Show time remaining to deadline" | Explicitly prohibited for Kerala MVD compliance. Creates pressure on drivers leading to unsafe driving on narrow Kerala roads. Already noted as a hard constraint in PROJECT.md. | Show delivery window as static text ("9:00 AM - 12:00 PM"). No countdown, no urgency coloring, no "late" indicators. |
+| **Pre-cached map tiles for entire route** | "Map should work fully offline" | OSM tiles for even a small Kerala region require 50-100MB+ of storage. Browser cache quotas are unpredictable. Service worker may be evicted by OS on low-memory Android devices. | Cache tiles opportunistically as driver views map (already in sw.js). Primary offline interface is the LIST view (no tiles needed). Map is a bonus when online. |
+| **Real-time chat with office** | "Driver needs to ask about an address" | Chat requires WebSocket infrastructure, message persistence, notification handling, and an always-on server component. Two people can call each other. | Display office phone number prominently in PWA header. One-tap "Call Office" button. |
+
+---
+
+### Domain 3: Geocoding Cache Fixes
+
+#### Table Stakes (Users Expect These)
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| **Unified cache normalization** | ROOT CAUSE of duplicate map locations. Two caches use different normalization: GoogleGeocoder file cache hashes `" ".join(address.lower().split())` (collapses all whitespace), while DB cache uses `address.strip().lower()` (preserves internal whitespace). Same address can exist in both with different coordinates. | MEDIUM | Create a single `normalize_address()` function in `core/geocoding/normalization.py`. Apply everywhere: `" ".join(address.strip().lower().split())` which handles leading/trailing whitespace AND internal whitespace normalization. Update GoogleGeocoder._address_hash() and repository.get_cached_geocode()/save_geocode_cache() to use it. |
+| **Single source of truth for cache** | GoogleGeocoder has a file-based JSON cache (`data/geocode_cache/google_cache.json`) AND the DB has a `geocode_cache` table. The upload endpoint checks DB cache first, then calls GoogleGeocoder which checks its own file cache. Results can diverge. | MEDIUM | Deprecate file-based cache. All cache reads/writes go through DB (repository layer). GoogleGeocoder becomes a pure API caller with no internal caching. The upload endpoint already does `repo.get_cached_geocode()` before calling the geocoder. |
+| **Duplicate location detection** | When two different addresses resolve to the same GPS coordinates (within a threshold), drivers get confused by overlapping map markers. Common in Kerala with informal addresses ("near SBI, MG Road" vs "opp. SBI, MG Road"). | MEDIUM | After geocoding all orders in a batch, compare each pair's coordinates. Flag pairs within ~15 meters (configurable). Use haversine or PostGIS `ST_DWithin`. Report as warning in ImportSummary: "Orders #5 and #12 may be at the same location (8m apart)". Use DaisyUI warning alert. |
+| **Geocoding cost tracking per upload** | Office staff should know how much each upload costs in Google API calls vs free cache hits. Directly requested in v1.1 milestone requirements. | LOW | Add two counters in the upload endpoint's geocoding loop: `cache_hits += 1` on DB cache hit, `api_calls += 1` on Google API call. Add fields to OptimizationSummary: `cache_hits: int`, `api_calls: int`. Display in ImportSummary: "42 cached (free) + 8 API calls (~$0.04)". |
+
+#### Differentiators (Competitive Advantage)
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| **Cache migration tool** | One-time script to import existing `google_cache.json` entries into DB cache with correct normalization. Preserves months of geocoding history. Without this, switching to DB-only cache loses all file-cached results, causing unnecessary API calls. | LOW | Python script: read JSON file, for each entry normalize address using new function, upsert into `geocode_cache` table via `repo.save_geocode_cache()`. Run once during v1.1 deployment. |
+| **Cache statistics in upload response** | Beyond just hits/calls count, show: total addresses in cache, cache hit rate over last 30 days, estimated total savings. Office staff see the cache growing in value. | LOW | SQL aggregation on `geocode_cache` table: `COUNT(*)`, `SUM(hit_count)`, estimated savings at $0.005/request. New endpoint `GET /api/geocode-stats` or add to upload response. |
+| **Driver-verified coordinate promotion** | When a driver confirms delivery at a GPS location, save those coordinates as a `driver_verified` cache entry (confidence=0.95). Over 6 months, this builds a Kerala-specific address database more accurate than Google. | LOW | Already partially implemented: `GeocodeCacheDB` supports `source="driver_verified"`, and the `PostGISGeocodingCache.save_driver_verified()` method exists. Need to wire: when telemetry status update includes coordinates AND status="delivered", call save with source="driver_verified". |
+
+#### Anti-Features (Do NOT Build)
+
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| **Automatic TTL-based cache invalidation** | "Addresses might change over time" | Physical addresses do not move. A 30-day TTL forces re-geocoding the same addresses monthly, wasting $5/1000 API calls for zero benefit. Only new construction warrants re-geocoding (and that's a new address, not a changed one). | No expiration. Manual invalidation only. Add admin "re-geocode this address" button in a future admin panel if ever needed. |
+| **Fuzzy address matching (Levenshtein/trigram)** | "Near SBI MG Road and nr. SBI MG Rd should match" | False positives could assign WRONG coordinates to an order. "Near SBI, MG Road, Kochi" and "Near SBI, MG Road, Kozhikode" would fuzzy-match but are 300km apart. Kerala has many similar-sounding place names. Safety-critical system cannot tolerate false geocode matches. | Exact normalized match only. If an address is not in cache, call Google API (it handles fuzzy matching with geographic context). Keep humans in the loop for ambiguous addresses. |
+| **Multiple geocoding provider fallback** | "If Google is down, use Nominatim as backup" | Different providers return slightly different coordinates for the same address. Mixing results in the cache creates route inconsistency. Nominatim's Kerala data is significantly less accurate (rural India coverage is poor). | Single provider (Google). If Google is down, queue orders for retry rather than falling back to an inferior provider. Surface the error clearly: "Geocoding service unavailable -- try again in a few minutes". |
+| **Reverse geocoding for telemetry pings** | "Show human-readable address for every GPS point on the map" | 25,000 pings/day x $0.005/request = $125/day = $45K/year. Completely unnecessary for fleet monitoring. | Show raw coordinates on hover. Reverse geocode only on demand (admin clicks a point). Cache the reverse result for future lookups. |
+| **Google Places autocomplete for manual address entry** | "Help users type correct addresses" | Google Places API costs $2.83/1000 sessions. Requires client-side API key (security risk). Users don't type addresses -- CDCMS CSV provides them. | Addresses come from CDCMS export. No manual entry needed in v1.1. If manual override is added later, use server-side geocoding with result preview, not client-side autocomplete. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[Geocoding failure reporting — backend]
-    └──requires──> [Per-row geocoding result accumulation in batch()]
-                       └──requires──> [New API response field: geocoding_report]
-                                          └──enables──> [Import summary UI]
-                                                            └──enables──> [Failed row download]
+[Unified cache normalization]
+    +-- requires --> [Single source of truth (deprecate file cache)]
+    +-- enables --> [Duplicate location detection]
+    +-- enables --> [Cache migration tool]
+    +-- enables --> [Geocoding cost tracking (accurate counts)]
 
-[Security headers]
-    └──no dependencies — standalone middleware
+[DaisyUI consistency across all 4 pages]
+    +-- enables --> [Theme switcher (light/dark)]
+    +-- enables --> [Loading/empty states with DaisyUI skeletons]
+    +-- enables --> [Color-coded status badges]
+    +-- enables --> [Capacity utilization bars]
 
-[Consistent design system (Tailwind + DaisyUI)]
-    └──enables──> [Toast system]
-    └──enables──> [Empty states]
-    └──enables──> [Status badge consistency]
+[Next-stop hero card (PWA)]
+    +-- requires --> [Stop status tracking (ALREADY EXISTS)]
+    +-- enhances --> [Focus mode (next-stop-only view)]
+    +-- enhances --> [Auto-advance after confirmation]
 
-[Input validation — backend]
-    └──required before──> [Import summary UI]
-    (backend must return structured errors for UI to display them)
+[Visual progress indicator (PWA)]
+    +-- requires --> [Stop status tracking (ALREADY EXISTS)]
+    +-- enhances --> [Next-stop hero card]
 
-[Unassigned order detail]
-    └──requires──> [RouteAssignment.unassigned_orders data returned to frontend]
-    (already in Pydantic model, may not be in API response JSON)
+[Geocoding cost tracking]
+    +-- requires --> [Counter addition in upload endpoint]
+    +-- requires --> [New fields in OptimizationSummary response model]
+    +-- enables --> [Cost indicator display in ImportSummary UI]
+    +-- enables --> [Cache statistics endpoint]
+
+[Offline sync indicator (PWA)]
+    +-- requires --> [Offline queue in localStorage (ALREADY EXISTS)]
+    +-- enhances --> [Pull-to-refresh mechanism]
+
+[Cache migration tool]
+    +-- requires --> [Unified normalization function finalized]
+    +-- requires --> [File cache deprecation decided]
+
+[Driver-verified coordinate promotion]
+    +-- requires --> [Status update GPS capture (ALREADY EXISTS)]
+    +-- requires --> [Telemetry endpoint wiring to save_geocode_cache]
+    +-- enhances --> [Duplicate location detection accuracy over time]
 ```
 
 ### Dependency Notes
 
-- **Geocoding failure reporting requires backend changes first:** The UI cannot show what the backend doesn't return. Backend must accumulate per-row results in `GoogleGeocoder.batch()`, then surface them through the `POST /api/upload-orders` response. The UI change is straightforward once that data exists.
-- **Design system before components:** Applying Tailwind + DaisyUI must happen before building individual UI improvements, or you end up mixing two CSS approaches in the same component.
-- **Security headers are independent:** Can be added as a middleware in one PR with no other dependencies. Should be first security item tackled.
-- **Failed row download enhances import summary:** Only valuable after the import summary shows which rows failed. Build in sequence, not parallel.
+- **Unified normalization MUST happen before cache migration.** The normalization algorithm must be settled before migrating historical file-cache data, otherwise migration would need to be re-run.
+- **Deprecating file cache MUST happen alongside normalization.** Cannot have consistent cache behavior with two caches using different key strategies. GoogleGeocoder's internal `_cache` dict and `_save_cache()` should be removed or made inert.
+- **DaisyUI consistency MUST come before theme switcher.** Cannot toggle themes until all pages use DaisyUI. Partially-themed pages would have some elements respond to theme change and others ignore it.
+- **Next-stop hero card is independent of geocoding fixes.** These two domains (PWA refresh + geocoding) can be worked in parallel by different developers or phases.
+- **Cost tracking requires both backend (counters) and frontend (display).** Backend change is prerequisite. Frontend display is a small addition to the existing ImportSummary component.
 
 ---
 
-## MVP Definition for This Milestone
+## MVP Definition
 
-This is a polish and hardening milestone on an existing working system, not a greenfield MVP. The framing is: "What's the minimum set of changes that takes this from prototype to professional?"
+### Must Ship in v1.1 (P1)
 
-### Must Ship (P1 — Blocking professional use)
+These directly address the milestone goals stated in PROJECT.md:
 
-- [ ] **Geocoding failure reporting** — the core data integrity bug. Silent drops must become visible failures with address + reason. This is the stated "Core Value" in PROJECT.md.
-- [ ] **Import summary screen** — after upload, show rows processed, geocoded, failed, unassigned. Replace the current generic error string.
-- [ ] **HTTP security headers** — `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `CSP`, `Permissions-Policy`. OWASP table stakes for any production API.
-- [ ] **Actionable error messages** — replace "Upload failed. Please try again." with specific errors (geocoding failed for N addresses, optimization service unavailable, etc.).
-- [ ] **Consistent UI design system** — Tailwind + DaisyUI applied uniformly. No mixed CSS approaches. Visual coherence across all pages.
+- [ ] **Unified cache normalization** -- fix the root cause of duplicate map locations (geocoding data integrity)
+- [ ] **Deprecate file-based geocode cache** -- single source of truth through DB cache only
+- [ ] **Duplicate location detection** -- flag orders resolving to same GPS coordinates
+- [ ] **Geocoding cost tracking** -- cache hit vs API call indicator per upload
+- [ ] **DaisyUI consistency across all 4 dashboard pages** -- professional logistics SaaS look
+- [ ] **SVG icons replacing emoji nav items** -- professional sidebar appearance
+- [ ] **Loading and empty states** -- no more blank pages when data is absent
+- [ ] **Next-stop hero card in driver PWA** -- simplified driver workflow
+- [ ] **Visual progress indicator in PWA** -- delivery progress visibility
+- [ ] **Pull-to-refresh in driver PWA** -- route data freshness control
+- [ ] **Touch target audit (60px+)** -- verify all primary actions meet outdoor-use size requirements
+- [ ] **High-contrast text audit** -- verify WCAG AAA (7:1) on all color combinations
 
-### Add After Core (P2 — Significantly improves quality)
+### Should Have (P2 -- add during v1.1 if time permits)
 
-- [ ] **Row-level import report table** — `Row | Address | Status | Reason` table after upload, beyond just counts.
-- [ ] **CORS origin whitelist** — production env must restrict allowed origins.
-- [ ] **Empty states for all pages** — meaningful placeholder content instead of blank pages.
-- [ ] **Toast notification system** — non-blocking feedback for all user actions.
-- [ ] **Failed row download** — "Download unprocessed rows as CSV" for correction and re-upload.
-- [ ] **Unassigned order detail** — show which specific orders weren't assigned, not just the count.
-- [ ] **API docs gating** — disable `/docs` and `/redoc` in production mode.
-- [ ] **Env var validation at startup** — crash loudly with helpful message if required env vars are missing.
-- [ ] **One-command docker setup** — `docker-compose up` works without manual steps.
+- [ ] **Color-coded status badges** on route cards -- quick visual scanning
+- [ ] **Per-vehicle capacity utilization bar** -- load balance visibility
+- [ ] **Daily summary card** -- at-a-glance operational overview
+- [ ] **Cache migration tool** -- preserve historical geocoding investment (run once at deploy)
+- [ ] **Theme switcher (light/dark)** -- add after DaisyUI consistency is proven
+- [ ] **Auto-advance after delivery confirmation** -- smoother driver workflow
+- [ ] **Haptic feedback on delivery confirmation** -- tactile confirmation for outdoor use
+- [ ] **Geocoding cost indicator in dashboard** -- surface cost tracking in ImportSummary UI
+- [ ] **Responsive sidebar improvements** -- DaisyUI drawer for mobile breakpoint
 
-### Defer to Future (P3 — Nice to have, not this milestone)
+### Future Consideration (v1.2+)
 
-- [ ] **Geocoding confidence display per stop** — valuable but needs UX design work.
-- [ ] **Capacity utilization bars on route cards** — cosmetic improvement, low priority.
-- [ ] **ETA display in driver list view** — requires summing durations client-side; low complexity but not blocking.
-- [ ] **Driver PWA high-contrast mode** — valuable for outdoor use; not in current milestone scope.
-- [ ] **Dependency security scan in CI** — important but infrastructure work.
+- [ ] **Focus mode (next-stop-only view)** in PWA -- after hero card validates the pattern
+- [ ] **Offline sync queue indicator** -- after validating offline queue reliability
+- [ ] **Cache statistics endpoint** -- when office staff request ongoing cost visibility
+- [ ] **Driver-verified coordinate promotion** -- wire GPS delivery data to cache
+- [ ] **Address similarity matching (fuzzy)** -- HIGH complexity, safety risk, defer until cache miss rate is measured
+- [ ] **Keyboard shortcuts** -- after core UI is stable and user feedback gathered
+- [ ] **At-a-glance daily summary with trend** -- requires storing historical run metrics for comparison
 
 ---
 
@@ -175,55 +230,68 @@ This is a polish and hardening milestone on an existing working system, not a gr
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Geocoding failure reporting (backend) | HIGH | MEDIUM | P1 |
-| Import summary screen (UI) | HIGH | LOW | P1 |
-| HTTP security headers | HIGH | LOW | P1 |
-| Actionable error messages | HIGH | LOW | P1 |
-| Consistent design system | HIGH | MEDIUM | P1 |
-| Row-level import report table | HIGH | MEDIUM | P2 |
-| CORS whitelist | MEDIUM | LOW | P2 |
-| Empty states | MEDIUM | LOW | P2 |
-| Toast system | MEDIUM | LOW | P2 |
-| Failed row download | MEDIUM | LOW | P2 |
-| Unassigned order detail | MEDIUM | MEDIUM | P2 |
-| API docs gating | MEDIUM | LOW | P2 |
-| Env var validation | MEDIUM | LOW | P2 |
-| One-command setup | HIGH | MEDIUM | P2 |
-| Geocoding confidence display | LOW | MEDIUM | P3 |
-| Capacity utilization bars | LOW | LOW | P3 |
-| ETA in driver list | LOW | LOW | P3 |
-| High-contrast driver mode | LOW | LOW | P3 |
+| Unified cache normalization | HIGH | MEDIUM | P1 |
+| Deprecate file-based cache | HIGH | MEDIUM | P1 |
+| Duplicate location detection | HIGH | MEDIUM | P1 |
+| Geocoding cost tracking (backend) | MEDIUM | LOW | P1 |
+| DaisyUI consistency all pages | HIGH | MEDIUM | P1 |
+| SVG icons replacing emojis | MEDIUM | LOW | P1 |
+| Loading/empty states | MEDIUM | LOW | P1 |
+| Next-stop hero card (PWA) | HIGH | MEDIUM | P1 |
+| Progress indicator (PWA) | MEDIUM | LOW | P1 |
+| Pull-to-refresh (PWA) | MEDIUM | LOW | P1 |
+| Touch target audit | HIGH | LOW | P1 |
+| Contrast audit | HIGH | LOW | P1 |
+| Status badges on route cards | MEDIUM | LOW | P2 |
+| Capacity utilization bars | MEDIUM | LOW | P2 |
+| Daily summary card | MEDIUM | MEDIUM | P2 |
+| Cache migration tool | MEDIUM | LOW | P2 |
+| Theme switcher | LOW | LOW | P2 |
+| Auto-advance (PWA) | MEDIUM | LOW | P2 |
+| Haptic feedback (PWA) | LOW | LOW | P2 |
+| Cost indicator in UI | MEDIUM | LOW | P2 |
+| Focus mode (PWA) | MEDIUM | MEDIUM | P3 |
+| Offline sync indicator | MEDIUM | MEDIUM | P3 |
+| Cache statistics endpoint | LOW | LOW | P3 |
+| Driver-verified promotion | MEDIUM | LOW | P3 |
+| Fuzzy address matching | MEDIUM | HIGH | P3 |
+
+**Priority key:**
+- P1: Must have for v1.1 milestone completion
+- P2: Should have, add during v1.1 if time permits or as immediate follow-up
+- P3: Nice to have, defer to v1.2+ milestone
 
 ---
 
 ## Competitor Feature Analysis
 
-| Feature | Onfleet | Routific | Our Approach |
-|---------|---------|---------|--------------|
-| Import failure visibility | Per-task status with reason codes; failed imports shown in task list | Shows unmatched addresses before optimization; user fixes then proceeds | Backend must return per-row geocoding status; show in summary screen |
-| Driver status indicators | Color-coded (blue=in-transit, green=idle) with map pin state | Driver list with completion percentage per route | Existing status model (Pending/Assigned/InTransit/Delivered/Failed) — surface in UI with color badges |
-| Dispatch KPI tiles | On-time rate, completion rate, driver capacity — live refresh | Stops completed, time savings vs unoptimized, fuel estimates | StatsBar already has 6 tiles; add geocoding failure count as 7th tile |
-| CSV import flow | Drag-drop with column mapping wizard, validation preview | Upload → automatic matching → review screen | Current: no review screen. Add: upload → geocoding report → confirm → proceed |
-| Security | Enterprise SSO, role-based access, audit logs | Similar enterprise posture | This app: API key auth is appropriate for single-operator use; add security headers, harden CORS |
-| Mobile driver app | Native iOS/Android app | Native apps | PWA is appropriate for this use case; focus on readability and offline reliability |
+| Feature | Route4Me | Routific | DispatchTrack | Our v1.1 Approach |
+|---------|----------|----------|---------------|-------------------|
+| Dashboard design | Complex, feature-heavy, dated UI | Clean minimal, modern | Enterprise-heavy, many panels | Clean minimal with DaisyUI -- closest to Routific aesthetic but simpler for single-depot use case |
+| Driver app platform | Native Android/iOS | Native apps | Native with full offline | PWA (no app store, zero install friction for 13 drivers). Trade-off: less native feel but appropriate for small fleet |
+| Next-stop prominence | Dedicated screen | Top card with large address | Large card with navigate button | Hero card at top of stop list. Optional focus mode later. |
+| Outdoor readability | Standard contrast | Standard contrast | Configurable themes | WCAG AAA (7:1) dark-first design. Exceeds all competitors. Kerala-specific requirement. |
+| Geocoding transparency | Hidden behind the scenes | Hidden behind the scenes | Hidden behind the scenes | **Unique:** Transparent cost tracking shown to office staff after each upload |
+| Offline support | Limited | Limited | Full offline with sync | Full offline via service worker + localStorage queue. Comparable to DispatchTrack. |
+| Duplicate detection | Manual review | Address validation warnings | Pre-route validation | Coordinate-proximity detection flagged automatically in import summary |
+| Cache management | Not user-visible | Not user-visible | Not user-visible | **Unique:** Cache hit rate, API call count, estimated cost visible to operators |
 
 ---
 
 ## Sources
 
-- [Onfleet Route Optimization](https://onfleet.com/route-optimization) — feature capabilities (MEDIUM confidence, marketing page)
-- [Onfleet Q4 2025 Product Update](https://onfleet.com/blog/onfleet-product-update-q4-2025/) — Command Center map view, Analytics Dashboard (MEDIUM confidence)
-- [Onfleet Driver Status Docs](https://support.onfleet.com/hc/en-us/articles/10228905705876-Driver-Status) — driver status color conventions (HIGH confidence, official docs)
-- [Data import UX: designing spreadsheet imports users don't hate](https://www.importcsv.com/blog/data-import-ux) — five-stage import flow, error patterns (MEDIUM confidence)
-- [Dromo CSV Import Best Practices](https://dromo.io/blog/ultimate-guide-to-csv-imports) — row-level error reporting, pre-import validation (MEDIUM confidence)
-- [OWASP HTTP Headers Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html) — required security headers and values (HIGH confidence, official OWASP)
-- [How to Secure FastAPI Against OWASP Top 10](https://oneuptime.com/blog/post/2025-01-06-fastapi-owasp-security/view) — FastAPI-specific security patterns (MEDIUM confidence)
-- [FastAPI CORS / Trusted Hosts 2025](https://johal.in/fastapi-cors-starlette-trusted-hosts-origins-2025-2/) — CORS origin whitelist patterns (MEDIUM confidence)
-- [Logistics KPIs 2025 — Locus Blog](https://blog.locus.sh/logistics-kpi/) — delivery completion rate, on-time rate as expected dashboard metrics (MEDIUM confidence)
-- [PWA UX Best Practices](https://www.grazitti.com/blog/top-7-tips-to-build-a-great-ux-for-pwa/) — offline mode, touch target sizing, gesture navigation (MEDIUM confidence)
-- [DaisyUI Component Docs](https://daisyui.com/components/) — badge, status, toast, alert components (HIGH confidence, official docs)
+- [DispatchTrack Mobile App UX Refresh](https://www.dispatchtrack.com/blog/mobile-app-ui-ux/) -- driver app redesign patterns, outdoor readability improvements
+- [Last-Mile Delivery Driver App UX Optimization](https://www.zigpoll.com/content/how-can-our-ux-designers-optimize-the-mobile-app-interface-to-reduce-delivery-time-errors-and-improve-driver-efficiency-for-lastmile-logistics) -- next-stop workflow, one-handed operation, progressive disclosure, bottom thumb zone placement
+- [Redesigning a Delivery Driver App (Medium)](https://amillionadventures.medium.com/redesigning-orderins-delivery-driver-app-part-1-research-1ba39ee70b1a) -- research-based driver app redesign with outdoor contrast findings
+- [AddressHub: Caching Geocoding Results](https://address-hub.com/address-intelligence/caching/) -- cache normalization, TTL strategy, cost reduction metrics (10-20ms cache vs 100-300ms API)
+- [Radar: Complete Guide to Geocoding APIs](https://radar.com/blog/geocoding-apis) -- caching best practices, normalize before provider calls, deduplication
+- [Deduplicate Location Records (Towards Data Science)](https://towardsdatascience.com/deduplicate-and-clean-up-millions-of-location-records-abcffb308ebf/) -- geospatial clustering for duplicate detection
+- [DaisyUI Themes Documentation](https://daisyui.com/docs/themes/) -- built-in 35 themes, light/dark mode, theme generator
+- [Logistics KPIs That Matter in 2026 (Locus)](https://blog.locus.sh/logistics-kpi/) -- delivery dashboard metrics: on-time rate, cost per delivery, fleet utilization
+- [PWA Offline-First Strategies (MagicBell)](https://www.magicbell.com/blog/offline-first-pwas-service-worker-caching-strategies) -- service worker caching patterns: cache-first, network-first, stale-while-revalidate
+- [Logistics Dashboard Design Trends 2026 (Muzli)](https://muz.li/blog/best-dashboard-design-examples-inspirations-for-2026/) -- information hierarchy, visual weight, key metrics at top
+- Codebase analysis: `.planning/codebase/CONCERNS.md` (dual-cache normalization bug), `ARCHITECTURE.md` (data flow), `STACK.md` (tech decisions)
 
 ---
-
-*Feature research for: Kerala LPG Delivery Route Optimizer — UI/UX, Error Handling, Security milestone*
+*Feature research for: Kerala LPG Delivery Route Optimizer v1.1 -- Dashboard UI Overhaul, Driver PWA Refresh, Geocoding Cache Fixes*
 *Researched: 2026-03-01*

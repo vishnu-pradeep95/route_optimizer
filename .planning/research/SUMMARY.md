@@ -1,195 +1,259 @@
 # Project Research Summary
 
-**Project:** Kerala LPG Delivery Route Optimizer — UI/UX Polish, Security Hardening, Test Improvement Milestone
-**Domain:** Logistics SaaS — Single-operator delivery route optimization dashboard + offline-capable driver PWA
+**Project:** Kerala LPG Delivery Route Optimizer v1.1 — Polish & Reliability
+**Domain:** Logistics SaaS dashboard UI overhaul + driver delivery PWA refresh + geocoding data integrity
 **Researched:** 2026-03-01
-**Confidence:** HIGH (stack versions verified on PyPI/npm; architecture grounded in codebase inspection; pitfalls confirmed against official docs)
+**Confidence:** HIGH
 
 ## Executive Summary
 
-This is a hardening and polish milestone on a working logistics system, not a greenfield build. The core route optimization stack (FastAPI 0.129, React 19 + Vite 7, PostgreSQL/PostGIS, OSRM, VROOM) is already in production and must not change. The milestone has three parallel concerns: making the UI look and behave like a professional logistics product, fixing a critical data integrity bug where geocoding failures are silently swallowed, and adding the security headers and dependency hygiene required for any production web application. Research confirms all three are achievable with low-to-medium complexity additions — no architectural rewrites are needed.
+This is a v1.1 polish and reliability milestone on a working logistics system, not a greenfield build. The product is a logistics operations tool for a 13-vehicle LPG delivery fleet in Kerala: a React dashboard for dispatch staff and a vanilla-JS PWA for drivers on Android phones. The v1.1 scope covers three distinct workstreams: (1) migrating the dashboard from prototype-quality custom CSS to a consistent DaisyUI component system, (2) improving the driver PWA for outdoor usability with a simplified next-stop flow, and (3) fixing a critical geocoding cache data integrity bug that causes duplicate map locations. All three workstreams build on a validated, already-deployed stack. Only one new dependency is needed across the entire milestone: `lucide-react` for SVG icons.
 
-The most important finding across all four research areas is a strict build order dependency. Tailwind + DaisyUI scaffolding must be installed and verified collision-free before any component work begins. Backend error propagation (the `geocoding_failures` structured response) must be shipped before the frontend import summary UI. Security middleware must be validated against the existing test suite before declaring hardening complete. Getting this sequence wrong is the most common failure mode for milestones like this — the research consistently flags that refactoring, behavior changes, and styling migrations should never be mixed in the same commit.
+The recommended approach is sequential by data dependency. Geocoding normalization must be fixed first because the dashboard UI consumes the geocoding response — building cost-tracking UI on top of inconsistent cache data would waste effort. The backend geocoding enhancements (cost tracking, duplicate detection) come second, providing the new API response fields the dashboard needs. Dashboard UI migration comes third, page-by-page using DaisyUI utility classes with the existing `tw:` prefix to avoid CSS collisions. The driver PWA refresh is fully independent and can proceed in parallel with the dashboard work — it shares no code, no API changes, and no styling system with the React dashboard.
 
-The single highest-risk item is the Tailwind v4 CSS variable namespace collision. Tailwind v4 emits `--color-*` CSS custom properties onto `:root` that will directly conflict with the existing dashboard design tokens (`--color-accent`, `--color-surface`, `--color-success`, etc.). The fix is a one-line change (`@import "tailwindcss" prefix(tw)`) at the very start of installation — but if this is missed, colors break silently and the resulting debugging cost is high. Every phase plan must treat this as a pre-condition checkpoint, not an afterthought.
+The key risks are all well-understood and preventable. The geocoding bug has a known root cause (two caches using different normalization functions, confirmed at specific code lines) and a direct fix (single `normalize_address()` module). The CSS overhaul has two specific landmines: DaisyUI theme variable collision with the project's existing `--color-*` custom properties, and Tailwind Preflight regressions against existing CSS files. Both are caught by visual inspection before committing component changes. The driver PWA has a silent deployment failure mode (service worker caching stale CSS) that is solved by automating the `CACHE_VERSION` bump. No architectural rewrites are needed — this milestone is about making the existing architecture consistent and reliable.
+
+---
 
 ## Key Findings
 
 ### Recommended Stack
 
-The additive libraries for this milestone are well-established and version-pinned. For the UI layer: Tailwind CSS 4.2.1 + DaisyUI 5.5.19 are the confirmed current stable versions (npm-verified 2026-03-01), and DaisyUI v5 is Tailwind v4-native with zero runtime dependencies. Leaflet must stay at 1.9.4 — the 2.0.0 alpha breaks the existing plugin ecosystem including markercluster. For security: PyJWT 2.11.0 replaces abandoned python-jose (FastAPI team explicitly deprecated python-jose in 2025), and pwdlib 0.3.0 replaces abandoned passlib (passlib breaks on Python 3.13). For testing: hypothesis 6.151.9, factory_boy 3.3.3, pytest-cov 7.0.0, and respx 0.22.0 are all current stable, PyPI-verified.
+The existing stack is validated and should not change. The only addition is `lucide-react` (a single `npm install` in the dashboard) for SVG icons to replace the current emoji nav items. All other v1.1 improvements use technologies already installed: DaisyUI 5 component classes (already configured with `tw:` prefix), framer-motion (already installed, currently used only in RunHistory), Python stdlib `unicodedata` for Malayalam Unicode normalization, PostGIS `ST_DWithin` via existing GeoAlchemy2 for spatial duplicate detection, and vanilla JS + CSS for the PWA.
 
-The driver PWA presents a specific constraint: it has no build step. The correct solution is the Tailwind standalone CLI binary, which pre-compiles a static `tailwind.css` artifact at author time. This file is committed and cached by the service worker. The Tailwind Play CDN (`@tailwindcss/browser@4`) is explicitly documented as "not for production" by Tailwind Labs and is incompatible with the PWA's offline requirements.
+The driver PWA's constraint of no build step is a deliberate architectural decision: it keeps the app as a single cacheable `index.html` for reliable offline operation. This means all CSS must be pre-compiled via the existing `scripts/build-pwa-css.sh` script, and no dynamic Tailwind class names in JavaScript.
 
 **Core technologies:**
-- Tailwind CSS 4.2.1 + DaisyUI 5.5.19: utility-first CSS with semantic components — covers all dashboard and PWA UI needs with a 34 kB CSS footprint
-- PyJWT 2.11.0: JWT auth, replacing abandoned python-jose per FastAPI team recommendation
-- pwdlib 0.3.0: password hashing, replacing abandoned passlib; Python 3.13-safe
-- Secweb 1.11.0: one-call HTTP security header middleware for Starlette/FastAPI (MEDIUM confidence on version freshness)
-- hypothesis 6.151.9 + factory_boy 3.3.3 + respx 0.22.0: property-based testing, fixture factories, and HTTP mock library for edge case coverage
-- Leaflet.markercluster 1.5.3: cluster 300+ delivery pins without breaking map readability
+- `lucide-react ^0.575.0`: SVG nav icons — only new dependency; tree-shakeable ESM, 1KB/icon, logistics icon set verified (Truck, Route, MapPin, ClipboardList)
+- DaisyUI 5.5.19 with `tw:` prefix: all new dashboard UI components — already installed and themed to logistics amber/stone palette
+- `core/geocoding/normalize.py` (new module): single `normalize_address()` function — stdlib only (`unicodedata` NFKC + whitespace collapse), eliminates dual-cache key divergence
+- PostGIS `ST_DWithin`: duplicate GPS coordinate detection — existing GiST spatial index, O(n log n) vs O(n²) Python loops
+- framer-motion 12 (already installed): page transitions and list animations — React 19 compatible, no migration needed
+
+**What NOT to add:** No chart library (no charts in v1.1 scope), no React Router (4 pages with `useState<Page>` is correct), no TanStack Query (4-5 API calls with no polling complexity), no shadcn/ui (conflicts with DaisyUI), no Zustand/Redux (no cross-page shared state), no Workbox (existing hand-written sw.js is sufficient), no IndexedDB (localStorage is nowhere near the 5MB limit at 13 vehicles x ~50 stops), no libpostal (2GB model for a stdlib problem), no Redis (PostGIS cache handles caching at 40-50 addresses/day).
 
 ### Expected Features
 
-The gap between the current system and a professional logistics tool is primarily about visibility and feedback, not new functionality. The most critical missing feature is geocoding failure reporting: orders that fail geocoding silently disappear from the map. Dispatchers upload 47 orders and see 41 pins with no explanation. This is the core data integrity bug that blocks professional use. Every UI improvement layers on top of fixing this first.
+The research distinguishes sharply between features that fix real problems (P1) versus incremental improvements (P2) versus scope creep. The geocoding normalization bug and dashboard CSS inconsistency are operational problems, not cosmetic — they get P1 treatment.
 
-**Must have (table stakes — P1):**
-- Geocoding failure reporting (backend) — silent drops must become visible structured failures with address + reason
-- Import summary screen — rows processed/geocoded/failed/unassigned shown after every upload
-- HTTP security headers — X-Frame-Options, X-Content-Type-Options, CSP, Referrer-Policy, Permissions-Policy
-- Actionable error messages — replace generic "Upload failed" strings with specific, row-level guidance
-- Consistent design system — Tailwind + DaisyUI applied uniformly; no mixed CSS approaches
+**Must have (P1 — table stakes and milestone requirements):**
+- Unified geocoding cache normalization — fix root cause of duplicate map locations
+- Deprecate file-based geocode cache — single source of truth via PostGIS only
+- Duplicate GPS coordinate detection — flag orders resolving to same location (warning, not auto-remove)
+- Geocoding cost tracking (backend) — cache hit vs API call counters in upload response
+- DaisyUI component consistency across all 4 dashboard pages — professional logistics SaaS appearance
+- SVG icons replacing emoji nav items — 4 icons, lucide-react
+- Loading and empty states for all pages — no blank content areas
+- Next-stop hero card in driver PWA — prominent current stop without scrolling
+- Visual delivery progress indicator in PWA — "7 of 23 delivered" progress bar
+- Pull-to-refresh in driver PWA — visible route reload mechanism
+- 60px+ touch target audit — verify all primary actions meet outdoor-use size requirements
+- WCAG AAA (7:1) contrast audit — verify all text combinations pass on dark backgrounds
 
-**Should have (competitive — P2):**
-- Row-level import report table (Row | Address | Status | Reason) with export to CSV
-- CORS origin whitelist restricted to known production origins
-- Toast notification system for all user actions (non-blocking, auto-dismissing)
-- Empty states for all pages (not blank screens)
-- Unassigned order detail — which specific orders weren't routed and why
-- API docs gating — disable /docs and /redoc in production
-- Environment variable validation at startup — fail loudly with helpful messages
-- One-command Docker setup with Kerala OSM data preprocessing documented
+**Should have (P2 — add during v1.1 if time permits):**
+- Color-coded status badges on route cards (data already exists, DaisyUI badge is trivial)
+- Per-vehicle capacity utilization bar (DaisyUI progress, single formula from `total_weight_kg / 446`)
+- Daily summary card on Upload page (aggregate from existing `/api/routes` response)
+- Cache migration tool (one-time script, preserves months of historical geocoding)
+- Theme switcher light/dark (trivial after DaisyUI consistency is established)
+- Auto-advance to next stop after delivery confirmation
+- Haptic feedback on delivery confirmation (`navigator.vibrate(50)`, single line)
+- Geocoding cost indicator display in ImportSummary UI
+- Responsive sidebar with DaisyUI drawer for mobile breakpoint
 
-**Defer to future (P3):**
-- Geocoding confidence display per stop
-- Capacity utilization bars on route cards
-- ETA display in driver stop list
-- Driver PWA high-contrast mode for bright outdoor use
-- Dependency security scan in CI (pip-audit, npm audit)
+**Defer to v1.2+:**
+- Focus mode (next-stop-only full-screen view) — validate hero card pattern first
+- Offline sync queue indicator — after validating queue reliability
+- Driver-verified coordinate promotion — wire GPS delivery data to cache
+- Fuzzy address matching — HIGH safety risk; false positives could assign wrong coordinates; defer until cache miss rate is measured
+
+**Hard anti-features (never build):**
+- Drag-and-drop route reordering — undermines VROOM optimizer, creates sub-optimal routes
+- Countdown timers for delivery windows — Kerala MVD compliance prohibition, driver safety risk
+- Real-time auto-refresh on all pages — LiveMap polls at 15s (correct); other pages need only a manual refresh button
+- Multiple geocoding provider fallback — mixing coordinates from different providers breaks cache consistency
+- Photo proof-of-delivery — camera complexity, image upload on Kerala 3G, privacy concerns; GPS verification is sufficient
 
 ### Architecture Approach
 
-The architecture for this milestone is additive, not disruptive. The FastAPI middleware stack gets security headers inserted at the outermost layer. The `OptimizationSummary` Pydantic model gains a `geocoding_failures: list[GeocodingFailure]` field that surfaces what the geocoder already knows but currently drops. The React dashboard gets `@tailwindcss/vite` added to `vite.config.ts` and a `useToast` hook with a `ToastContainer` component. The driver PWA gets a pre-compiled static CSS file. All existing components, routes, and integrations remain in place throughout.
+The v1.1 architecture is three parallel workstreams that touch different layers with one cross-cutting dependency. The geocoding fix (backend Python) produces new API response fields that the dashboard UI (React) displays — this single dependency forces the sequencing. The driver PWA (vanilla JS, different HTML file) is fully isolated. No microservices, no new databases, no new infrastructure. All changes are at the code level within the existing monorepo structure.
 
-**Major components and their changes:**
-1. `api/main.py` middleware stack — add Secweb security headers as outermost middleware; validate CORS origin whitelist; confirm CORS middleware is registered first so error responses (429, 401) include CORS headers
-2. `core/geocoding/google_adapter.py` — collect failures into a structured list instead of logging and dropping; return `GeocodingFailure` objects with order_id, address_raw, and classified reason code
-3. `dashboard/src/` — install Tailwind via `@tailwindcss/vite` plugin; add DaisyUI; implement `useToast` hook; migrate components one at a time with component CSS files deleted only after visual verification
-4. `driver_app/index.html` — pre-compile Tailwind CSS via standalone CLI; bump `sw.js` CACHE_VERSION; avoid DaisyUI interactive variant components (CDN excludes them)
-5. `tests/` — replace Kochi depot coordinates with Vatakara coordinates; add behavior-asserting tests for geocoding failures and VROOM timeout; reset rate limiter state between tests
+**New files created in v1.1:**
+1. `core/geocoding/normalize.py` — single `normalize_address()` function, the root-cause fix
+2. `infra/alembic/versions/xxx_normalize_geocode_cache.py` — data migration to re-normalize existing rows
+3. `src/components/GeocodingStats.tsx` — cache hit/API call breakdown display
+4. `src/components/DuplicateLocationAlert.tsx` — duplicate GPS coordinate warning
+
+**New functions in existing files:**
+- `core/database/repository.py::find_duplicate_locations()` — PostGIS ST_DWithin spatial query
+
+**Major modifications:**
+- `core/geocoding/google_adapter.py` — use `normalize_address()` in `_address_hash()`
+- `core/database/repository.py` — use `normalize_address()` in get/save cache methods
+- `apps/kerala_delivery/api/main.py` — cost tracking counters, duplicate detection, new `OptimizationSummary` fields
+- All 4 dashboard pages (TSX + CSS) — migrate from custom CSS to DaisyUI utility classes; delete CSS files after migration
+- `driver_app/index.html` — next-stop UX flow, outdoor readability improvements
+- `driver_app/sw.js` — Cache API for route data, BackgroundSync for status updates
+
+**Key patterns to enforce:**
+- DaisyUI with `tw:` prefix for all new dashboard UI (pattern already established and verified working)
+- Single normalization module imported everywhere address comparison occurs — never inline
+- PostGIS for spatial queries, never Python distance math
+- Driver PWA stays monolithic HTML — no file splitting (would break offline cache)
+- One page migration per commit — visual verification between each, no big-bang CSS rewrite
 
 ### Critical Pitfalls
 
-1. **Tailwind v4 CSS variable collision** — use `@import "tailwindcss" prefix(tw)` immediately at install time. Tailwind v4 emits `--color-*` variables that override the dashboard's existing `--color-accent`, `--color-surface` etc. Silent breakage. Fix: one-line prefix at install; verify in DevTools before writing any utility classes. (See: tailwindlabs/tailwindcss#15754)
+1. **Dual geocoding cache normalization mismatch** — Fix by creating `core/geocoding/normalize.py` as the single normalization source; update both `google_adapter.py` (line 195) and `repository.py` (line 741) to import from it; run Alembic migration to re-normalize existing `address_norm` values; deprecate the file cache entirely to avoid the two-cache drift problem persisting.
 
-2. **CORS headers missing on error responses (429/401)** — CORS middleware must be registered first (`app.add_middleware(CORSMiddleware, ...)` before all other middleware). If registered after rate limiting or auth middleware, error responses escape without `Access-Control-Allow-Origin` and the browser reports a misleading CORS error instead of the actual 429 or 401.
+2. **Service worker caching stale PWA CSS** — Every change to `driver_app/index.html` or `tailwind.css` must be accompanied by a `CACHE_VERSION` bump in `sw.js`. Silent failure: drivers see old UI indefinitely with no errors. Automate via a CI step that fails if `index.html` changed but SW version did not.
 
-3. **Rate limiting breaks the existing 351-test suite** — slowapi's in-memory limiter persists state across TestClient calls. After adding `@limiter.limit()` decorators, E2E pipeline tests and parametrized upload tests will fail with 429. Fix: add an `autouse=True` conftest fixture that resets limiter state between tests.
+3. **Competing CSS design systems in the dashboard** — DaisyUI and the project's 20+ `--color-*` custom properties both define semantic colors. Fix before building any new components: make DaisyUI semantic tokens authoritative; refactor existing CSS to alias them (`--color-accent: var(--color-primary)`). Never allow both systems to independently define the same semantic color.
 
-4. **Removing "dead code" that is actually defense-in-depth** — `main.py` is 1760 lines of AI-generated code with overlapping security guards. Removing what looks redundant (duplicate escape calls, multiple null checks) destroys layered protection. Rule: trace every code path before removing a guard; run the full test suite after each individual file cleanup.
+4. **Duplicate location detection false positives** — A flat 50m proximity threshold flags legitimate separate deliveries in dense Vatakara streets. Use confidence-weighted thresholds: ROOFTOP results flag within 10m, RANGE_INTERPOLATED within 25m, GEOMETRIC_CENTER within 100m, APPROXIMATE never. Present as warnings, not automatic removals.
 
-5. **E2E tests use Kochi coordinates instead of Vatakara** — existing test fixtures define `KOCHI_DEPOT` at latitude ~9.97° (Kochi) while production uses Vatakara at 11.52°N. Tests pass because VROOM doesn't validate geography, but geographic bounds tests are meaningless against the wrong location. Fix first, before writing any new tests.
+5. **Leaflet requires CSP `style-src 'unsafe-inline'` permanently** — Do not remove this during the UI overhaul. Leaflet uses `element.style.transform` and inline style attributes for positioning map overlays (confirmed open issue Leaflet/Leaflet#9168, no fix available). Add a code comment at `main.py` line 256 explaining this so it is not "cleaned up" later.
+
+---
 
 ## Implications for Roadmap
 
-Based on research, the build order is dictated by hard dependencies, not preference. The architecture research provides an explicit 8-step sequence that should translate directly into phase structure.
+Based on the dependency analysis in the research, the workstreams must be sequenced to respect the API contract: geocoding backend changes produce the fields that the dashboard UI consumes. Four phases are recommended.
 
-### Phase 1: Foundation Setup
-**Rationale:** Nothing else can proceed safely without this. Tailwind installation must be verified collision-free before component work. Backend structured error model must exist before frontend can parse it. These are blockers, not features.
-**Delivers:** Tailwind + DaisyUI integrated into Vite build and verified against existing CSS tokens; `GeocodingFailure` Pydantic model and structured `OptimizationSummary` response shape defined; `useToast` React hook and `ToastContainer` component built; Vatakara depot coordinates corrected in all test fixtures.
-**Addresses:** Consistent design system foundation (P1), geocoding failure reporting backend (P1)
-**Avoids:** CSS variable collision (Pitfall 1), wrong test geography causing false-green tests (Pitfall 6)
+### Phase 1: Geocoding Cache Normalization Fix
 
-### Phase 2: Security Hardening
-**Rationale:** Security middleware is independent of UI work and can proceed in parallel with Phase 1 but should be verified and merged before UI components are built on top. Middleware order must be confirmed before any endpoint changes.
-**Delivers:** Secweb security headers middleware added; CORS origin whitelist restricted to production origins; API docs gating in production mode; environment variable validation at startup; rate limiter reset fixture in conftest.
-**Uses:** Secweb 1.11.0, PyJWT 2.11.0, pwdlib 0.3.0
-**Avoids:** CORS headers missing on error responses (Pitfall 3), rate limiting breaking test suite (Pitfall 4), dev mode unusable after hardening (Pitfall 9)
+**Rationale:** This is the only true foundation phase — its output (consistent `address_norm` keys) is a prerequisite for accurate cost tracking and meaningful duplicate warnings. Building UI features on top of inconsistent geocoding data wastes effort. This phase also has the highest correctness risk (data migration of existing rows) and should be validated before UI work begins.
 
-### Phase 3: Geocoding Failure Visibility
-**Rationale:** The core data integrity bug. Must ship before UI improvements because the import summary screen has nothing meaningful to display until the backend returns structured failure data.
-**Delivers:** `GoogleGeocoder.batch()` accumulates per-order failures; `POST /api/upload-orders` returns `geocoding_failures[]` with classified reason codes; import summary screen shows processed/geocoded/failed counts; toast warning for partial geocoding with expandable failure list.
-**Addresses:** Geocoding failure reporting (P1 blocker), import summary screen (P1), actionable error messages (P1)
-**Avoids:** Silent drop anti-pattern (Architecture Anti-Pattern 3)
+**Delivers:** Unified `normalize_address()` function in `core/geocoding/normalize.py`, updated `google_adapter.py` and `repository.py`, Alembic migration for existing `address_norm` values, file cache deprecated or migrated, unit tests for normalization consistency.
 
-### Phase 4: UI Polish and Component Migration
-**Rationale:** With foundation verified and error data available from the backend, component-by-component Tailwind migration can proceed. Progressive migration (one component per PR, CSS file deleted only after visual verification) prevents big-bang regression.
-**Delivers:** All dashboard pages migrated to Tailwind + DaisyUI classes; empty states for all pages; toast system wired to all user actions; per-component CSS files deleted; row-level import report table with CSV export; unassigned order detail view.
-**Addresses:** Consistent design system (P1), empty states (P2), row-level import report (P2), unassigned order detail (P2), failed row download (P2)
-**Avoids:** One giant CSS cleanup commit (Architecture Anti-Pattern 4), DaisyUI theme variable bypass (Architecture Anti-Pattern 2)
+**Addresses (P1 features):** Unified cache normalization, deprecate file-based cache.
 
-### Phase 5: Driver PWA Update
-**Rationale:** The driver PWA update is independent of the dashboard migration but must not proceed until the Tailwind standalone CLI pre-compilation workflow is established in Phase 1. Service worker cache versioning is a hard requirement for every change.
-**Delivers:** Pre-compiled `tailwind.css` generated by Tailwind standalone CLI; inline styles replaced with DaisyUI utility classes; `sw.js` CACHE_VERSION bumped; interactive states (modals, stop list) managed via vanilla JS `classList.toggle()` not DaisyUI variant classes.
-**Addresses:** Driver PWA design consistency
-**Avoids:** Play CDN in production (Architecture Anti-Pattern 1), DaisyUI CDN missing interactive states (Pitfall 2), service worker cache staleness (Pitfall 8)
+**Avoids:** Pitfall 1 (dual-cache mismatch), Pitfall 10/PITFALLS (file cache not cleared), Pitfall 11/PITFALLS (cost tracking counts wrong cache layer).
 
-### Phase 6: Test Quality and Code Cleanup
-**Rationale:** Code cleanup must come last — never mixed with behavior changes. Test improvements can identify gaps left by earlier phases and lock in correct behavior as a regression net. Cleanup requires a fully green test suite as a pre-condition.
-**Delivers:** hypothesis property-based tests for geocoding coordinate validators and weight calculations; factory_boy fixtures replacing hard-coded dicts; respx mocks for Google Geocoding API and OSRM calls; pytest-cov coverage gate in CI; ruff + vulture cleanup of unused imports and dead code; `main.py` slop removal (inline imports, phase-comment noise, redundant try/except); one-command Docker setup documented.
-**Uses:** hypothesis 6.151.9, factory_boy 3.3.3, respx 0.22.0, pytest-cov 7.0.0
-**Avoids:** Removing defense-in-depth code (Pitfall 5), behavior vs. mock-verification tests (Pitfall 11), OSRM documentation gap (Pitfall 10), refactoring mixed with feature work (Architecture Anti-Pattern 5)
+**Research flag:** No deeper research needed. Root cause is fully diagnosed to specific code lines. `normalize_address()` is stdlib-only. Alembic migration pattern is established in the codebase.
+
+---
+
+### Phase 2: Geocoding Enhancements (Backend)
+
+**Rationale:** Builds directly on Phase 1's consistent normalization. Cost tracking counters and duplicate detection both require the cache to behave consistently before their counts are meaningful. This phase closes out the entire backend geocoding workstream and produces the updated `OptimizationSummary` response shape that Phase 3 (dashboard) will consume.
+
+**Delivers:** `geocode_cache_hits` and `geocode_api_calls` fields in upload response, `find_duplicate_locations()` in repository using PostGIS `ST_DWithin`, `DuplicateGroup` Pydantic model, updated `OptimizationSummary`, updated `dashboard/types.ts`.
+
+**Addresses (P1 features):** Duplicate GPS coordinate detection, geocoding cost tracking (backend), file cache deprecation finalized.
+
+**Avoids:** Pitfall 8/PITFALLS (duplicate detection false positives — implement confidence-weighted thresholds here, not flat distance matching).
+
+**Research flag:** No deeper research needed. PostGIS ST_DWithin and Pydantic model extension are well-documented. The only judgment call is the confidence-weighted threshold values — use ROOFTOP=10m, RANGE_INTERPOLATED=25m, GEOMETRIC_CENTER=100m, APPROXIMATE=skip.
+
+---
+
+### Phase 3: Dashboard UI Overhaul
+
+**Rationale:** Depends on Phase 2 for the `GeocodingStats` and `DuplicateLocationAlert` components, which consume new API response fields. The remaining page migrations (LiveMap, RunHistory, FleetManagement) are independent of the geocoding work and can be worked in parallel within the phase. The page-by-page migration strategy avoids visual regression — one page per commit, CSS file deleted after visual verification.
+
+**Delivers:** All 4 pages migrated to DaisyUI utility classes with `tw:` prefix; emoji icons replaced with lucide-react SVGs; loading and empty states for all pages; GeocodingStats and DuplicateLocationAlert components wired to new API fields; all per-page CSS files deleted after migration.
+
+**Addresses (P1 features):** DaisyUI consistency, SVG icons, loading/empty states, geocoding cost indicator (UI), duplicate location warning display.
+
+**Addresses (P2 features if time permits):** Color-coded status badges, capacity utilization bars, daily summary card, theme switcher.
+
+**Avoids:** Pitfall 2 (CSS variable collision — verify DevTools `:root` before first component), Pitfall 5 (CSP `'unsafe-inline'` — document, do not remove), Pitfall 6 (competing design systems — make DaisyUI tokens authoritative first), Pitfall 9 (Preflight regressions — visual diff before any component work).
+
+**Recommended internal order:** (1) Unify color token system (DaisyUI as source of truth), (2) Replace emoji icons in App.tsx, (3) Migrate UploadRoutes + add GeocodingStats + DuplicateLocationAlert, (4) Migrate LiveMap, (5) Migrate RunHistory, (6) Migrate FleetManagement, (7) Clean up sidebar/drawer patterns.
+
+**Research flag:** No deeper research needed. The `tw:` prefix is already configured and verified working in the project. DaisyUI component migration is mechanical.
+
+---
+
+### Phase 4: Driver PWA Refresh
+
+**Rationale:** Fully independent of Phases 1-3 (different tech stack, different HTML file, no shared API changes). Can run in parallel with Phase 3 if two developers are available. Listed as Phase 4 for single-developer sequencing — completing the backend and dashboard first means the PWA refresh is the sole focus with no context-switching between React and vanilla JS.
+
+**Delivers:** Next-stop hero card at top of stop list, delivery progress bar ("7 of 23"), pull-to-refresh button with last-updated timestamp, 60px+ touch target audit and fixes, WCAG AAA contrast audit and fixes, enhanced offline (route data in Cache API not just localStorage), BackgroundSync for status updates, service worker cache version automation.
+
+**Addresses (P1 features):** Next-stop hero card, progress indicator, pull-to-refresh, touch target audit, contrast audit.
+
+**Addresses (P2 features if time permits):** Auto-advance after delivery confirmation, haptic feedback (`navigator.vibrate(50)`, one line).
+
+**Avoids:** Pitfall 3/PITFALLS (PWA dead CSS — decide on DaisyUI adoption vs removal before visual work starts), Pitfall 4 (stale SW cache — automate CACHE_VERSION bump), Pitfall 7 (no-build-step Tailwind — no dynamic class names in JS).
+
+**Critical constraint:** PWA must remain a single monolithic `index.html` with no build step. No external JS files. No splitting CSS into multiple files. The monolithic structure is the offline architecture — splitting files requires updating `APP_SHELL` in sw.js and risks cache miss on a split file breaking offline mode entirely.
+
+**Research flag:** Physical Android device testing required for outdoor contrast validation before declaring the contrast audit complete. Browser DevTools cannot replicate direct Kerala sunlight on a mobile screen.
+
+---
 
 ### Phase Ordering Rationale
 
-- **Foundation first** because both CSS variable collision and test fixture geography errors will corrupt everything built on top of them if not fixed before other phases begin.
-- **Security before UI polish** because middleware order affects every endpoint, and it is far easier to verify CORS headers on clean endpoints than after component migration has touched `main.py`.
-- **Backend error propagation before frontend summary UI** because the frontend import summary is meaningless without structured data from the API — a strict data dependency confirmed by the feature dependency graph in FEATURES.md.
-- **Driver PWA after dashboard** because the Tailwind standalone CLI workflow established for the dashboard informs the PWA pre-compilation approach; doing PWA first would require discovering this in isolation.
-- **Cleanup last** because the architecture research explicitly states: never mix refactoring with behavior changes. The 351-test suite is the safety net; it must be green throughout every cleanup step.
+- **Geocoding first** because it is a data integrity fix, not a UI concern. Two cache layers with different normalization have been producing inconsistent data since v1.0. Every day this goes unfixed adds to the migration scope.
+- **Backend enhancements before frontend** because the `OptimizationSummary` response model is the API contract. Dashboard types.ts must reflect the final response shape before building UI components that consume new fields.
+- **Dashboard third** because it is the largest workstream by file count but has no blocking dependencies after Phase 2 completes. Page-by-page migration avoids coordinating with other changes.
+- **PWA fourth (or parallel)** because it is fully isolated. Putting it last in single-developer sequencing avoids context-switching between two frontend paradigms.
 
 ### Research Flags
 
-Phases likely needing deeper research during planning:
-- **Phase 3 (Geocoding Failure Visibility):** The `_classify_geocode_failure()` helper and the Google Geocoding API status code taxonomy need validation against the actual API response format in the codebase before implementation. Architecture research provides a pattern but codebase-specific details matter.
-- **Phase 5 (Driver PWA):** The Tailwind standalone CLI download URL and exact binary invocation for the project's Docker build environment (Linux x64 on WSL2) should be verified at planning time. The service worker cache size for offline map tile pre-caching is flagged as ~50MB in PITFALLS.md — confirm this is acceptable before committing to it.
+Phases needing deeper research during planning:
+- **Phase 4 (PWA contrast audit):** Physical Android device required for outdoor testing. Plan for in-field testing or coordinate with an actual driver before declaring the audit done.
 
 Phases with standard patterns (skip research-phase):
-- **Phase 1 (Foundation Setup):** Tailwind + DaisyUI installation is well-documented with official step-by-step guides verified against current versions.
-- **Phase 2 (Security Hardening):** HTTP security headers and CORS configuration are OWASP-documented patterns; Secweb middleware reduces this to a one-call integration.
-- **Phase 6 (Cleanup):** ruff, vulture, and pytest-cov tooling are mature with established usage patterns; no novel integration work required.
+- **Phase 1 (Normalization fix):** Root cause fully diagnosed. stdlib only. Write the code.
+- **Phase 2 (Backend enhancements):** PostGIS ST_DWithin and Pydantic model extension are well-documented. Only judgment call is confidence thresholds — captured above.
+- **Phase 3 (Dashboard UI):** DaisyUI 5 with `tw:` prefix is already working in the project. Migration is mechanical.
+- **Phase 4 (PWA refresh JS/CSS):** Vanilla JS state machine and CSS variables are well-understood. No unknowns beyond physical device testing.
+
+---
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All versions verified directly on PyPI/npm as of 2026-03-01. Version compatibility matrix confirmed (Tailwind 4 + DaisyUI 5, PyJWT + FastAPI 0.129, respx + httpx 0.28.1). One exception: Secweb 1.11.0 is MEDIUM — release date not pinned, monitor GitHub for freshness. |
-| Features | MEDIUM-HIGH | P1 features are directly grounded in codebase gaps (geocoding failures confirmed by code inspection). P2/P3 priority ordering uses competitor analysis from Onfleet and Routific, which are MEDIUM-confidence marketing sources. Core must-haves are HIGH confidence. |
-| Architecture | HIGH | Build order sequence is derived from actual codebase structure (1760-line `main.py` inspected, `OptimizationSummary` model traced, Vite config reviewed). Structured error response pattern follows FastAPI official docs. PWA offline constraint is grounded in existing `sw.js` inspection. |
-| Pitfalls | HIGH | Six critical pitfalls are grounded in either official GitHub issues (tailwindlabs/tailwindcss#15754), official docs (FastAPI middleware ordering, DaisyUI CDN limitations), or direct codebase inspection (Kochi vs. Vatakara coordinates, rate limiter test isolation). |
+| Stack | HIGH | Codebase directly analyzed. Only new dependency (lucide-react) is npm-verified at v0.575.0. All others are existing working dependencies with confirmed version compatibility. |
+| Features | HIGH | Geocoding bug root-caused to specific code lines in google_adapter.py:195 and repository.py:741. Industry patterns cross-referenced against DispatchTrack, Routific, and delivery app UX research. |
+| Architecture | HIGH | All file paths, function names, and line numbers verified against actual codebase. No inferred architecture — direct inspection throughout. Build order derived from actual data flow. |
+| Pitfalls | HIGH | CSS variable prefix bug is a confirmed open GitHub issue (tailwindlabs/tailwindcss#16441). Leaflet CSP requirement is a confirmed open GitHub issue (Leaflet/Leaflet#9168). Dual normalization bug is code-verified at specific lines. |
 
-**Overall confidence:** HIGH
+**Overall confidence: HIGH**
 
 ### Gaps to Address
 
-- **Secweb CSP header tuning:** The CSP must allow Leaflet tile URLs (unpkg.com, OSM tile servers) and the existing Google Geocoding API calls. The exact CSP policy string needs to be drafted and tested against the running application — a misconfigured CSP silently breaks map tiles. Address during Phase 2 planning.
-- **Geocoding API response shape:** The `_classify_geocode_failure()` helper in ARCHITECTURE.md assumes specific status codes from Google Geocoding API. Verify these against actual API responses in the codebase (`core/geocoding/google_adapter.py`) before implementing. Address during Phase 3 planning.
-- **Rate limiter multi-worker behavior:** PITFALLS.md flags that slowapi's in-memory limiter produces inconsistent behavior when uvicorn runs with `--workers N > 1`. If the deployment uses multiple workers, a Redis backend for slowapi is required. Confirm deployment topology during Phase 2 planning.
-- **Offline map tile pre-caching scope:** Caching OSM tiles for a 30km radius around Vatakara at zoom 10–16 is estimated at ~50MB. Confirm whether this is within acceptable PWA install size for the target Android devices before committing to the approach in Phase 5.
+- **Confidence-weighted duplicate detection thresholds:** The 10m/25m/100m thresholds for ROOFTOP/RANGE_INTERPOLATED/GEOMETRIC_CENTER are reasonable estimates. Validate against the actual `geocode_cache` table — check the distribution of `location_type` values for Kerala addresses. Adjust based on observed false-positive rate in the first test batch.
+- **PWA outdoor contrast validation:** WCAG 7:1 contrast ratios are mathematically verifiable but do not account for sunlight conditions. The saffron-on-dark palette was designed for outdoor use but any color changes must be tested on a physical device. Plan for in-field sign-off.
+- **File cache migration scope:** The size and entry count of `data/geocode_cache/google_cache.json` are not known from research. If it contains months of unique Kerala addresses not yet in the DB cache, migration is worth running. If it is small or stale, deleting it is faster. Check file size before Phase 1 begins.
+- **DaisyUI oklch vs hex visual parity:** DaisyUI's oklch color values and the existing hex `#D97706` amber are not visually identical. Plan for one design review session after the first page migration to verify the custom logistics theme tokens produce the correct colors.
+
+---
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [DaisyUI npm](https://www.npmjs.com/package/daisyui) — v5.5.19 version verified 2026-03-01
-- [Tailwind CSS npm](https://www.npmjs.com/package/tailwindcss) — v4.2.1 version verified 2026-03-01
-- [Tailwind CSS v4 official blog](https://tailwindcss.com/blog/tailwindcss-v4) — CSS-variable architecture, no tailwind.config.js
-- [Tailwind Play CDN docs](https://tailwindcss.com/docs/installation/play-cdn) — "not for production" confirmed
-- [Leaflet 2.0 alpha blog](https://leafletjs.com/2025/05/18/leaflet-2.0.0-alpha.html) — alpha status, breaking plugin API
-- [PyJWT PyPI](https://pypi.org/project/PyJWT/) — v2.11.0 released Jan 30, 2026
-- [FastAPI discussion #11345](https://github.com/fastapi/fastapi/discussions/11345) — python-jose abandonment, PyJWT recommendation
-- [pwdlib PyPI](https://pypi.org/project/pwdlib/) — v0.3.0, bcrypt+argon2 backends, Python 3.13 safe
-- [FastAPI discussion #11773](https://github.com/fastapi/fastapi/discussions/11773) — passlib abandonment, pwdlib recommendation
-- [OWASP HTTP Headers Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html) — required security headers
-- [FastAPI middleware ordering docs](https://fastapi.tiangolo.com/advanced/middleware/) — CORS must be outermost
-- [FastAPI error handling docs](https://fastapi.tiangolo.com/tutorial/handling-errors/) — structured detail dict pattern
-- [DaisyUI CDN limitations](https://daisyui.com/docs/cdn/) — interactive variant classes excluded
-- [tailwindlabs/tailwindcss#15754](https://github.com/tailwindlabs/tailwindcss/issues/15754) — CSS variable namespace collision
-- Codebase inspection: `apps/kerala_delivery/api/main.py`, `apps/kerala_delivery/dashboard/src/index.css`, `tests/test_e2e_pipeline.py`, `.planning/codebase/CONCERNS.md`
+- Direct codebase inspection: `core/geocoding/google_adapter.py` line 195 — file cache normalization (`" ".join(address.lower().split())`)
+- Direct codebase inspection: `core/database/repository.py` line 741 — DB cache normalization (`address_raw.strip().lower()`) — normalization bug confirmed here
+- Direct codebase inspection: `apps/kerala_delivery/driver_app/sw.js` — CACHE_VERSION v3, APP_SHELL pre-cache list
+- Direct codebase inspection: `apps/kerala_delivery/driver_app/index.html` — monolithic ~51KB, inline CSS and JS architecture
+- Direct codebase inspection: `apps/kerala_delivery/driver_app/pwa-input.css` and `tailwind.css` — dead CSS confirmed
+- Direct codebase inspection: `apps/kerala_delivery/dashboard/src/index.css` — DaisyUI `@import "tailwindcss" prefix(tw)` configuration, 20+ `--color-*` custom properties
+- Direct codebase inspection: `apps/kerala_delivery/api/main.py` line 256 — CSP config, lines 852-898 — geocoding loop structure
+- [PostGIS ST_DWithin docs](https://postgis.net/docs/ST_DWithin.html) — spatial proximity query with GiST index
+- [Python unicodedata docs](https://docs.python.org/3/library/unicodedata.html) — NFKC normalization for Malayalam script
+- [DaisyUI 5 Components](https://daisyui.com/components/) — Stat, Table, Badge, Skeleton, Steps, Alert, Toast, Modal verified available
+- [MDN Screen Wake Lock API](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Wake_Lock_API) — 95%+ Android support confirmed
+- [lucide-react npm](https://www.npmjs.com/package/lucide-react) — v0.575.0, 10.3k+ dependents, ESM tree-shaking
 
 ### Secondary (MEDIUM confidence)
-- [hypothesis PyPI](https://pypi.org/project/hypothesis/) — v6.151.9 released Feb 2026
-- [factory-boy PyPI](https://pypi.org/project/factory-boy/) — v3.3.3
-- [respx PyPI](https://pypi.org/project/respx/) — v0.22.0, httpx>=0.25 required
-- [pytest-cov PyPI](https://pypi.org/project/pytest-cov/) — v7.0.0
-- [Secweb libraries.io](https://libraries.io/pypi/Secweb) — v1.11.0 (release date not fully pinned)
-- [Onfleet Driver Status Docs](https://support.onfleet.com/hc/en-us/articles/10228905705876-Driver-Status) — driver status color conventions
-- [Dromo CSV Import Best Practices](https://dromo.io/blog/ultimate-guide-to-csv-imports) — row-level error reporting UX
-- [slowapi documentation](https://slowapi.readthedocs.io/) — rate limiter test isolation patterns
-- [Simon Willison — Tips for coding agents to write good Python tests (2026)](https://simonwillison.net/2026/Jan/26/tests/) — behavior-first test principle
+- [Tailwind v4 CSS variable prefix bug — tailwindlabs/tailwindcss#16441](https://github.com/tailwindlabs/tailwindcss/issues/16441) — confirmed open issue, workaround documented
+- [Leaflet CSP unsafe-inline — Leaflet/Leaflet#9168](https://github.com/Leaflet/Leaflet/issues/9168) — confirmed open issue, no fix available
+- [AddressHub: Caching Geocoding Results](https://address-hub.com/address-intelligence/caching/) — cache normalization strategies, 10-20ms cache vs 100-300ms API
+- [DispatchTrack Mobile App UX](https://www.dispatchtrack.com/blog/mobile-app-ui-ux/) — driver app redesign patterns, outdoor readability
+- [Last-Mile Delivery Driver App UX (zigpoll)](https://www.zigpoll.com/content/how-can-our-ux-designers-optimize-the-mobile-app-interface-to-reduce-delivery-time-errors-and-improve-driver-efficiency-for-lastmile-logistics) — next-stop workflow, one-handed operation, bottom thumb zone
+- [Radar: Complete Guide to Geocoding APIs](https://radar.com/blog/geocoding-apis) — normalize before provider calls, deduplication best practices
+- [Deduplicate Location Records (Towards Data Science)](https://towardsdatascience.com/deduplicate-and-clean-up-millions-of-location-records-abcffb308ebf/) — geospatial duplicate detection patterns
+- [PWA Offline-First Strategies (MagicBell)](https://www.magicbell.com/blog/offline-first-pwas-service-worker-caching-strategies) — Cache API vs localStorage, BackgroundSync patterns
+- [MDN prefers-contrast media query](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-contrast) — browser support, implementation
 
 ### Tertiary (LOW confidence — needs validation)
-- [FastAPI OWASP hardening guide](https://oneuptime.com/blog/post/2025-01-06-fastapi-owasp-security/view) — single source, 2025; verify CSP header values against actual tile CDN URLs used
-- Offline map tile caching size estimate (~50MB for Vatakara 30km radius, zoom 10–16) — derived from general OSM tile density estimates; needs measurement
+- [Lucide bundle benchmark 2026](https://medium.com/codetodeploy/the-hidden-bundle-cost-of-react-icons-why-lucide-wins-in-2026-1ddb74c1a86c) — tree-shaking comparison (single article, verify independently)
+- [PWA Best Practices 2026 (Wirefuture)](https://wirefuture.com/post/progressive-web-apps-pwa-best-practices-for-2026) — general offline-first patterns
 
 ---
 *Research completed: 2026-03-01*

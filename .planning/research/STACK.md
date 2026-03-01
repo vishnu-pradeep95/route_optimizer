@@ -1,218 +1,267 @@
 # Stack Research
 
-**Domain:** Logistics SaaS — LPG delivery route optimization dashboard + driver PWA (Kerala, India)
+**Domain:** Logistics SaaS dashboard UI overhaul + driver PWA refresh + geocoding data integrity
 **Researched:** 2026-03-01
-**Confidence:** MEDIUM-HIGH (most versions verified via PyPI/npm; see per-item notes)
-**Scope:** Subsequent milestone additions — UI polish, security hardening, test improvements. No framework changes.
+**Confidence:** HIGH
+**Scope:** v1.1 milestone additions only. Dashboard UI overhaul, driver PWA refresh, geocoding cache normalization and duplicate detection.
 
 ---
 
-## Context: What Already Exists (Do Not Re-research)
+## Context: What Already Exists (Do Not Change)
 
-The base stack (FastAPI 0.129, React 19 + Vite 7, PostgreSQL 16 + PostGIS, OSRM, VROOM, SQLAlchemy 2, asyncpg, Alembic, pytest 9, pytest-asyncio 1.3) is already in place and must not change. This document covers **additive** libraries only.
+The base stack is validated and working. Listed here as context for additions only.
+
+| Technology | Version | Layer |
+|------------|---------|-------|
+| React | 19.2.0 | Dashboard |
+| TypeScript | 5.9.3 | Dashboard |
+| Vite | 7.3.1 | Dashboard build |
+| Tailwind CSS | 4.2.1 | Both (dashboard via Vite plugin, PWA via tailwindcss-extra CLI) |
+| DaisyUI | 5.5.19 | Both (oklch logistics theme, `@plugin "daisyui"`) |
+| @tailwindcss/vite | 4.2.1 | Dashboard build |
+| MapLibre GL + react-map-gl | 5.18.0 / 8.1.0 | Dashboard maps |
+| Leaflet | 1.9.4 | Driver PWA maps (CDN) |
+| framer-motion | 12.34.3 | Dashboard animation (RunHistory only) |
+| DM Sans + IBM Plex Mono | @fontsource | Dashboard typography |
+| Outfit + JetBrains Mono | Google Fonts CDN | Driver PWA typography |
+| Python/FastAPI | 0.129.1 | Backend API |
+| SQLAlchemy + asyncpg | 2.0.46 / 0.31.0 | Async PostgreSQL ORM |
+| GeoAlchemy2 | 0.18.1 | PostGIS geometry columns |
+| Shapely | 2.1.2 | Geometric operations |
+| PostGIS | 3.5 | Spatial database extension (ST_DWithin, ST_DistanceSphere available) |
+| Secweb | 1.30.10 | HTTP security headers (already in requirements.txt) |
 
 ---
 
-## Recommended Stack
+## Recommended Additions
 
-### UI Layer — Professional Logistics Dashboard
+### Dashboard UI Overhaul
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| Tailwind CSS | 4.2.1 | Utility-first CSS for dashboard and PWA | v4 is current stable (released ~Feb 2026); CSS-variable-based theming, no JS config file, 34 kB install footprint. The project already committed to Tailwind in PROJECT.md. |
-| DaisyUI | 5.5.19 | Semantic component classes on top of Tailwind | v5 is Tailwind v4-native with zero deps, 34 kB compressed CSS (down from 137 kB in v4). Ships Table, Badge, Stats, Card, Navbar, Drawer, Modal — all needed for a logistics SaaS look. |
-| Leaflet | 1.9.4 | Interactive map for dashboard and driver PWA | Stay on 1.9.4 (stable). Leaflet 2.0 is alpha (released Aug 2025) with breaking API changes (module imports replace global `L`); upgrading during a UI polish phase adds risk with no user benefit. |
-| Leaflet.markercluster | 1.5.3 | Cluster 100–500 delivery pins into manageable groups | Purpose-built, maintained by Leaflet org, handles 10 k markers in Chrome. Critical for readability when 300+ orders are on map. |
+| lucide-react | ^0.575.0 | SVG icon library | Tree-shakeable ESM-native icons, ~1KB per icon. The dashboard currently uses emoji for nav icons (upload emoji, map emoji, clipboard emoji, truck emoji). Professional logistics SaaS requires proper SVG icons. lucide-react has 1500+ icons including logistics-relevant ones: Truck, Package, MapPin, Route, ClipboardList, Fuel, Navigation, BarChart3, Upload, Settings, Activity. Best bundle efficiency in 2026 React icon benchmarks. |
 
-**Confidence:** HIGH — Tailwind 4.2.1 and DaisyUI 5.5.19 versions verified on npm (2026-03-01). Leaflet 1.9.4 confirmed stable; 2.0 confirmed alpha-only per official blog. Leaflet.markercluster 1.5.3 widely used, maintained by Leaflet org.
+**Why lucide-react over alternatives:**
 
-### Security Hardening Libraries
+| Alternative | Why Not |
+|-------------|---------|
+| react-icons | Imports pull in entire icon family bundles. At 50k+ icons, tree-shaking is less efficient. lucide-react tree-shakes to only imported icons. |
+| @heroicons/react | Only ~300 icons. Missing logistics-specific icons (no fuel, no route, limited navigation). |
+| @phosphor-icons/react | Viable alternative with 6 weight variants per icon. Overkill for this dashboard -- lucide's single clean stroke style fits the industrial-utilitarian design language. |
+| Copy-paste SVGs | Loses React component ergonomics (props for size, color, strokeWidth, className). |
 
-| Library | Version | Purpose | Why Recommended |
-|---------|---------|---------|-----------------|
-| PyJWT | 2.11.0 | JWT encode/decode for API auth tokens | FastAPI docs updated in 2025 to recommend PyJWT over python-jose (python-jose is abandoned, last release ~3 years ago). PyJWT 2.11.0 released Jan 30, 2026 — actively maintained. |
-| pwdlib | 0.3.0 | Password hashing (bcrypt/argon2 backends) | passlib is abandoned (last release 2020, breaks on Python 3.13). FastAPI docs now use pwdlib in examples. pwdlib 0.3.0 released Oct 2025 supports bcrypt and argon2. Install with `pip install "pwdlib[bcrypt]"`. |
-| Secweb | 1.11.0 | HTTP security headers middleware for Starlette/FastAPI | Applies CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy in one `SecWeb(app=app)` call. Lightweight, no external deps. Use instead of rolling headers manually. |
+### Driver PWA Refresh
 
-**Confidence:** HIGH for PyJWT (verified PyPI, FastAPI GitHub discussion #11345 confirms switch). HIGH for pwdlib (verified PyPI, FastAPI GitHub discussion #11773). MEDIUM for Secweb (version confirmed via libraries.io; last release cadence not fully verified — monitor GitHub for freshness).
+**Zero new dependencies required.** The driver PWA must remain a standalone HTML/JS app with no build step. All improvements use existing technologies:
 
-### Testing Libraries
+| Capability | Implementation | Notes |
+|------------|----------------|-------|
+| High-contrast outdoor mode | CSS `@media (prefers-contrast: more)` + manual toggle in localStorage | Native CSS feature. Add high-contrast color overrides for saffron-on-dark theme. Toggle via settings gear icon. |
+| Simplified next-stop flow | Vanilla JS state machine: `currentStopIndex`, tap/swipe to advance | ~50 lines of JS. The current list view shows all stops. New flow: one stop at a time with large "Navigate" and "Mark Delivered" buttons. |
+| Better offline: pre-cache route data | Service worker `fetch` event: intercept `GET /api/routes/{vehicle_id}` response, clone to cache | Extend existing SW from caching only app shell to also caching the last fetched route data. ~20 lines added to sw.js. |
+| Screen wake lock | `navigator.wakeLock.request('screen')` in delivery mode | Prevents screen dimming during active delivery. 95%+ Android mobile support. Release lock when all stops delivered. |
+| Haptic feedback | `navigator.vibrate([200])` on delivery confirmation | Single line. Gives tactile confirmation when marking stop as delivered. |
+| Swipe navigation | `touchstart`/`touchmove`/`touchend` listeners | ~30 lines vanilla JS. Horizontal swipe to advance/go back between stops. |
+| Font readability improvements | Already using Outfit (UI) + JetBrains Mono (data). Increase base font-size to 16px minimum, bump touch target data text to 18px. | CSS changes only. |
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| pytest-cov | 7.0.0 | Coverage measurement integrated with pytest | Always — add to CI to gate coverage regression. Note: v7 removes `.pth`-based subprocess measurement; use `coverage`'s native patch for subprocess coverage if needed. |
-| hypothesis | 6.151.9 | Property-based testing (auto-generates edge cases) | Use for geocoding coordinate validators, route weight calculations, CSV parsing edge cases. Verifies properties across all valid inputs, not just hand-picked examples. |
-| factory_boy | 3.3.3 | Test fixture factories (replaces hard-coded dicts) | Use to build `Order`, `Route`, `Vehicle` objects in tests without duplicating fixture boilerplate. Integrate with pytest via `pytest-factoryboy`. |
-| respx | 0.22.0 | Mock httpx calls in tests | Use to mock Google Geocoding API, OSRM, and VROOM HTTP calls in unit tests without making real network requests. Works with both sync and async httpx. |
+**Driver PWA CSS build:** Continue using `scripts/build-pwa-css.sh` with `tailwindcss-extra` CLI binary. This compiles `pwa-input.css` (Tailwind + DaisyUI plugin) to static `tailwind.css`. No Node.js runtime needed at deploy time.
 
-**Confidence:** HIGH — all four versions verified directly on PyPI (hypothesis 6.151.9 released Feb 2026; factory_boy 3.3.3 Feb 2025; pytest-cov 7.0.0 Sep 2025; respx 0.22.0 Dec 2024).
+### Geocoding Cache Normalization + Duplicate Detection
 
-### Development Tools
+**Zero new Python dependencies required.** The existing stack covers all needs:
 
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| pytest-asyncio 1.3.0 | Async test support (already in stack) | Set `asyncio_mode = "auto"` in `pyproject.toml` or `pytest.ini` to avoid per-test `@pytest.mark.asyncio` decorators. Already installed — just configure mode. |
-| Playwright (already planned) | Visual regression and E2E testing of dashboard | PROJECT.md notes it is planned. Use `@playwright/test` with Vite dev server for visual checks of Tailwind/DaisyUI components. |
+| Capability | Implementation | Why No New Library |
+|------------|----------------|-------------------|
+| Address normalization unification | Single `normalize_address()` function: `unicodedata.normalize('NFKC', " ".join(addr.strip().lower().split()))` | Python 3.12 stdlib `unicodedata` handles Malayalam Unicode canonical normalization. The bug is two different normalizations (see details below), not a missing library. |
+| Duplicate GPS detection | PostGIS `ST_DWithin(location, target_point, 50)` query in repository | GeoAlchemy2 0.18.1 already exposes ST_DWithin. GiST spatial index on `geocode_cache.location` enables sub-ms queries. No Python haversine library needed. |
+| Cache hit/miss cost tracking | Add `is_cache_hit: bool` and `api_calls_count: int` to response Pydantic model | Model change + counter in CachedGeocoder.stats dict. Zero new deps. |
+| Malayalam Unicode normalization | `unicodedata.normalize('NFKC', text)` | Stdlib. Handles combining characters and canonical decomposition for Malayalam script. |
+
+---
+
+## The Geocoding Normalization Bug (Detailed)
+
+This is the core data integrity issue. Two caching layers use different normalization:
+
+**Layer 1 -- File cache** (`core/geocoding/google_adapter.py:189-196`):
+```python
+def _address_hash(self, address: str) -> str:
+    normalized = " ".join(address.lower().split())  # collapses whitespace
+    return hashlib.sha256(normalized.encode()).hexdigest()[:16]
+```
+
+**Layer 2 -- DB cache** (`core/database/repository.py:741`):
+```python
+normalized = address_raw.strip().lower()  # preserves internal whitespace
+```
+
+**Example divergence:** Address `"Near SBI,  MG Road,  Kochi"` (double spaces):
+- File cache normalizes to: `"near sbi, mg road, kochi"` (spaces collapsed) -> SHA-256 hash
+- DB cache normalizes to: `"near sbi,  mg road,  kochi"` (double spaces preserved)
+- Result: Same address gets different cache keys. DB misses, makes unnecessary API call, creates duplicate entry.
+
+**Fix:** Create `core/geocoding/normalize.py` with a single canonical function:
+```python
+import re
+import unicodedata
+
+def normalize_address(raw: str) -> str:
+    """Canonical address normalization for cache key generation.
+
+    Used by both file-based and DB-based geocode caches.
+    Steps: NFKC normalize -> lowercase -> collapse whitespace -> strip.
+    """
+    text = unicodedata.normalize('NFKC', raw)
+    text = text.lower()
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+```
+
+Then use this function in both `GoogleGeocoder._address_hash()` and `repository.get_cached_geocode()` / `repository.save_geocode_cache()`.
+
+**Migration:** Run a one-time script to re-normalize existing `address_norm` values in the DB.
+
+**Recommendation:** Deprecate the file cache entirely. The DB cache is the production path (shared across instances, supports spatial queries, tracks hit counts). The file cache was a bootstrap mechanism. After migration, GoogleGeocoder should delegate all caching to CachedGeocoder.
+
+---
+
+## DaisyUI 5 Components to Leverage (Already Installed)
+
+These require zero installation -- just use the CSS classes with `tw-` prefix.
+
+| Component | Use Case in v1.1 | Why |
+|-----------|-------------------|-----|
+| **Table** | Route list, fleet management, geocoding failure report | Responsive via `overflow-x-auto`, zebra striping, hover states. Replace current custom CSS tables. |
+| **Stat** | KPI cards: orders uploaded, cache hit rate, routes generated, total distance, API calls saved | Clean numeric display with title, value, description. Replace current plain text stats. |
+| **Badge** | Status tags: "Geocoded", "Cache Hit", "API Call", "Failed", vehicle status | Semantic colors mapped to DaisyUI theme (success, warning, error, info). |
+| **Skeleton** | Loading states during optimization and route fetch | Content-shaped placeholders, better UX than spinner for route cards and stats. |
+| **Steps** | Upload workflow progress indicator: Parse -> Geocode -> Optimize -> Done | Visual multi-step progress. Shows current phase during the 5-30 second optimization flow. |
+| **Alert** | Import summary states (already partially used in ImportSummary) | Standardize success/warning/error patterns across the dashboard. |
+| **Toast** | Non-blocking notifications: "Routes generated", "Upload failed" | Corner-positioned, auto-dismiss. Non-intrusive confirmation. |
+| **Modal** | Confirmation dialogs: delete vehicle, re-optimize, clear cache | Accessible, ESC-dismissible, focus-trapped. |
+| **Tooltip** | Explain cache indicators, abbreviations, status icons | Non-intrusive contextual help for operators. |
+| **Indicator** | Badge overlay on nav icons (e.g., pending routes count) | Overlays a count number on sidebar icon. |
+| **Collapse** | Expandable geocoding failure details (already used in ImportSummary) | Standardize on DaisyUI version for visual consistency. |
+| **Loading** | Inline loading spinner for buttons during API calls | Small spinner inside button during submit. |
+| **Validator** | Fleet management form field validation feedback | Color changes on input validity (green/red border + message). |
+
+---
+
+## What NOT to Add
+
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| recharts / chart.js / echarts | No charts in v1.1 scope. Dashboard shows route lists, maps, and stat numbers. Adding a chart library is premature. | DaisyUI Stat component for numeric KPIs |
+| react-router / @tanstack/router | Only 4 pages. Current `useState<Page>` works perfectly. Adding a router is overhead for zero benefit at this page count. | Keep existing `activePage` state pattern in App.tsx |
+| @tanstack/react-query | Only 4-5 API calls total. Current `useEffect` + `fetch` is adequate. No polling, no optimistic updates, no cache invalidation complexity. | Keep existing `useCallback` + `fetch` pattern in lib/api.ts |
+| shadcn/ui | Would conflict with DaisyUI -- both provide component primitives. DaisyUI is already installed, themed, and working. | DaisyUI 5 components |
+| @headlessui/react | DaisyUI 5 already provides accessible modal, dropdown, tabs, accordion. Headless UI adds abstraction without new capability. | DaisyUI modal, dropdown, tabs |
+| Zustand / Redux / Jotai | 4 pages with independent state. No cross-page state sharing needed. Prop depth is shallow (App -> Page -> Component). | React useState / useReducer |
+| react-table / TanStack Table | Route list has 13 rows max. Fleet management has 13 vehicles. No need for virtualization, column resizing, or complex filtering. | DaisyUI Table with manual sort (~20 lines) |
+| Workbox (Google SW toolkit) | Driver PWA already has a well-structured 146-line service worker. Workbox adds a build step and abstraction for something already working. | Extend existing hand-written sw.js |
+| IndexedDB / idb library | Current localStorage holds route data for 13 vehicles x ~50 stops = ~650 items. localStorage 5MB limit is nowhere near reached. | Keep localStorage for route cache + offline queue |
+| libpostal / pypostal | Requires 2GB+ trained model download. Massive overhead for normalizing Kerala landmark-based addresses. | Python stdlib `unicodedata.normalize('NFKC')` + whitespace collapsing |
+| text-unidecode / Unidecode | Transliterates Malayalam to ASCII gibberish. We need Unicode canonical normalization (NFKC), not transliteration. | `unicodedata.normalize('NFKC', text)` |
+| haversine (Python library) | All geocoded data lives in PostGIS. ST_DWithin does the same calculation on indexed spatial data, faster than loading into Python. | PostGIS `ST_DWithin` via GeoAlchemy2 |
+| Redis | PostgreSQL geocode_cache with GiST index handles caching. Redis would add another Docker service for no measurable benefit at this scale (40-50 addresses/day). | PostgreSQL geocode_cache table |
+| Leaflet.markercluster | Not needed for v1.1. Dashboard uses MapLibre GL (not Leaflet). Driver PWA shows one route at a time (max ~50 markers). Clustering is a future concern if dashboard switches to showing all routes simultaneously. | MapLibre native clustering (if ever needed) |
+
+---
+
+## framer-motion Status
+
+The project has `framer-motion@^12.34.3` installed. This IS the same code as "Motion for React" -- the npm `motion` package v12.34.3 and `framer-motion` v12.34.3 are the same library by Matt Perry / Motion Division.
+
+Currently only `RunHistory.tsx` imports from `framer-motion`. This works with React 19 at v12.
+
+**No migration needed.** The import can optionally change from:
+```typescript
+import { motion, AnimatePresence } from "framer-motion";
+```
+to:
+```typescript
+import { motion, AnimatePresence } from "motion/react";
+```
+This is cosmetic (same underlying code). Do it during RunHistory refactor if convenient. Do not create a separate task.
+
+**Use framer-motion for v1.1:** Page transitions in App.tsx, list item animations in route cards, stat counter animations. Already installed, zero additional cost.
 
 ---
 
 ## Installation
 
-### Python (add to requirements.txt)
-
 ```bash
-# Security hardening
-pip install "PyJWT==2.11.0" "pwdlib[bcrypt]==0.3.0" "Secweb==1.11.0"
+# Dashboard -- single new dependency
+cd apps/kerala_delivery/dashboard
+npm install lucide-react
 
-# Testing improvements
-pip install "pytest-cov==7.0.0" "hypothesis==6.151.9" "factory-boy==3.3.3" "respx==0.22.0"
+# That's it. Everything else is already installed or uses stdlib.
 ```
 
-### Node / Frontend
+**No Python additions needed.** `unicodedata` is Python stdlib. PostGIS `ST_DWithin` is available via existing GeoAlchemy2.
 
-```bash
-# Core UI
-npm install tailwindcss@4.2.1 daisyui@5.5.19
-
-# Leaflet clustering (for dashboard map)
-npm install leaflet.markercluster@1.5.3
-npm install -D @types/leaflet.markercluster
-```
-
-### Driver PWA (no build step — CDN links)
-
-```html
-<!-- Tailwind v4 browser build (development only; use CLI build for production) -->
-<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-
-<!-- DaisyUI v5 (requires Tailwind v4) -->
-<link href="https://cdn.jsdelivr.net/npm/daisyui@5/dist/full.min.css" rel="stylesheet"/>
-
-<!-- Leaflet stable -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-<!-- Marker clustering -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-```
-
-**Note:** Tailwind `@tailwindcss/browser` CDN is explicitly marked "development/prototypes only" in official docs. The driver PWA needs a production-ready CSS solution. Options: (a) pre-build a `driver.css` artifact via Tailwind CLI during Docker build, or (b) use DaisyUI's standalone CDN CSS which does not require Tailwind at runtime. Recommendation: pre-build and serve static CSS — keeps the PWA's no-build-step constraint while avoiding CDN dependency in production.
-
-### pytest.ini / pyproject.toml configuration
-
-```ini
-[pytest]
-asyncio_mode = auto
-```
-
----
-
-## Alternatives Considered
-
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| DaisyUI 5 + Tailwind 4 | shadcn/ui + Tailwind | If the project were a new greenfield React app with full build pipeline control. shadcn requires per-component copy-paste into src; incompatible with no-build-step PWA constraint. |
-| DaisyUI 5 + Tailwind 4 | Ant Design / MUI | If desktop-app feel and comprehensive pre-built React components were needed. Adds large bundle, opinionated theming, and is overkill for a single-team logistics tool. |
-| Leaflet 1.9.4 | Leaflet 2.0 alpha | Do not use 2.0 until stable — breaking API (no global `L`), all plugins must be updated to ESM imports, and existing driver PWA code would break. Re-evaluate when 2.0.0 stable ships. |
-| PyJWT 2.11.0 | python-jose | Do not use python-jose — abandoned, 3-year-old codebase, security patches not being applied. FastAPI's own documentation deprecated it in 2025. |
-| pwdlib 0.3.0 | passlib | Do not use passlib on Python 3.12+. It raises deprecation warnings on 3.12 and will break on 3.13. pwdlib is passlib's spiritual successor for bcrypt/argon2. |
-| pwdlib 0.3.0 | argon2-cffi directly | argon2-cffi works but lacks the convenience wrapper. Use pwdlib[argon2] to get the same backend with a unified API. Only use argon2-cffi directly if pwdlib's API becomes a blocker. |
-| Secweb | secure.py (TypeError/secure) | secure.py is more flexible for custom header policies. Use it instead of Secweb if CSP needs fine-grained per-route control. Both are valid; Secweb is simpler for an internal tool. |
-| respx | pytest-httpx | Either works. respx has slightly better documentation and a more ergonomic fixture API. pytest-httpx is a fine alternative if respx causes friction. |
-| hypothesis | manual parametrize | Use hypothesis for coordinate validators and weight calculations where the input space is large and continuous. Use plain `@pytest.mark.parametrize` for discrete enumerable cases (e.g., CSV column permutations). |
-
----
-
-## What NOT to Use
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| python-jose | Abandoned ~2022; no security patches; FastAPI docs explicitly dropped it in 2025 | PyJWT 2.11.0 |
-| passlib | Last released 2020; triggers deprecation warnings on Python 3.12; breaks on 3.13 | pwdlib 0.3.0 with bcrypt backend |
-| Leaflet 2.0.0-alpha | Alpha stage, breaking API changes, all plugins (markercluster etc.) not yet ported to ESM | Leaflet 1.9.4 (stable) |
-| @tailwindcss/browser CDN in production | Official docs say "development and prototypes only"; adds runtime JS overhead | Pre-build CSS with Tailwind CLI during Docker image build |
-| Ant Design / MUI / Chakra | Heavy bundle, opinionated theming clashes with DaisyUI, unnecessary for internal logistics tool | DaisyUI 5 components |
-| Wildcard CORS (`allow_origins=["*"]`) | Breaks `allow_credentials=True`; exposes API to any origin | Explicit origin list from `CORS_ALLOWED_ORIGINS` env var (already in config) |
-
----
-
-## Stack Patterns by Context
-
-**Tailwind in React dashboard (has build step):**
-- Install `tailwindcss` + `@tailwindcss/vite` plugin, configure `vite.config.ts`
-- Tailwind v4 uses CSS `@import "tailwindcss"` in place of v3's `@tailwind base/components/utilities`
-- DaisyUI v5 is a Tailwind plugin: `plugins: [daisyui]` in CSS or JS config
-
-**Tailwind in driver PWA (no build step):**
-- Pre-build a static `driver.css` during Docker image build using `npx tailwindcss --input driver.css --output dist/driver.css --minify`
-- Reference pre-built CSS via `<link>` in `index.html`
-- Do NOT use `@tailwindcss/browser` in production
-
-**Security headers — where to put them:**
-- Add `SecWeb(app=app)` before any route handlers in `main.py` lifespan setup
-- Tune CSP to allow Leaflet tile URLs (`unpkg.com`, OSM tile servers) and inline script nonces if needed
-- Keep CORS config driven from `CORS_ALLOWED_ORIGINS` env var (already exists — do not hardcode)
-
-**Property-based testing with hypothesis for geospatial code:**
-- Use `hypothesis.strategies.floats(min_value=-90, max_value=90)` for lat, `floats(min_value=-180, max_value=180)` for lon
-- Target functions: `haversine_distance()`, `is_within_delivery_radius()`, CSV geocode normalization
-- Mark slow hypothesis tests with `@settings(max_examples=50)` to keep CI fast
-
-**Factory_boy for delivery domain objects:**
-```python
-import factory
-from apps.kerala_delivery.models import Order
-
-class OrderFactory(factory.Factory):
-    class Meta:
-        model = Order
-    customer_id = factory.Sequence(lambda n: f"CUST{n:04d}")
-    lat = factory.Faker("latitude")
-    lon = factory.Faker("longitude")
-    cylinders = factory.Faker("pyint", min_value=1, max_value=5)
-```
+**No driver PWA additions needed.** All improvements are CSS + vanilla JS using existing Tailwind/DaisyUI compiled CSS.
 
 ---
 
 ## Version Compatibility
 
-| Package A | Compatible With | Notes |
-|-----------|-----------------|-------|
-| tailwindcss@4.2.1 | daisyui@5.5.19 | DaisyUI v5 requires Tailwind v4. DaisyUI v4 requires Tailwind v3. Do not mix versions. |
-| daisyui@5.5.19 | React 19 | DaisyUI is CSS-only; works with any JS framework or vanilla JS. No React peer dep issues. |
-| Leaflet@1.9.4 | leaflet.markercluster@1.5.3 | Compatible. Do NOT use Leaflet 2.0 alpha with markercluster — plugins not ported yet. |
-| PyJWT@2.11.0 | FastAPI@0.129.1 | No conflicts. PyJWT has no FastAPI peer dependency. |
-| pwdlib@0.3.0 | Python 3.12.3 | Works. Python 3.13 support confirmed by pwdlib's design intent. |
-| pytest-asyncio@1.3.0 | pytest@9.0.2 | Already installed together; confirmed compatible. Set `asyncio_mode = auto`. |
-| hypothesis@6.151.9 | pytest@9.0.2 | Works. hypothesis integrates with pytest natively via plugin discovery. |
-| respx@0.22.0 | httpx@0.28.1 | respx 0.22.0 requires httpx>=0.25.0. Project has httpx 0.28.1. |
+| Package | Compatible With | Notes |
+|---------|-----------------|-------|
+| lucide-react@0.575 | React 19.2.0 | Confirmed. Uses React.forwardRef (still supported in React 19). Tree-shakes cleanly with Vite 7. |
+| lucide-react@0.575 | TypeScript 5.9.3 | Ships its own type definitions. |
+| framer-motion@12.34.3 | React 19.2.0 | Full React 19 support since v12 alpha. Working in project today. |
+| DaisyUI@5.5.19 | Tailwind CSS 4.2.1 | DaisyUI 5 built for Tailwind 4. Uses `@plugin` directive. Working in project today. |
+| tailwindcss-extra CLI | Tailwind CSS 4.x + DaisyUI 5.x | Third-party CLI bundles DaisyUI plugin for standalone compilation. Used by driver PWA CSS build. |
+| Python 3.12 unicodedata | All Python deps | stdlib, no version conflicts possible. |
+| PostGIS 3.5 ST_DWithin | GeoAlchemy2 0.18.1 | ST_DWithin available since PostGIS 1.x. GiST index on location column already exists in schema. |
+
+---
+
+## Stack Patterns by Feature Area
+
+**Dashboard UI overhaul:**
+- Replace emoji nav icons with lucide-react SVG icons (Truck, Upload, Map, ClipboardList)
+- Use DaisyUI 5 component classes with `tw-` prefix for all new UI elements
+- Leverage DaisyUI Stat for KPI cards, Table for data lists, Badge for status tags
+- Keep existing CSS custom properties (`:root` vars in index.css) for backward compat
+- Use framer-motion for page transitions (AnimatePresence) and list animations
+- Maintain current DM Sans + IBM Plex Mono typography
+
+**Driver PWA refresh:**
+- All styling via Tailwind utility classes compiled by `tailwindcss-extra` CLI
+- No new JavaScript dependencies; all interactivity via vanilla JS
+- Extend sw.js to cache route API responses (clone response in fetch handler)
+- Add `prefers-contrast: more` CSS media query + localStorage toggle
+- Use Screen Wake Lock API for active delivery mode
+- Keep Outfit + JetBrains Mono fonts; increase base font sizes for outdoor readability
+
+**Geocoding cache normalization:**
+- Create single `core/geocoding/normalize.py` module with `normalize_address()` function
+- Apply `unicodedata.normalize('NFKC')` + lowercase + whitespace collapse
+- Use in both GoogleGeocoder._address_hash() and repository get/save_geocode_cache()
+- Run Alembic migration to re-normalize existing `address_norm` column values
+- Add `ST_DWithin(location, new_point, 50)` query for duplicate coordinate detection
+- Add `is_cache_hit` and `api_calls_count` fields to geocoding response model
+- Long-term: deprecate file cache, use DB cache as single source of truth
 
 ---
 
 ## Sources
 
-- [DaisyUI npm](https://www.npmjs.com/package/daisyui) — v5.5.19 current as of 2026-03-01 (verified)
-- [DaisyUI v5 release notes](https://daisyui.com/docs/v5/?lang=en) — Tailwind 4 compatibility, zero deps, 34 kB (verified)
-- [Tailwind CSS v4.0 blog](https://tailwindcss.com/blog/tailwindcss-v4) — v4 release, CSS-variable architecture (official)
-- [tailwindcss npm](https://www.npmjs.com/package/tailwindcss) — v4.2.1 current (verified)
-- [Leaflet 2.0 alpha blog](https://leafletjs.com/2025/05/18/leaflet-2.0.0-alpha.html) — alpha status confirmed (official)
-- [PyJWT PyPI](https://pypi.org/project/PyJWT/) — v2.11.0 released Jan 30, 2026 (verified)
-- [FastAPI discussion #11345](https://github.com/fastapi/fastapi/discussions/11345) — python-jose abandonment, PyJWT recommendation (official FastAPI team)
-- [pwdlib PyPI](https://pypi.org/project/pwdlib/) — v0.3.0 released Oct 2025, bcrypt+argon2 backends (verified)
-- [FastAPI discussion #11773](https://github.com/fastapi/fastapi/discussions/11773) — passlib abandonment, pwdlib recommendation (official FastAPI team)
-- [pytest-cov PyPI](https://pypi.org/project/pytest-cov/) — v7.0.0 released Sep 2025 (verified)
-- [hypothesis PyPI](https://pypi.org/project/hypothesis/) — v6.151.9 released Feb 2026 (verified)
-- [factory-boy PyPI](https://pypi.org/project/factory-boy/) — v3.3.3 released Feb 2025 (verified)
-- [respx PyPI](https://pypi.org/project/respx/) — v0.22.0 released Dec 2024, httpx>=0.25 required (verified)
-- [pytest-asyncio PyPI](https://pypi.org/project/pytest-asyncio/) — v1.3.0 released Nov 2025 (verified)
-- [Secweb libraries.io](https://libraries.io/pypi/Secweb) — v1.11.0 (MEDIUM confidence; release date not pinned)
-- [OWASP REST Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html) — security headers checklist
-- [FastAPI OWASP hardening guide](https://oneuptime.com/blog/post/2025-01-06-fastapi-owasp-security/view) — MEDIUM confidence (single source, 2025)
-- [FastAPI async tests docs](https://fastapi.tiangolo.com/advanced/async-tests/) — asyncio_mode=auto pattern (official)
+- [lucide-react on npm](https://www.npmjs.com/package/lucide-react) -- v0.575.0, 10.3k+ dependents (HIGH confidence)
+- [Lucide icon search](https://lucide.dev/icons/) -- verified logistics-relevant icons exist (HIGH confidence)
+- [Lucide bundle benchmark 2026](https://medium.com/codetodeploy/the-hidden-bundle-cost-of-react-icons-why-lucide-wins-in-2026-1ddb74c1a86c) -- tree-shaking comparison (MEDIUM confidence, single article)
+- [DaisyUI Components](https://daisyui.com/components/) -- verified Stat, Table, Badge, Skeleton, Steps availability (HIGH confidence)
+- [DaisyUI 5 release notes](https://daisyui.com/docs/v5/) -- confirmed all modifiers responsive, 34KB compressed (HIGH confidence)
+- [Motion for React](https://motion.dev/docs/react) -- confirmed framer-motion v12 = motion v12, React 19 compatible (HIGH confidence)
+- [PostGIS ST_DWithin docs](https://postgis.net/docs/ST_DWithin.html) -- spatial proximity queries (HIGH confidence)
+- [Python unicodedata docs](https://docs.python.org/3/library/unicodedata.html) -- NFKC normalization for Malayalam (HIGH confidence)
+- [MDN Screen Wake Lock API](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Wake_Lock_API) -- browser support table (HIGH confidence)
+- [MDN prefers-contrast](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-contrast) -- CSS media query for outdoor readability (HIGH confidence)
+- [PWA Best Practices 2026](https://wirefuture.com/post/progressive-web-apps-pwa-best-practices-for-2026) -- offline-first patterns (MEDIUM confidence)
 
 ---
 
-*Stack research for: Kerala LPG Delivery Route Optimizer — UI + Security + Testing milestone*
+*Stack research for: Kerala LPG Delivery Route Optimizer v1.1 Polish & Reliability*
 *Researched: 2026-03-01*
