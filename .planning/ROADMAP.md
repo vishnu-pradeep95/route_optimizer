@@ -62,12 +62,12 @@ Plans:
   3. Uploading a CSV where 3 of 10 rows fail geocoding still produces an optimized route for the 7 successful orders
   4. The system uses only Vatakara depot coordinates (11.52°N) throughout the pipeline — no Kozhikode coordinates appear in geocoded results, route origins, or test fixtures
   5. CSV rows with missing required fields or malformed data show a validation error per row before geocoding is attempted
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: Backend — structured geocoding failure model; `batch()` accumulates failures; audit depot coordinate propagation
-- [ ] 03-02: Backend — CSV row-level pre-validation before geocoding; partial-batch optimization support
-- [ ] 03-03: Frontend — import summary screen with counts; expandable failure list; toast warning for partial geocoding
+- [ ] 03-01-PLAN.md — Add ImportResult model and row-level validation to CsvImporter; audit depot coordinates
+- [ ] 03-02-PLAN.md — Enrich OptimizationSummary with failure data; collect geocoding errors; zero-success structured response
+- [ ] 03-03-PLAN.md — Import summary UI with counts, expandable failure table, three visual states (DaisyUI)
 
 ### Phase 4: Dashboard UI Migration
 **Goal**: Every dashboard page looks like a professional logistics SaaS product (Onfleet/Routific style) with consistent Tailwind/DaisyUI styling
