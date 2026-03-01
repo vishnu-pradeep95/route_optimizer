@@ -199,7 +199,8 @@
 .app-main {
   /* Place in column 2 (sidebar is position:fixed, out of grid flow) */
   grid-column: 2;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   height: 100vh;
 }
 

@@ -474,40 +474,42 @@ export function UploadRoutes() {
       )}
 
       {/* Results Section */}
-      {workflowState === "success" && uploadResult && (
+      {workflowState === "success" && (
         <div className="results-section">
-          {/* Import Summary — placed BETWEEN upload and route cards */}
-          <ImportSummary uploadResult={uploadResult} />
+          {/* Import Summary — only shown after a fresh upload with diagnostics */}
+          {uploadResult && <ImportSummary uploadResult={uploadResult} />}
 
-          {/* Only show routes header + cards if there are geocoded orders */}
-          {(uploadResult.geocoded ?? uploadResult.orders_assigned ?? 0) > 0 && (
+          {/* Route cards — shown when routes exist (fresh upload or loaded from API) */}
+          {routes.length > 0 && (
             <>
               {/* Summary Bar */}
               <div className="results-header">
                 <div className="results-summary">
                   <h2>Routes Generated</h2>
-                  <div className="summary-stats">
-                    <div className="summary-stat">
-                      <span className="stat-val">{uploadResult.orders_assigned}</span>
-                      <span className="stat-lbl">Orders Assigned</span>
-                    </div>
-                    <div className="summary-stat">
-                      <span className="stat-val">{uploadResult.vehicles_used}</span>
-                      <span className="stat-lbl">Vehicles</span>
-                    </div>
-                    {uploadResult.orders_unassigned > 0 && (
-                      <div className="summary-stat warning">
-                        <span className="stat-val">{uploadResult.orders_unassigned}</span>
-                        <span className="stat-lbl">Unassigned</span>
+                  {uploadResult && (
+                    <div className="summary-stats">
+                      <div className="summary-stat">
+                        <span className="stat-val">{uploadResult.orders_assigned}</span>
+                        <span className="stat-lbl">Orders Assigned</span>
                       </div>
-                    )}
-                    <div className="summary-stat">
-                      <span className="stat-val">
-                        {uploadResult.optimization_time_ms.toFixed(0)} ms
-                      </span>
-                      <span className="stat-lbl">Solve Time</span>
+                      <div className="summary-stat">
+                        <span className="stat-val">{uploadResult.vehicles_used}</span>
+                        <span className="stat-lbl">Vehicles</span>
+                      </div>
+                      {uploadResult.orders_unassigned > 0 && (
+                        <div className="summary-stat warning">
+                          <span className="stat-val">{uploadResult.orders_unassigned}</span>
+                          <span className="stat-lbl">Unassigned</span>
+                        </div>
+                      )}
+                      <div className="summary-stat">
+                        <span className="stat-val">
+                          {uploadResult.optimization_time_ms.toFixed(0)} ms
+                        </span>
+                        <span className="stat-lbl">Solve Time</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 <div className="results-actions">
@@ -638,8 +640,8 @@ export function UploadRoutes() {
             </>
           )}
 
-          {/* Zero-success: show Upload New File button when no routes */}
-          {(uploadResult.geocoded ?? uploadResult.orders_assigned ?? 0) === 0 && (
+          {/* Zero-success after fresh upload: show Upload New File button */}
+          {uploadResult && (uploadResult.geocoded ?? uploadResult.orders_assigned ?? 0) === 0 && (
             <div className="import-summary-actions">
               <button className="new-upload-btn" onClick={handleReset}>
                 Upload New File

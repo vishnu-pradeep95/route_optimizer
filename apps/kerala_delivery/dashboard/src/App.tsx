@@ -133,18 +133,6 @@ function App() {
         {activePage === "live-map" && <LiveMap />}
         {activePage === "run-history" && <RunHistory />}
         {activePage === "fleet" && <FleetManagement />}
-
-        {/* Tailwind + DaisyUI smoke test -- remove after Phase 1 verification */}
-        <div className="tw:p-4 tw:m-4 tw:bg-base-200 tw:rounded-lg tw:border tw:border-base-300" data-testid="tw-smoke-test">
-          <p className="tw:text-sm tw:text-base-content tw:mb-2">Tailwind + DaisyUI smoke test:</p>
-          <div className="tw:flex tw:gap-2">
-            <button className="tw:btn tw:btn-primary tw:btn-sm">Primary</button>
-            <button className="tw:btn tw:btn-secondary tw:btn-sm">Secondary</button>
-            <span className="tw:badge tw:badge-success">Success</span>
-            <span className="tw:badge tw:badge-error">Error</span>
-            <span className="tw:badge tw:badge-info">Info</span>
-          </div>
-        </div>
       </main>
     </div>
   );
