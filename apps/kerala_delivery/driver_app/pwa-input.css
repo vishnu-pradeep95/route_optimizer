@@ -1,0 +1,6 @@
+/* Tailwind input for driver PWA static CSS compilation.
+ * Compiled via: scripts/build-pwa-css.sh
+ * Uses same prefix(tw) as dashboard for consistent class names.
+ */
+@import "tailwindcss" prefix(tw);
+@plugin "daisyui";

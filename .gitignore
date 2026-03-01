@@ -39,6 +39,9 @@ infra/vroom-conf/access.log
 node_modules/
 apps/kerala_delivery/dashboard/dist/
 
+# Tailwind standalone CLI binary (~60MB, downloaded in setup)
+tools/tailwindcss-extra
+
 # Backups (large binary files, stored on host not in git)
 backups/
 *.sql.gz
