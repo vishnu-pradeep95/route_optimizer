@@ -1603,6 +1603,95 @@ class TestDeliveryWindowEnforcement:
 
 
 # =============================================================================
+# Security Headers & CORS Tests (Phase 2 — SEC-01, SEC-02, SEC-03, SEC-05)
+# =============================================================================
+
+
+class TestSecurityHeaders:
+    """Tests for security headers, CORS hardening, and API docs gating (Phase 2).
+
+    Verifies SEC-01 (security headers), SEC-02 (CORS), SEC-03 (docs gating),
+    and SEC-05 (deprecated library verification).
+    """
+
+    def test_security_headers_present(self, client):
+        """All responses include required security headers (SEC-01)."""
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        # Secweb headers
+        assert "content-security-policy" in resp.headers
+        assert "'self'" in resp.headers["content-security-policy"]
+        assert "x-frame-options" in resp.headers
+        assert resp.headers["x-frame-options"] == "DENY"
+        assert "x-content-type-options" in resp.headers
+        assert resp.headers["x-content-type-options"] == "nosniff"
+        assert "referrer-policy" in resp.headers
+        # Custom middleware header
+        assert "permissions-policy" in resp.headers
+        assert "geolocation=(self)" in resp.headers["permissions-policy"]
+        assert "camera=()" in resp.headers["permissions-policy"]
+
+    def test_csp_allows_map_tiles(self, client):
+        """CSP img-src includes OpenStreetMap tile servers and Leaflet assets."""
+        resp = client.get("/health")
+        csp = resp.headers.get("content-security-policy", "")
+        assert "*.tile.openstreetmap.org" in csp
+        assert "unpkg.com" in csp
+
+    def test_csp_allows_unsafe_inline_styles(self, client):
+        """CSP style-src includes 'unsafe-inline' for Leaflet inline styles."""
+        resp = client.get("/health")
+        csp = resp.headers.get("content-security-policy", "")
+        assert "'unsafe-inline'" in csp
+
+    def test_security_headers_on_error_responses(self, client):
+        """Security headers present even on 404 error responses."""
+        resp = client.get("/nonexistent-path")
+        assert "x-frame-options" in resp.headers
+        assert "x-content-type-options" in resp.headers
+
+    def test_cors_rejects_unlisted_origin(self, client):
+        """Requests from unlisted origins do not get CORS headers (SEC-02)."""
+        resp = client.get(
+            "/health",
+            headers={"Origin": "https://evil.example.com"},
+        )
+        assert "access-control-allow-origin" not in resp.headers
+
+    def test_cors_allows_listed_origin(self, client):
+        """Requests from listed dev origins get CORS headers."""
+        resp = client.get(
+            "/health",
+            headers={"Origin": "http://localhost:8000"},
+        )
+        assert resp.headers.get("access-control-allow-origin") == "http://localhost:8000"
+
+    def test_docs_gated_in_production(self):
+        """API docs return 404 when ENVIRONMENT=production (SEC-03)."""
+        with patch.dict(os.environ, {"ENVIRONMENT": "production", "RATE_LIMIT_ENABLED": "false"}):
+            # Must reimport to pick up the new environment
+            import importlib
+            import apps.kerala_delivery.api.main as main_mod
+            importlib.reload(main_mod)
+            prod_client = TestClient(main_mod.app)
+            try:
+                assert prod_client.get("/docs").status_code == 404
+                assert prod_client.get("/redoc").status_code == 404
+                assert prod_client.get("/openapi.json").status_code == 404
+            finally:
+                # Reload with default environment to restore for other tests
+                with patch.dict(os.environ, {"ENVIRONMENT": "development", "RATE_LIMIT_ENABLED": "false"}):
+                    importlib.reload(main_mod)
+
+    def test_deprecated_libraries_not_installed(self):
+        """Neither python-jose nor passlib is installed (SEC-05)."""
+        with pytest.raises(ImportError):
+            import jose  # noqa: F401
+        with pytest.raises(ImportError):
+            import passlib  # noqa: F401
+
+
+# =============================================================================
 # Rate Limiting Tests
 # =============================================================================
 
