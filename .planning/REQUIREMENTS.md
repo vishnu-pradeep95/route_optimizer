@@ -28,7 +28,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### UI/UX — Driver PWA
 
-- [ ] **PWA-01**: Pre-compiled Tailwind CSS via standalone CLI (no CDN, offline-capable)
+- [x] **PWA-01**: Pre-compiled Tailwind CSS via standalone CLI (no CDN, offline-capable)
 - [ ] **PWA-02**: Professional mobile layout — clean route list, map, delivery cards
 - [ ] **PWA-03**: Service worker cache updated for new CSS assets
 - [ ] **PWA-04**: Toast/alert system for delivery status feedback on mobile
@@ -51,12 +51,12 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Testing
 
-- [ ] **TEST-01**: Fix E2E test coordinates — use Vatakara (11.52°N) instead of Kochi (9.97°N)
+- [x] **TEST-01**: Fix E2E test coordinates — use Vatakara (11.52°N) instead of Kochi (9.97°N)
 - [ ] **TEST-02**: Add hypothesis property-based tests for CSV parsing edge cases
 - [ ] **TEST-03**: Add factory_boy factories for Order, Vehicle, Route test data
 - [ ] **TEST-04**: Add respx mocks for Google Geocoding, VROOM, OSRM external API calls
 - [ ] **TEST-05**: pytest-cov coverage gate — establish baseline and prevent regression
-- [ ] **TEST-06**: Async test configuration — set asyncio_mode=auto in pytest.ini
+- [x] **TEST-06**: Async test configuration — set asyncio_mode=auto in pytest.ini
 
 ### Documentation
 
@@ -114,7 +114,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DASH-06 | Phase 4 | Pending |
 | DASH-07 | Phase 4 | Pending |
 | DASH-08 | Phase 4 | Pending |
-| PWA-01 | Phase 1 | Pending |
+| PWA-01 | Phase 1 | Complete |
 | PWA-02 | Phase 5 | Pending |
 | PWA-03 | Phase 5 | Pending |
 | PWA-04 | Phase 5 | Pending |
@@ -128,12 +128,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | QUAL-02 | Phase 6 | Pending |
 | QUAL-03 | Phase 6 | Pending |
 | QUAL-04 | Phase 6 | Pending |
-| TEST-01 | Phase 1 | Pending |
+| TEST-01 | Phase 1 | Complete |
 | TEST-02 | Phase 6 | Pending |
 | TEST-03 | Phase 6 | Pending |
 | TEST-04 | Phase 6 | Pending |
 | TEST-05 | Phase 6 | Pending |
-| TEST-06 | Phase 1 | Pending |
+| TEST-06 | Phase 1 | Complete |
 | DOCS-01 | Phase 6 | Pending |
 | DOCS-02 | Phase 6 | Pending |
 | DOCS-03 | Phase 6 | Pending |
