@@ -50,6 +50,7 @@ from core.data_import.csv_importer import CsvImporter, ColumnMapping, ImportResu
 from core.data_import.cdcms_preprocessor import preprocess_cdcms, get_cdcms_column_mapping, CDCMS_COL_ORDER_NO, CDCMS_COL_ADDRESS
 from core.database.connection import engine, get_session
 from core.database import repository as repo
+from core.geocoding.cache import CachedGeocoder
 from core.geocoding.google_adapter import GoogleGeocoder
 from core.licensing.license_manager import validate_license, LicenseStatus, LicenseInfo, GRACE_PERIOD_DAYS
 from core.models.location import Location
@@ -508,9 +509,7 @@ async def verify_read_key(
 # =============================================================================
 # Geocoder singleton — reuse across requests to avoid repeated init
 # =============================================================================
-# Why singleton? GoogleGeocoder loads a file-based cache from disk on init.
-# Re-creating it per request wastes I/O reading the same cache file every time.
-# A module-level singleton loads the cache once and reuses it.
+# GoogleGeocoder is a pure API caller -- caching is handled by CachedGeocoder.
 _geocoder_instance: GoogleGeocoder | None = None
 
 
@@ -518,9 +517,7 @@ def _get_geocoder() -> GoogleGeocoder | None:
     """Get or create the shared GoogleGeocoder instance.
 
     Returns None if GOOGLE_MAPS_API_KEY is not set (geocoding disabled).
-    Thread-safe for the single-worker uvicorn setup we use.
-    Note: the instance is cached on first successful creation. If the API key
-    changes at runtime, restart the server to pick up the new key.
+    GoogleGeocoder is a pure API caller -- caching is handled by CachedGeocoder.
     """
     global _geocoder_instance
     if _geocoder_instance is not None:
@@ -844,33 +841,19 @@ async def upload_and_optimize(
             )
 
         # Step 2: Geocode orders that don't have coordinates
-        # First check the database geocode cache (free!), then fall back to Google API.
-        # Uses module-level singleton to avoid re-reading cache file per request.
+        # CachedGeocoder handles DB cache lookup + API fallback in one call.
         geocoder = _get_geocoder()
         geocoding_failures: list[ImportFailure] = []
 
+        # Use CachedGeocoder for unified cache-then-API flow
+        cached_geocoder = CachedGeocoder(upstream=geocoder, session=session) if geocoder else None
+
         for order in orders:
             if not order.is_geocoded:
-                # Try cache first — saves Google API calls ($5/1000 requests)
-                cached = await repo.get_cached_geocode(session, order.address_raw)
-                if cached:
-                    order.location = cached
-                    logger.info("Cache hit for address: %s", order.address_raw[:50])
-                elif geocoder:
-                    result = geocoder.geocode(order.address_raw)
-                    # Guard: check result.location is not None before accessing
-                    # its attributes. GeocodingResult can have success=True with
-                    # location=None in edge cases.
+                if cached_geocoder:
+                    result = await cached_geocoder.geocode(order.address_raw)
                     if result.success and result.location:
                         order.location = result.location
-                        # Cache for future use
-                        await repo.save_geocode_cache(
-                            session,
-                            order.address_raw,
-                            result.location,
-                            source="google",
-                            confidence=result.location.geocode_confidence or 0.5,
-                        )
                     else:
                         # Log the raw Google API response for debugging.
                         # Common causes: API key not enabled, billing not set up,
@@ -894,6 +877,19 @@ async def upload_and_optimize(
                             row_number=order_row_map.get(order.order_id, 0),
                             address_snippet=order.address_raw[:80],
                             reason=reason,
+                            stage="geocoding",
+                        ))
+                else:
+                    # No geocoder available -- still try cache for previously
+                    # geocoded addresses, then fail if no cache hit
+                    cached = await repo.get_cached_geocode(session, order.address_raw)
+                    if cached:
+                        order.location = cached
+                    else:
+                        geocoding_failures.append(ImportFailure(
+                            row_number=order_row_map.get(order.order_id, 0),
+                            address_snippet=order.address_raw[:80],
+                            reason="Geocoding service not configured (missing API key)",
                             stage="geocoding",
                         ))
 
