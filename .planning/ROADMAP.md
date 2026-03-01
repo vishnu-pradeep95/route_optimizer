@@ -29,12 +29,12 @@ This is a hardening and polish milestone on a working logistics system. The rout
   3. The Tailwind standalone CLI binary is present and can generate a static `tailwind.css` for the PWA from the command line
   4. All E2E tests that previously referenced Kochi coordinates (9.97°N) now use Vatakara (11.52°N) and the full test suite still passes
   5. `asyncio_mode=auto` is configured in pytest.ini and async tests run without warnings
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: Install Tailwind 4 + DaisyUI 5 in Vite pipeline with collision-safe prefix
-- [ ] 01-02: Define logistics SaaS design tokens and verify collision-free in DevTools
-- [ ] 01-03: Set up Tailwind standalone CLI for PWA; fix Vatakara coordinates in tests; configure asyncio_mode
+- [ ] 01-01-PLAN.md — Install Tailwind 4 + DaisyUI 5 in Vite pipeline with collision-safe prefix
+- [ ] 01-02-PLAN.md — Define logistics SaaS design tokens and verify collision-free in DevTools
+- [ ] 01-03-PLAN.md — Set up Tailwind standalone CLI for PWA; fix Vatakara coordinates in tests; configure asyncio_mode
 
 ### Phase 2: Security Hardening
 **Goal**: All API endpoints emit correct security headers, CORS is locked to production origins, and deprecated auth libraries are replaced
