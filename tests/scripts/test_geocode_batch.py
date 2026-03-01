@@ -40,8 +40,8 @@ def address_csv(tmp_path: Path) -> str:
     """
     csv_content = (
         "address,customer_id\n"
-        "Edappally Junction Kochi Kerala,CUST-001\n"
-        "Near Temple Marine Drive Kochi,CUST-002\n"
+        "Vatakara Bus Stand Vatakara Kerala,CUST-001\n"
+        "Near Temple Chorode Vatakara,CUST-002\n"
         "Some Building Somewhere,CUST-003\n"
     )
     csv_file = tmp_path / "addresses.csv"
@@ -54,8 +54,8 @@ def custom_column_csv(tmp_path: Path) -> str:
     """CSV with a non-default address column name."""
     csv_content = (
         "raw_address,name\n"
-        "MG Road Kochi,Customer A\n"
-        "Palarivattom Kochi,Customer B\n"
+        "Memunda Vatakara,Customer A\n"
+        "Vatakara Railway Station Vatakara,Customer B\n"
     )
     csv_file = tmp_path / "custom.csv"
     csv_file.write_text(csv_content)
@@ -84,7 +84,7 @@ class TestReadAddressesFromCsv:
             custom_column_csv, address_column="raw_address"
         )
         assert len(addresses) == 2
-        assert "MG Road Kochi" in addresses
+        assert "Memunda Vatakara" in addresses
 
     def test_raises_on_missing_column(self, address_csv: str):
         """Should raise ValueError when the specified column doesn't exist.
@@ -106,9 +106,9 @@ class TestReadAddressesFromCsv:
 
         csv_content = (
             "address\n"
-            "Edappally Junction Kochi\n"
-            "Edappally Junction Kochi\n"
-            "Marine Drive Kochi\n"
+            "Vatakara Bus Stand Vatakara\n"
+            "Vatakara Bus Stand Vatakara\n"
+            "Chorode Vatakara\n"
         )
         csv_file = tmp_path / "dupes.csv"
         csv_file.write_text(csv_content)
@@ -122,7 +122,7 @@ class TestReadAddressesFromCsv:
 
         csv_content = (
             "address\n"
-            "Edappally Junction Kochi\n"
+            "Vatakara Bus Stand Vatakara\n"
             "  \n"
             "\n"
         )
@@ -153,8 +153,8 @@ class TestReadAddressesFromDb:
         mock_session = AsyncMock()
         mock_result = MagicMock()
         mock_result.all.return_value = [
-            ("Edappally Junction Kochi",),
-            ("Marine Drive Kochi",),
+            ("Vatakara Bus Stand Vatakara",),
+            ("Chorode Vatakara",),
         ]
         mock_session.execute = AsyncMock(return_value=mock_result)
 
@@ -165,7 +165,7 @@ class TestReadAddressesFromDb:
             addresses = await read_addresses_from_db()
 
         assert len(addresses) == 2
-        assert "Edappally Junction Kochi" in addresses
+        assert "Vatakara Bus Stand Vatakara" in addresses
 
     @pytest.mark.asyncio
     async def test_returns_empty_when_all_geocoded(self):
@@ -230,7 +230,7 @@ class TestGeocodeBatch:
         """
         from scripts.geocode_batch import geocode_batch
 
-        cached_location = Location(latitude=9.9816, longitude=76.2996)
+        cached_location = Location(latitude=11.5950, longitude=75.5700)
         mock_session = AsyncMock()
 
         async def mock_get_session():
@@ -256,9 +256,9 @@ class TestGeocodeBatch:
         from scripts.geocode_batch import geocode_batch
 
         mock_result = GeocodingResult(
-            location=Location(latitude=9.9674, longitude=76.2855),
+            location=Location(latitude=11.5800, longitude=75.5850),
             confidence=0.9,
-            formatted_address="MG Road, Kochi",
+            formatted_address="Memunda, Vatakara",
         )
         mock_session = AsyncMock()
 
@@ -275,7 +275,7 @@ class TestGeocodeBatch:
             mock_geocoder = MockGeocoder.return_value
             mock_geocoder.geocode.return_value = mock_result
 
-            stats = await geocode_batch(["MG Road Kochi"])
+            stats = await geocode_batch(["Memunda Vatakara"])
 
         assert stats["api_calls"] == 1
         assert stats["api_success"] == 1
@@ -336,7 +336,7 @@ class TestGeocodeBatch:
         from scripts.geocode_batch import geocode_batch
 
         mock_result = GeocodingResult(
-            location=Location(latitude=9.9312, longitude=76.2673),
+            location=Location(latitude=11.6350, longitude=75.5900),
             confidence=0.85,
         )
         mock_session = AsyncMock()
@@ -346,7 +346,7 @@ class TestGeocodeBatch:
 
         # First address: cache hit; second: cache miss
         cache_responses = [
-            Location(latitude=9.9816, longitude=76.2996),  # hit
+            Location(latitude=11.5950, longitude=75.5700),  # hit
             None,  # miss
         ]
 
@@ -377,7 +377,7 @@ class TestGeocodeBatch:
         from scripts.geocode_batch import geocode_batch
 
         mock_result = GeocodingResult(
-            location=Location(latitude=9.9312, longitude=76.2673),
+            location=Location(latitude=11.6350, longitude=75.5900),
             confidence=0.85,
         )
         mock_session = AsyncMock()

@@ -31,8 +31,8 @@ from apps.kerala_delivery.api.qr_helpers import (
 def two_stops():
     """Minimal route: origin + destination (no waypoints)."""
     return [
-        {"latitude": 9.97, "longitude": 76.28},
-        {"latitude": 9.98, "longitude": 76.29},
+        {"latitude": 11.62, "longitude": 75.58},
+        {"latitude": 11.63, "longitude": 75.59},
     ]
 
 
@@ -40,9 +40,9 @@ def two_stops():
 def three_stops():
     """Route with origin + 1 waypoint + destination."""
     return [
-        {"latitude": 9.97, "longitude": 76.28},
-        {"latitude": 9.975, "longitude": 76.285},
-        {"latitude": 9.98, "longitude": 76.29},
+        {"latitude": 11.62, "longitude": 75.58},
+        {"latitude": 11.625, "longitude": 75.585},
+        {"latitude": 11.63, "longitude": 75.59},
     ]
 
 
@@ -52,13 +52,13 @@ def eleven_stops():
 
     Google Maps supports 9 waypoints + origin + destination = 11 stops.
     """
-    return [{"latitude": 9.97 + i * 0.001, "longitude": 76.28} for i in range(11)]
+    return [{"latitude": 11.62 + i * 0.001, "longitude": 75.58} for i in range(11)]
 
 
 @pytest.fixture
 def fifteen_stops():
     """15 stops — requires route splitting into multiple segments."""
-    return [{"latitude": 9.97 + i * 0.001, "longitude": 76.28} for i in range(15)]
+    return [{"latitude": 11.62 + i * 0.001, "longitude": 75.58} for i in range(15)]
 
 
 # =============================================================================
@@ -75,30 +75,30 @@ class TestBuildGoogleMapsUrl:
 
     def test_single_stop_same_origin_destination(self):
         """Single stop → origin and destination are the same point."""
-        stops = [{"latitude": 9.97, "longitude": 76.28}]
+        stops = [{"latitude": 11.62, "longitude": 75.58}]
         url = build_google_maps_url(stops)
-        assert "origin=9.97,76.28" in url
-        assert "destination=9.97,76.28" in url
+        assert "origin=11.62,75.58" in url
+        assert "destination=11.62,75.58" in url
         assert "waypoints" not in url
 
     def test_two_stops_no_waypoints(self, two_stops):
         """Two stops → origin + destination, no waypoints."""
         url = build_google_maps_url(two_stops)
-        assert "origin=9.97,76.28" in url
-        assert "destination=9.98,76.29" in url
+        assert "origin=11.62,75.58" in url
+        assert "destination=11.63,75.59" in url
         assert "waypoints" not in url
         assert "travelmode=driving" in url
 
     def test_three_stops_has_waypoint(self, three_stops):
         """Three stops → origin + 1 waypoint + destination."""
         url = build_google_maps_url(three_stops)
-        assert "origin=9.97,76.28" in url
-        assert "destination=9.98,76.29" in url
-        assert "waypoints=9.975,76.285" in url
+        assert "origin=11.62,75.58" in url
+        assert "destination=11.63,75.59" in url
+        assert "waypoints=11.625,75.585" in url
 
     def test_many_waypoints_pipe_separated(self):
         """Multiple intermediate stops are pipe-separated in waypoints param."""
-        stops = [{"latitude": 9.97 + i * 0.001, "longitude": 76.28} for i in range(5)]
+        stops = [{"latitude": 11.62 + i * 0.001, "longitude": 75.58} for i in range(5)]
         url = build_google_maps_url(stops)
         # 3 intermediate stops should be pipe-separated
         assert url.count("|") == 2  # 3 waypoints = 2 pipe separators
@@ -197,7 +197,7 @@ class TestSplitRouteIntoSegments:
 
     def test_short_route_single_segment(self):
         """Route with 8 stops → 1 segment."""
-        stops = [{"latitude": 9.97 + i * 0.001, "longitude": 76.28} for i in range(8)]
+        stops = [{"latitude": 11.62 + i * 0.001, "longitude": 75.58} for i in range(8)]
         segments = split_route_into_segments(stops)
         assert len(segments) == 1
         assert segments[0]["segment"] == 1
@@ -211,7 +211,7 @@ class TestSplitRouteIntoSegments:
 
     def test_12_stops_two_segments(self):
         """12 stops → 2 segments (exceeds 11-stop limit)."""
-        stops = [{"latitude": 9.97 + i * 0.001, "longitude": 76.28} for i in range(12)]
+        stops = [{"latitude": 11.62 + i * 0.001, "longitude": 75.58} for i in range(12)]
         segments = split_route_into_segments(stops)
         assert len(segments) == 2
 
@@ -250,7 +250,7 @@ class TestSplitRouteIntoSegments:
 
     def test_large_route_30_stops(self):
         """30 stops should produce 3+ segments covering all stops."""
-        stops = [{"latitude": 9.97 + i * 0.001, "longitude": 76.28} for i in range(30)]
+        stops = [{"latitude": 11.62 + i * 0.001, "longitude": 75.58} for i in range(30)]
         segments = split_route_into_segments(stops)
         assert len(segments) >= 3
         # All stops should be covered
@@ -258,7 +258,7 @@ class TestSplitRouteIntoSegments:
 
     def test_single_stop_single_segment(self):
         """Edge case: single stop → 1 segment."""
-        stops = [{"latitude": 9.97, "longitude": 76.28}]
+        stops = [{"latitude": 11.62, "longitude": 75.58}]
         segments = split_route_into_segments(stops)
         assert len(segments) == 1
         assert segments[0]["stop_count"] == 1

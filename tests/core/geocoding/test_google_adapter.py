@@ -44,10 +44,10 @@ def google_rooftop_response():
         "results": [
             {
                 "geometry": {
-                    "location": {"lat": 9.9816, "lng": 76.2996},
+                    "location": {"lat": 11.5950, "lng": 75.5700},
                     "location_type": "ROOFTOP",
                 },
-                "formatted_address": "Edappally Junction, Kochi, Kerala 682024, India",
+                "formatted_address": "Vatakara Bus Stand, Vatakara, Kerala 682024, India",
                 "place_id": "ChIJtest123",
             }
         ],
@@ -62,10 +62,10 @@ def google_approximate_response():
         "results": [
             {
                 "geometry": {
-                    "location": {"lat": 9.9312, "lng": 76.2673},
+                    "location": {"lat": 11.6350, "lng": 75.5900},
                     "location_type": "APPROXIMATE",
                 },
-                "formatted_address": "Marine Drive, Kochi, Kerala, India",
+                "formatted_address": "Chorode, Vatakara, Kerala, India",
                 "place_id": "ChIJtest456",
             }
         ],
@@ -94,7 +94,7 @@ class TestGoogleGeocoder:
                 json=lambda: google_rooftop_response,
                 raise_for_status=lambda: None,
             )
-            result = geocoder.geocode("Edappally Junction, Kochi")
+            result = geocoder.geocode("Vatakara Bus Stand, Vatakara")
 
         assert isinstance(result, GeocodingResult)
         assert result.success is True
@@ -114,12 +114,12 @@ class TestGoogleGeocoder:
                 json=lambda: google_rooftop_response,
                 raise_for_status=lambda: None,
             )
-            result = geocoder.geocode("Edappally Junction, Kochi")
+            result = geocoder.geocode("Vatakara Bus Stand, Vatakara")
 
         assert result.confidence == 0.95
         assert result.location is not None
-        assert result.location.latitude == pytest.approx(9.9816)
-        assert result.location.longitude == pytest.approx(76.2996)
+        assert result.location.latitude == pytest.approx(11.5950)
+        assert result.location.longitude == pytest.approx(75.5700)
 
     def test_approximate_accuracy_gives_low_confidence(
         self, geocoder, google_approximate_response
@@ -127,7 +127,7 @@ class TestGoogleGeocoder:
         """APPROXIMATE location_type maps to 0.40 — lowest confidence.
 
         APPROXIMATE means Google only resolved to a general area.
-        Many Kerala addresses (e.g., "near temple, Kochi") get this.
+        Many Kerala addresses (e.g., "near temple, Vatakara") get this.
         """
         with patch("core.geocoding.google_adapter.httpx.get") as mock_get:
             mock_get.return_value = MagicMock(
@@ -135,7 +135,7 @@ class TestGoogleGeocoder:
                 json=lambda: google_approximate_response,
                 raise_for_status=lambda: None,
             )
-            result = geocoder.geocode("Marine Drive, Kochi")
+            result = geocoder.geocode("Chorode, Vatakara")
 
         assert result.confidence == 0.40
 
@@ -170,9 +170,9 @@ class TestGoogleGeocoder:
                 raise_for_status=lambda: None,
             )
             # First call hits API
-            result1 = geocoder.geocode("Edappally Junction, Kochi")
+            result1 = geocoder.geocode("Vatakara Bus Stand, Vatakara")
             # Second call should use cache
-            result2 = geocoder.geocode("Edappally Junction, Kochi")
+            result2 = geocoder.geocode("Vatakara Bus Stand, Vatakara")
 
         # API was called only once
         assert mock_get.call_count == 1
@@ -190,7 +190,7 @@ class TestGoogleGeocoder:
 
         with patch("core.geocoding.google_adapter.httpx.get") as mock_get:
             mock_get.side_effect = httpx.ConnectError("No network")
-            result = geocoder.geocode("Some Address, Kochi")
+            result = geocoder.geocode("Some Address, Vatakara")
 
         assert result.success is False
         assert result.location is None
@@ -218,9 +218,9 @@ class TestGoogleGeocoder:
                 json=lambda: google_rooftop_response,
                 raise_for_status=lambda: None,
             )
-            result = geocoder.geocode("Edappally")
+            result = geocoder.geocode("Vatakara Bus Stand")
 
-        assert "Edappally Junction" in result.formatted_address
+        assert "Vatakara Bus Stand" in result.formatted_address
 
     def test_cache_persists_to_disk(self, geocoder, google_rooftop_response, tmp_path):
         """Cache file should be written to disk after a successful geocode.

@@ -27,7 +27,7 @@ from core.optimizer.vroom_adapter import VroomAdapter
 # Fixtures
 # =============================================================================
 
-KOCHI_DEPOT = Location(latitude=9.9716, longitude=76.2846, address_text="Depot")
+KOCHI_DEPOT = Location(latitude=11.6244, longitude=75.5796, address_text="Depot")
 
 
 @pytest.fixture
@@ -41,11 +41,11 @@ def optimizer():
 
 @pytest.fixture
 def geocoded_orders():
-    """3 geocoded LPG delivery orders in Kochi."""
+    """3 geocoded LPG delivery orders in Vatakara."""
     locations = [
-        Location(latitude=9.9816, longitude=76.2996, address_text="Edappally"),
-        Location(latitude=9.9567, longitude=76.2998, address_text="Palarivattom"),
-        Location(latitude=9.9312, longitude=76.2673, address_text="Marine Drive"),
+        Location(latitude=11.5950, longitude=75.5700, address_text="Vatakara Bus Stand"),
+        Location(latitude=11.6100, longitude=75.5650, address_text="Vatakara Railway Station"),
+        Location(latitude=11.6350, longitude=75.5900, address_text="Chorode"),
     ]
     return [
         Order(
@@ -97,11 +97,11 @@ def vroom_success_response():
                 "distance": 5000,
                 "duration": 600,
                 "steps": [
-                    {"type": "start", "location": [76.2846, 9.9716], "arrival": 0, "distance": 0, "duration": 0},
+                    {"type": "start", "location": [75.5796, 11.6244], "arrival": 0, "distance": 0, "duration": 0},
                     {
                         "type": "job",
                         "id": 0,
-                        "location": [76.2996, 9.9816],
+                        "location": [75.5700, 11.5950],
                         "arrival": 200,
                         "duration": 200,       # cumulative: 200s from start
                         "distance": 2000,      # cumulative: 2000m from start
@@ -110,13 +110,13 @@ def vroom_success_response():
                     {
                         "type": "job",
                         "id": 1,
-                        "location": [76.2998, 9.9567],
+                        "location": [75.5650, 11.6100],
                         "arrival": 400,
                         "duration": 400,       # cumulative: 400s from start
                         "distance": 4000,      # cumulative: 4000m from start
                         "service": 300,
                     },
-                    {"type": "end", "location": [76.2846, 9.9716], "arrival": 600, "distance": 5000, "duration": 600},
+                    {"type": "end", "location": [75.5796, 11.6244], "arrival": 600, "distance": 5000, "duration": 600},
                 ],
             },
             {
@@ -124,17 +124,17 @@ def vroom_success_response():
                 "distance": 3000,
                 "duration": 300,
                 "steps": [
-                    {"type": "start", "location": [76.2846, 9.9716], "arrival": 0, "distance": 0, "duration": 0},
+                    {"type": "start", "location": [75.5796, 11.6244], "arrival": 0, "distance": 0, "duration": 0},
                     {
                         "type": "job",
                         "id": 2,
-                        "location": [76.2673, 9.9312],
+                        "location": [75.5900, 11.6350],
                         "arrival": 150,
                         "duration": 150,       # cumulative: 150s from start
                         "distance": 1500,      # cumulative: 1500m from start
                         "service": 300,
                     },
-                    {"type": "end", "location": [76.2846, 9.9716], "arrival": 300, "distance": 3000, "duration": 300},
+                    {"type": "end", "location": [75.5796, 11.6244], "arrival": 300, "distance": 3000, "duration": 300},
                 ],
             },
         ],
@@ -156,17 +156,17 @@ def vroom_partial_response():
                 "distance": 2500,
                 "duration": 200,
                 "steps": [
-                    {"type": "start", "location": [76.2846, 9.9716], "arrival": 0, "distance": 0, "duration": 0},
+                    {"type": "start", "location": [75.5796, 11.6244], "arrival": 0, "distance": 0, "duration": 0},
                     {
                         "type": "job",
                         "id": 0,
-                        "location": [76.2996, 9.9816],
+                        "location": [75.5700, 11.5950],
                         "arrival": 200,
                         "duration": 200,       # cumulative
                         "distance": 1200,      # cumulative
                         "service": 300,
                     },
-                    {"type": "end", "location": [76.2846, 9.9716], "arrival": 400, "distance": 2500, "duration": 400},
+                    {"type": "end", "location": [75.5796, 11.6244], "arrival": 400, "distance": 2500, "duration": 400},
                 ],
             },
         ],
@@ -312,10 +312,10 @@ class TestVroomAdapter:
         call_kwargs = mock_post.call_args
         request_body = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
 
-        # First job: Edappally (lat=9.9816, lon=76.2996)
-        # VROOM expects [lon, lat] = [76.2996, 9.9816]
+        # First job: Vatakara Bus Stand (lat=11.595, lon=75.57)
+        # VROOM expects [lon, lat] = [75.57, 11.595]
         first_job = request_body["jobs"][0]
-        assert first_job["location"] == [76.2996, 9.9816]
+        assert first_job["location"] == [75.57, 11.595]
 
     def test_request_includes_geometry_option(
         self, optimizer, geocoded_orders, fleet, vroom_success_response
@@ -397,7 +397,7 @@ class TestVroomAdapter:
         orders = [
             Order(
                 order_id="PRI-001",
-                location=Location(latitude=9.98, longitude=76.30),
+                location=Location(latitude=11.63, longitude=75.57),
                 address_raw="Priority 1",
                 customer_ref="CUST-PRI1",
                 weight_kg=14.2,
@@ -406,7 +406,7 @@ class TestVroomAdapter:
             ),
             Order(
                 order_id="PRI-002",
-                location=Location(latitude=9.96, longitude=76.28),
+                location=Location(latitude=11.61, longitude=75.58),
                 address_raw="Priority 3",
                 customer_ref="CUST-PRI2",
                 weight_kg=14.2,
@@ -425,10 +425,10 @@ class TestVroomAdapter:
                     "distance": 4000,
                     "duration": 400,
                     "steps": [
-                        {"type": "start", "location": [76.2846, 9.9716], "arrival": 0, "distance": 0, "duration": 0},
-                        {"type": "job", "id": 0, "location": [76.30, 9.98], "arrival": 150, "duration": 150, "distance": 1500, "service": 300},
-                        {"type": "job", "id": 1, "location": [76.28, 9.96], "arrival": 300, "duration": 300, "distance": 3000, "service": 300},
-                        {"type": "end", "location": [76.2846, 9.9716], "arrival": 400, "distance": 4000, "duration": 400},
+                        {"type": "start", "location": [75.5796, 11.6244], "arrival": 0, "distance": 0, "duration": 0},
+                        {"type": "job", "id": 0, "location": [75.57, 11.63], "arrival": 150, "duration": 150, "distance": 1500, "service": 300},
+                        {"type": "job", "id": 1, "location": [75.58, 11.61], "arrival": 300, "duration": 300, "distance": 3000, "service": 300},
+                        {"type": "end", "location": [75.5796, 11.6244], "arrival": 400, "distance": 4000, "duration": 400},
                     ],
                 },
             ],

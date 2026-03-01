@@ -40,15 +40,15 @@ from core.optimizer.vroom_adapter import VroomAdapter
 # Fixtures
 # =============================================================================
 
-KOCHI_DEPOT = Location(latitude=9.9716, longitude=76.2846, address_text="Depot")
+KOCHI_DEPOT = Location(latitude=11.6244, longitude=75.5796, address_text="Depot")
 
-# Realistic delivery locations within 5km of Kochi depot
+# Realistic delivery locations within 5km of Vatakara depot
 DELIVERY_LOCATIONS = [
-    Location(latitude=9.9816, longitude=76.2996, address_text="Edappally Junction"),
-    Location(latitude=9.9567, longitude=76.2998, address_text="Palarivattom"),
-    Location(latitude=9.9312, longitude=76.2673, address_text="Marine Drive"),
-    Location(latitude=9.9850, longitude=76.2850, address_text="Kaloor"),
-    Location(latitude=9.9400, longitude=76.2600, address_text="Fort Kochi"),
+    Location(latitude=11.5950, longitude=75.5700, address_text="Vatakara Bus Stand"),
+    Location(latitude=11.6100, longitude=75.5650, address_text="Vatakara Railway Station"),
+    Location(latitude=11.6350, longitude=75.5900, address_text="Chorode"),
+    Location(latitude=11.6050, longitude=75.5850, address_text="Kaloor"),
+    Location(latitude=11.5700, longitude=75.5600, address_text="Azhiyur"),
 ]
 
 
@@ -106,15 +106,15 @@ def vroom_5_order_response():
                 "distance": 6000,
                 "duration": 800,
                 "steps": [
-                    {"type": "start", "location": [76.2846, 9.9716],
+                    {"type": "start", "location": [75.5796, 11.6244],
                      "arrival": 0, "distance": 0, "duration": 0},
-                    {"type": "job", "id": 0, "location": [76.2996, 9.9816],
+                    {"type": "job", "id": 0, "location": [75.5700, 11.5950],
                      "arrival": 150, "distance": 1500, "duration": 150, "service": 300},
-                    {"type": "job", "id": 1, "location": [76.2998, 9.9567],
+                    {"type": "job", "id": 1, "location": [75.5650, 11.6100],
                      "arrival": 350, "distance": 3500, "duration": 350, "service": 300},
-                    {"type": "job", "id": 3, "location": [76.2850, 9.9850],
+                    {"type": "job", "id": 3, "location": [75.5850, 11.6050],
                      "arrival": 550, "distance": 5000, "duration": 550, "service": 300},
-                    {"type": "end", "location": [76.2846, 9.9716],
+                    {"type": "end", "location": [75.5796, 11.6244],
                      "arrival": 800, "distance": 6000, "duration": 800},
                 ],
             },
@@ -123,13 +123,13 @@ def vroom_5_order_response():
                 "distance": 4000,
                 "duration": 500,
                 "steps": [
-                    {"type": "start", "location": [76.2846, 9.9716],
+                    {"type": "start", "location": [75.5796, 11.6244],
                      "arrival": 0, "distance": 0, "duration": 0},
-                    {"type": "job", "id": 2, "location": [76.2673, 9.9312],
+                    {"type": "job", "id": 2, "location": [75.5900, 11.6350],
                      "arrival": 200, "distance": 2000, "duration": 200, "service": 300},
-                    {"type": "job", "id": 4, "location": [76.2600, 9.9400],
+                    {"type": "job", "id": 4, "location": [75.5600, 11.5700],
                      "arrival": 400, "distance": 3500, "duration": 400, "service": 300},
-                    {"type": "end", "location": [76.2846, 9.9716],
+                    {"type": "end", "location": [75.5796, 11.6244],
                      "arrival": 500, "distance": 4000, "duration": 500},
                 ],
             },
@@ -267,7 +267,7 @@ class TestRouteToQrPipeline:
     def test_large_route_splits_into_segments(self):
         """Route with >11 stops should split into multiple QR segments."""
         stops_data = [
-            {"latitude": 9.97 + i * 0.001, "longitude": 76.28}
+            {"latitude": 11.62 + i * 0.001, "longitude": 75.58}
             for i in range(20)
         ]
         segments = split_route_into_segments(stops_data)

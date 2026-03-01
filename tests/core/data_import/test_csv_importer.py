@@ -36,8 +36,8 @@ class TestCsvImporter:
         """
         csv = self._create_csv(
             "order_id,address,customer_id,cylinder_type,quantity,priority,notes\n"
-            'ORD-001,"Kalamassery, Kochi",CUST-001,domestic,2,2,Ring bell\n'
-            'ORD-002,"Marine Drive, Kochi",CUST-002,domestic,1,1,Urgent\n'
+            'ORD-001,"Payyoli, Vatakara",CUST-001,domestic,2,2,Ring bell\n'
+            'ORD-002,"Chorode, Vatakara",CUST-002,domestic,1,1,Urgent\n'
         )
         try:
             # Pass explicit cylinder weights so the test verifies lookup behavior
@@ -55,14 +55,14 @@ class TestCsvImporter:
         """CSV with lat/lon columns produces geocoded orders."""
         csv = self._create_csv(
             "order_id,address,customer_id,weight_kg,latitude,longitude\n"
-            "ORD-001,Kochi,CUST-001,14.2,9.9716,76.2846\n"
+            "ORD-001,Vatakara,CUST-001,14.2,11.6244,75.5796\n"
         )
         try:
             importer = CsvImporter()
             orders = importer.import_orders(csv)
             assert len(orders) == 1
             assert orders[0].is_geocoded
-            assert orders[0].location.latitude == 9.9716
+            assert orders[0].location.latitude == 11.6244
         finally:
             os.unlink(csv)
 
@@ -90,7 +90,7 @@ class TestCsvImporter:
         """
         csv = self._create_csv(
             "order_id,address,customer_id,cylinder_type,quantity\n"
-            'ORD-001,"Hotel XYZ, Kochi",CUST-001,commercial,1\n'
+            'ORD-001,"Hotel XYZ, Vatakara",CUST-001,commercial,1\n'
         )
         try:
             # Kerala-specific weights, normally from apps/kerala_delivery/config.py
@@ -105,7 +105,7 @@ class TestCsvImporter:
         """Supports remapped column names for different CDCMS exports."""
         csv = self._create_csv(
             "booking_ref,delivery_address,consumer_no,weight\n"
-            'BK-001,"MG Road, Kochi",CON-001,14.2\n'
+            'BK-001,"Memunda, Vatakara",CON-001,14.2\n'
         )
         try:
             mapping = ColumnMapping(
@@ -132,7 +132,7 @@ class TestCsvImporter:
         """When no cylinder_type or weight_kg column, uses default weight."""
         csv = self._create_csv(
             "order_id,address,customer_id\n"
-            'ORD-001,"Kochi Address",CUST-001\n'
+            'ORD-001,"Vatakara Address",CUST-001\n'
         )
         try:
             importer = CsvImporter(default_cylinder_weight_kg=14.2)
@@ -151,7 +151,7 @@ class TestCsvImporter:
         csv = self._create_csv(
             "order_id,address,customer_id,weight_kg,latitude,longitude\n"
             # Point in Kerala — within India bounds
-            "ORD-001,Kochi,CUST-001,14.2,9.9716,76.2846\n"
+            "ORD-001,Vatakara,CUST-001,14.2,11.6244,75.5796\n"
             # Point in Antarctica — outside India bounds
             "ORD-002,South Pole,CUST-002,14.2,-85.0,0.0\n"
         )
@@ -161,7 +161,7 @@ class TestCsvImporter:
             assert len(orders) == 2
             # First order within India → geocoded
             assert orders[0].is_geocoded
-            assert orders[0].location.latitude == 9.9716
+            assert orders[0].location.latitude == 11.6244
             # Second order outside India → NOT geocoded (needs geocoding)
             assert not orders[1].is_geocoded
         finally:

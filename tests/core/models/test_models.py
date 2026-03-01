@@ -14,14 +14,14 @@ class TestLocation:
 
     def test_valid_kerala_location(self):
         """Kerala coordinates within valid range are accepted."""
-        loc = Location(latitude=9.9716, longitude=76.2846)
-        assert loc.latitude == 9.9716
-        assert loc.longitude == 76.2846
+        loc = Location(latitude=11.6244, longitude=75.5796)
+        assert loc.latitude == 11.6244
+        assert loc.longitude == 75.5796
 
     def test_lon_lat_tuple_returns_geoformat(self):
         """to_lon_lat_tuple returns (lon, lat) for OSRM/GeoJSON compatibility."""
-        loc = Location(latitude=9.9716, longitude=76.2846)
-        assert loc.to_lon_lat_tuple() == (76.2846, 9.9716)
+        loc = Location(latitude=11.6244, longitude=75.5796)
+        assert loc.to_lon_lat_tuple() == (75.5796, 11.6244)
 
     def test_invalid_latitude_rejected(self):
         """Latitude outside -90..90 is rejected by Pydantic validation."""
@@ -48,7 +48,7 @@ class TestOrder:
         """Standard domestic LPG cylinder order."""
         order = Order(
             order_id="ORD-001",
-            address_raw="Kalamassery, Kochi",
+            address_raw="Payyoli, Vatakara",
             customer_ref="CUST-001",
             weight_kg=14.2,
         )
@@ -60,10 +60,10 @@ class TestOrder:
         """Order with GPS coordinates reports as geocoded."""
         order = Order(
             order_id="ORD-002",
-            address_raw="Marine Drive, Kochi",
+            address_raw="Chorode, Vatakara",
             customer_ref="CUST-002",
             weight_kg=14.2,
-            location=Location(latitude=9.9312, longitude=76.2673),
+            location=Location(latitude=11.6350, longitude=75.5900),
         )
         assert order.is_geocoded
 
@@ -133,7 +133,7 @@ class TestRoute:
             stops=[
                 RouteStop(
                     order_id=f"ORD-{i}",
-                    location=Location(latitude=9.97, longitude=76.28),
+                    location=Location(latitude=11.62, longitude=75.58),
                     sequence=i,
                 )
                 for i in range(1, 4)
@@ -152,7 +152,7 @@ class TestRoute:
                     stops=[
                         RouteStop(
                             order_id="ORD-1",
-                            location=Location(latitude=9.97, longitude=76.28),
+                            location=Location(latitude=11.62, longitude=75.58),
                             sequence=1,
                         ),
                     ],
@@ -163,12 +163,12 @@ class TestRoute:
                     stops=[
                         RouteStop(
                             order_id="ORD-2",
-                            location=Location(latitude=9.95, longitude=76.27),
+                            location=Location(latitude=11.61, longitude=75.57),
                             sequence=1,
                         ),
                         RouteStop(
                             order_id="ORD-3",
-                            location=Location(latitude=9.93, longitude=76.26),
+                            location=Location(latitude=11.60, longitude=75.56),
                             sequence=2,
                         ),
                     ],
@@ -192,7 +192,7 @@ class TestTimezoneConsistency:
         """Order.created_at should default to a timezone-aware UTC datetime."""
         order = Order(
             order_id="TZ-001",
-            address_raw="Test Address, Kochi",
+            address_raw="Test Address, Vatakara",
             customer_ref="CUST-001",
             weight_kg=14.2,
         )

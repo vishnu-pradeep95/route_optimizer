@@ -4,7 +4,7 @@ These tests require Docker services running:
     docker compose up -d
 
 They hit real OSRM and VROOM instances with Kerala map data to verify:
-1. OSRM returns plausible travel times for Kochi coordinates
+1. OSRM returns plausible travel times for Vatakara coordinates
 2. VROOM solves a realistic 30-order CVRP and produces valid routes
 3. The full API pipeline (CSV upload → optimize → routes) works end-to-end
 
@@ -53,7 +53,7 @@ def _service_is_up(url: str) -> bool:
 OSRM_URL = os.environ.get("OSRM_URL", "http://localhost:5000")
 VROOM_URL = os.environ.get("VROOM_URL", "http://localhost:3000")
 
-OSRM_AVAILABLE = _service_is_up(f"{OSRM_URL}/route/v1/driving/76.2846,9.9716;76.2996,9.9816")
+OSRM_AVAILABLE = _service_is_up(f"{OSRM_URL}/route/v1/driving/75.5796,11.6244;75.5700,11.5950")
 VROOM_AVAILABLE = _service_is_up(VROOM_URL)
 
 # Custom pytest marker — skip integration tests when services are down
@@ -90,39 +90,39 @@ def vroom():
 
 @pytest.fixture
 def kochi_depot():
-    """Depot location in central Kochi for integration tests.
+    """Depot location in central Vatakara for integration tests.
 
     Why not use config.DEPOT_LOCATION?
     The production depot may be anywhere in Kerala (currently Vatakara).
-    Integration tests need a fixed Kochi depot to validate plausible
-    distances against the Kochi delivery points defined below.
-    Using a hardcoded Kochi location makes tests independent of config.
+    Integration tests need a fixed Vatakara depot to validate plausible
+    distances against the Vatakara delivery points defined below.
+    Using a hardcoded Vatakara location makes tests independent of config.
     """
     return Location(
-        latitude=9.9716,
-        longitude=76.2846,
-        address_text="Integration Test Depot (MG Road, Kochi)",
+        latitude=11.6244,
+        longitude=75.5796,
+        address_text="Integration Test Depot (Memunda, Vatakara)",
     )
 
 
 @pytest.fixture
 def kochi_delivery_points():
-    """10 delivery points across Kochi — real coordinates.
+    """10 delivery points across Vatakara — real coordinates.
 
     These are public landmark locations spread across the city,
     covering ~8 km north-south and ~5 km east-west range.
     """
     return [
-        Location(latitude=9.9816, longitude=76.2996, address_text="Edappally Junction"),
-        Location(latitude=9.9944, longitude=76.3064, address_text="Palarivattom"),
-        Location(latitude=9.9674, longitude=76.3203, address_text="Vyttila Junction"),
-        Location(latitude=9.9937, longitude=76.2910, address_text="Kaloor Stadium"),
-        Location(latitude=9.9777, longitude=76.2764, address_text="Marine Drive"),
-        Location(latitude=9.9580, longitude=76.3023, address_text="Panampilly Nagar"),
-        Location(latitude=10.0553, longitude=76.3221, address_text="Kalamassery HMT"),
-        Location(latitude=9.9639, longitude=76.2434, address_text="Fort Kochi"),
-        Location(latitude=9.9499, longitude=76.3488, address_text="Tripunithura"),
-        Location(latitude=10.0097, longitude=76.3151, address_text="Cheranalloor"),
+        Location(latitude=11.5950, longitude=75.5700, address_text="Vatakara Bus Stand"),
+        Location(latitude=11.6150, longitude=75.5750, address_text="Vatakara Railway Station"),
+        Location(latitude=11.5800, longitude=75.5870, address_text="Chorode Junction"),
+        Location(latitude=11.6130, longitude=75.5820, address_text="Nadapuram Road Junction"),
+        Location(latitude=11.5900, longitude=75.5760, address_text="Chorode"),
+        Location(latitude=11.5850, longitude=75.5830, address_text="Edakkad"),
+        Location(latitude=11.6500, longitude=75.6000, address_text="Payyoli Junction"),
+        Location(latitude=11.5750, longitude=75.5500, address_text="Azhiyur"),
+        Location(latitude=11.5650, longitude=75.6100, address_text="Thalassery"),
+        Location(latitude=11.6400, longitude=75.5950, address_text="Mahe Junction"),
     ]
 
 
@@ -167,29 +167,29 @@ class TestOsrmIntegration:
 
     Validates that:
     - OSRM has Kerala data loaded (not an empty or wrong region)
-    - Travel times are plausible for Kochi distances
+    - Travel times are plausible for Vatakara distances
     - Distance matrix is symmetric-ish (A→B ≈ B→A)
     - Safety multiplier is applied correctly
     """
 
     @requires_osrm
     def test_osrm_returns_travel_time_for_kochi(self, osrm, kochi_depot):
-        """Basic smoke test: OSRM should route between known Kochi locations.
+        """Basic smoke test: OSRM should route between known Vatakara locations.
 
-        Depot (MG Road) → Edappally is ~3-5 km by road.
+        Depot (Memunda) → Vatakara Bus Stand is ~3-5 km by road.
         Expected: 5-20 min drive (with multiplier), 2-8 km.
         """
-        edappally = Location(latitude=9.9816, longitude=76.2996, address_text="Edappally")
+        edappally = Location(latitude=11.5950, longitude=75.5700, address_text="Vatakara Bus Stand")
         result = osrm.get_travel_time(kochi_depot, edappally)
 
         # Sanity checks — if these fail, OSRM probably has wrong data
         assert result.duration_seconds > 0, "Duration must be positive"
-        assert result.distance_meters > 1000, "Edappally is >1km from MG Road"
+        assert result.distance_meters > 1000, "Vatakara Bus Stand is >1km from Memunda"
         assert result.distance_meters < 15000, "Should be <15km by road"
         assert result.duration_seconds < 3600, "Should be <1 hour drive"
 
         # Verify safety multiplier was applied (1.3× means duration > raw OSRM)
-        # Raw OSRM for ~4km in Kochi should be ~5-10 min ≈ 300-600s
+        # Raw OSRM for ~4km in Vatakara should be ~5-10 min ≈ 300-600s
         # With 1.3× that's 390-780s
         assert result.duration_seconds > 200, "With multiplier, should be >200s"
 
@@ -213,10 +213,10 @@ class TestOsrmIntegration:
     def test_travel_times_are_asymmetric_but_close(self, osrm, kochi_delivery_points):
         """A→B and B→A should be similar but not identical (one-way streets).
 
-        Kerala has many one-way roads in Kochi. Travel times should differ
+        Kerala has many one-way roads in Vatakara. Travel times should differ
         by at most 50% between directions.
         """
-        a = kochi_delivery_points[0]  # Edappally
+        a = kochi_delivery_points[0]  # Vatakara Bus Stand
         b = kochi_delivery_points[2]  # Vyttila
 
         ab = osrm.get_travel_time(a, b)
@@ -229,18 +229,18 @@ class TestOsrmIntegration:
     def test_farther_points_take_longer(self, osrm, kochi_depot):
         """Closer destinations should have shorter travel times.
 
-        Edappally (~3km from depot) should be faster than Tripunithura (~8km).
+        Vatakara Bus Stand (~3km from depot) should be faster than Thalassery (~8km).
         """
-        edappally = Location(latitude=9.9816, longitude=76.2996, address_text="Edappally")
-        tripunithura = Location(latitude=9.9499, longitude=76.3488, address_text="Tripunithura")
+        edappally = Location(latitude=11.5950, longitude=75.5700, address_text="Vatakara Bus Stand")
+        tripunithura = Location(latitude=11.5650, longitude=75.6100, address_text="Thalassery")
 
         to_edappally = osrm.get_travel_time(kochi_depot, edappally)
         to_tripunithura = osrm.get_travel_time(kochi_depot, tripunithura)
 
         assert to_tripunithura.duration_seconds > to_edappally.duration_seconds, \
-            "Tripunithura (farther) should take longer than Edappally (closer)"
+            "Thalassery (farther) should take longer than Vatakara Bus Stand (closer)"
         assert to_tripunithura.distance_meters > to_edappally.distance_meters, \
-            "Tripunithura should be a longer route"
+            "Thalassery should be a longer route"
 
 
 # =============================================================================
@@ -252,7 +252,7 @@ class TestVroomIntegration:
     """Tests that hit the real VROOM solver (which internally calls OSRM).
 
     Validates that:
-    - VROOM can solve a Kochi delivery problem
+    - VROOM can solve a Vatakara delivery problem
     - All orders are assigned (fleet has enough capacity)
     - Routes respect vehicle capacity constraints
     - Stop sequences make geographic sense
@@ -284,9 +284,9 @@ class TestVroomIntegration:
     def test_route_distances_are_plausible(
         self, vroom, sample_orders_for_optimization, fleet_3_vehicles
     ):
-        """Each route should have reasonable total distance for Kochi.
+        """Each route should have reasonable total distance for Vatakara.
 
-        Kochi delivery area is ~5km radius. Each route should be:
+        Vatakara delivery area is ~5km radius. Each route should be:
         - More than 1 km (has to go somewhere)
         - Less than 100 km (not circumnavigating India)
         """

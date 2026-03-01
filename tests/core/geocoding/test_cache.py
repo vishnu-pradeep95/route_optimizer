@@ -52,11 +52,11 @@ def mock_session():
 
 @pytest.fixture
 def kochi_location():
-    """A geocoded location in central Kochi for cache test data."""
+    """A geocoded location in central Vatakara for cache test data."""
     return Location(
-        latitude=9.9816,
-        longitude=76.2996,
-        address_text="Edappally Junction, Kochi",
+        latitude=11.5950,
+        longitude=75.5700,
+        address_text="Vatakara Bus Stand, Vatakara",
         geocode_confidence=0.95,
     )
 
@@ -65,14 +65,14 @@ def kochi_location():
 def mock_upstream(kochi_location):
     """Mock upstream geocoder (e.g., GoogleGeocoder) that always succeeds.
 
-    Returns a GeocodingResult with the Kochi location for any address.
+    Returns a GeocodingResult with the Vatakara location for any address.
     In production, this would be GoogleGeocoder calling the real API.
     """
     upstream = MagicMock()
     upstream.geocode.return_value = GeocodingResult(
         location=kochi_location,
         confidence=0.95,
-        formatted_address="Edappally Junction, Kochi, Kerala 682024",
+        formatted_address="Vatakara Bus Stand, Vatakara, Kerala 682024",
     )
     return upstream
 
@@ -121,11 +121,11 @@ class TestCacheHit:
             new_callable=AsyncMock,
             return_value=kochi_location,
         ):
-            result = await cached_geocoder.geocode("Edappally Junction, Kochi")
+            result = await cached_geocoder.geocode("Vatakara Bus Stand, Vatakara")
 
         assert result.success is True
-        assert result.location.latitude == pytest.approx(9.9816)
-        assert result.location.longitude == pytest.approx(76.2996)
+        assert result.location.latitude == pytest.approx(11.5950)
+        assert result.location.longitude == pytest.approx(75.5700)
         # Upstream should NOT have been called
         mock_upstream.geocode.assert_not_called()
 
@@ -141,7 +141,7 @@ class TestCacheHit:
             new_callable=AsyncMock,
             return_value=kochi_location,
         ):
-            await cached_geocoder.geocode("Edappally Junction, Kochi")
+            await cached_geocoder.geocode("Vatakara Bus Stand, Vatakara")
 
         assert cached_geocoder.stats["hits"] == 1
         assert cached_geocoder.stats["misses"] == 0
@@ -159,9 +159,9 @@ class TestCacheHit:
         The cache preserves the original confidence.
         """
         low_confidence_location = Location(
-            latitude=9.9312,
-            longitude=76.2673,
-            address_text="Near Temple, Kochi",
+            latitude=11.6350,
+            longitude=75.5900,
+            address_text="Near Temple, Vatakara",
             geocode_confidence=0.5,
         )
         with patch(
@@ -169,7 +169,7 @@ class TestCacheHit:
             new_callable=AsyncMock,
             return_value=low_confidence_location,
         ):
-            result = await cached_geocoder.geocode("Near Temple, Kochi")
+            result = await cached_geocoder.geocode("Near Temple, Vatakara")
 
         assert result.confidence == 0.5
 
@@ -197,10 +197,10 @@ class TestCacheMiss:
             PATCH_SAVE_CACHED,
             new_callable=AsyncMock,
         ):
-            result = await cached_geocoder.geocode("New Address, Kochi")
+            result = await cached_geocoder.geocode("New Address, Vatakara")
 
         assert result.success is True
-        mock_upstream.geocode.assert_called_once_with("New Address, Kochi")
+        mock_upstream.geocode.assert_called_once_with("New Address, Vatakara")
 
     @pytest.mark.asyncio
     async def test_saves_result_to_cache(self, cached_geocoder, kochi_location):
@@ -216,13 +216,13 @@ class TestCacheMiss:
             PATCH_SAVE_CACHED,
             new_callable=AsyncMock,
         ) as save_mock:
-            await cached_geocoder.geocode("New Address, Kochi")
+            await cached_geocoder.geocode("New Address, Vatakara")
 
         save_mock.assert_called_once()
         call_kwargs = save_mock.call_args.kwargs
         assert call_kwargs["source"] == "google"
         assert call_kwargs["confidence"] == 0.95
-        assert call_kwargs["address_raw"] == "New Address, Kochi"
+        assert call_kwargs["address_raw"] == "New Address, Vatakara"
         assert call_kwargs["location"] == kochi_location
 
     @pytest.mark.asyncio
@@ -268,7 +268,7 @@ class TestErrorHandling:
             PATCH_SAVE_CACHED,
             new_callable=AsyncMock,
         ):
-            result = await cached_geocoder.geocode("MG Road, Kochi")
+            result = await cached_geocoder.geocode("Memunda, Vatakara")
 
         assert result.success is True
         mock_upstream.geocode.assert_called_once()
@@ -334,7 +334,7 @@ class TestErrorHandling:
             new_callable=AsyncMock,
             side_effect=Exception("DB write failed"),
         ):
-            result = await cached_geocoder.geocode("MG Road, Kochi")
+            result = await cached_geocoder.geocode("Memunda, Vatakara")
 
         # Result should still be successful despite cache save failure
         assert result.success is True
@@ -361,9 +361,9 @@ class TestDriverVerified:
             PATCH_SAVE_CACHED,
             new_callable=AsyncMock,
         ) as save_mock:
-            location = Location(latitude=9.9716, longitude=76.2846)
+            location = Location(latitude=11.6244, longitude=75.5796)
             await cached_geocoder.save_driver_verified(
-                "MG Road, Kochi", location
+                "Memunda, Vatakara", location
             )
 
         save_mock.assert_called_once()
@@ -382,14 +382,14 @@ class TestDriverVerified:
             PATCH_SAVE_CACHED,
             new_callable=AsyncMock,
         ) as save_mock:
-            location = Location(latitude=9.9716, longitude=76.2846)
+            location = Location(latitude=11.6244, longitude=75.5796)
             await cached_geocoder.save_driver_verified(
-                "MG Road, Kochi", location
+                "Memunda, Vatakara", location
             )
 
         call_kwargs = save_mock.call_args.kwargs
-        assert call_kwargs["location"].latitude == pytest.approx(9.9716)
-        assert call_kwargs["location"].longitude == pytest.approx(76.2846)
+        assert call_kwargs["location"].latitude == pytest.approx(11.6244)
+        assert call_kwargs["location"].longitude == pytest.approx(75.5796)
 
 
 # =============================================================================

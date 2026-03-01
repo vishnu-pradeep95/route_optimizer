@@ -100,8 +100,8 @@ def sample_csv_file():
     """
     csv_content = (
         "order_id,address,customer_id,cylinder_type,quantity,priority,latitude,longitude\n"
-        'ORD-001,"Edappally Junction, Kochi",CUST-001,domestic,1,2,9.9816,76.2996\n'
-        'ORD-002,"Palarivattom, Kochi",CUST-002,domestic,2,1,9.9567,76.2998\n'
+        'ORD-001,"Vatakara Bus Stand, Vatakara",CUST-001,domestic,1,2,11.5950,75.5700\n'
+        'ORD-002,"Vatakara Railway Station, Vatakara",CUST-002,domestic,2,1,11.6100,75.5650\n'
     )
     return csv_content.encode("utf-8")
 
@@ -122,13 +122,13 @@ def mock_vroom_2_orders():
                 "distance": 3000,
                 "duration": 400,
                 "steps": [
-                    {"type": "start", "location": [76.2846, 9.9716], "arrival": 0,
+                    {"type": "start", "location": [75.5796, 11.6244], "arrival": 0,
                      "distance": 0, "duration": 0},
-                    {"type": "job", "id": 0, "location": [76.2996, 9.9816],
+                    {"type": "job", "id": 0, "location": [75.5700, 11.5950],
                      "arrival": 200, "duration": 200, "distance": 1500, "service": 300},
-                    {"type": "job", "id": 1, "location": [76.2998, 9.9567],
+                    {"type": "job", "id": 1, "location": [75.5650, 11.6100],
                      "arrival": 400, "duration": 400, "distance": 3000, "service": 300},
-                    {"type": "end", "location": [76.2846, 9.9716], "arrival": 600,
+                    {"type": "end", "location": [75.5796, 11.6244], "arrival": 600,
                      "distance": 3000, "duration": 600},
                 ],
             },
@@ -220,8 +220,8 @@ class TestRoutesEndpoints:
         mock_stop = MagicMock()
         mock_stop.order = MagicMock()
         mock_stop.order.order_id = "ORD-001"
-        mock_stop.location = from_shape(Point(76.2996, 9.9816), srid=4326)
-        mock_stop.address_display = "Edappally Junction"
+        mock_stop.location = from_shape(Point(75.5700, 11.5950), srid=4326)
+        mock_stop.address_display = "Vatakara Bus Stand"
         mock_stop.sequence = 1
         mock_stop.distance_from_prev_km = 2.5
         mock_stop.duration_from_prev_minutes = 5.0
@@ -338,8 +338,8 @@ class TestRoutesEndpoints:
                 "/api/routes/VEH-01/stops/ORD-001/status",
                 json={
                     "status": "delivered",
-                    "latitude": 9.9816,
-                    "longitude": 76.2996,
+                    "latitude": 11.5950,
+                    "longitude": 75.5700,
                 },
             )
 
@@ -347,8 +347,8 @@ class TestRoutesEndpoints:
         # Verify delivery_location was passed to the repo
         call_kwargs = mock_repo.update_stop_status.call_args.kwargs
         assert call_kwargs["delivery_location"] is not None
-        assert call_kwargs["delivery_location"].latitude == pytest.approx(9.9816)
-        assert call_kwargs["delivery_location"].longitude == pytest.approx(76.2996)
+        assert call_kwargs["delivery_location"].latitude == pytest.approx(11.5950)
+        assert call_kwargs["delivery_location"].longitude == pytest.approx(75.5700)
 
     def test_update_stop_status_rejects_invalid(self, client):
         """Invalid status values should be rejected with 422.
@@ -563,8 +563,8 @@ class TestTelemetryEndpoint:
                 "/api/telemetry",
                 json={
                     "vehicle_id": "VEH-01",
-                    "latitude": 9.9716,
-                    "longitude": 76.2846,
+                    "latitude": 11.6244,
+                    "longitude": 75.5796,
                     "speed_kmh": 30.0,
                     "accuracy_m": 10.0,
                 },
@@ -589,8 +589,8 @@ class TestTelemetryEndpoint:
                 "/api/telemetry",
                 json={
                     "vehicle_id": "VEH-01",
-                    "latitude": 9.9716,
-                    "longitude": 76.2846,
+                    "latitude": 11.6244,
+                    "longitude": 75.5796,
                     "speed_kmh": 55.0,
                     "accuracy_m": 10.0,
                 },
@@ -616,8 +616,8 @@ class TestTelemetryEndpoint:
                 "/api/telemetry",
                 json={
                     "vehicle_id": "VEH-01",
-                    "latitude": 9.9716,
-                    "longitude": 76.2846,
+                    "latitude": 11.6244,
+                    "longitude": 75.5796,
                     "speed_kmh": 25.0,
                     "accuracy_m": 75.0,
                 },
@@ -642,7 +642,7 @@ class TestGetVehicleTelemetry:
         from geoalchemy2.shape import from_shape
 
         mock_ping = MagicMock(spec=TelemetryDB)
-        mock_ping.location = from_shape(Point(76.2846, 9.9716), srid=4326)
+        mock_ping.location = from_shape(Point(75.5796, 11.6244), srid=4326)
         mock_ping.speed_kmh = 30.0
         mock_ping.accuracy_m = 10.0
         mock_ping.heading = 90.0
@@ -658,8 +658,8 @@ class TestGetVehicleTelemetry:
         assert data["vehicle_id"] == "VEH-01"
         assert data["count"] == 1
         assert data["pings"][0]["speed_kmh"] == 30.0
-        assert data["pings"][0]["latitude"] == pytest.approx(9.9716, abs=0.001)
-        assert data["pings"][0]["longitude"] == pytest.approx(76.2846, abs=0.001)
+        assert data["pings"][0]["latitude"] == pytest.approx(11.6244, abs=0.001)
+        assert data["pings"][0]["longitude"] == pytest.approx(75.5796, abs=0.001)
 
     def test_get_telemetry_empty(self, client):
         """GET /api/telemetry/{vehicle_id} with no pings returns empty list."""
@@ -792,13 +792,13 @@ class TestGeocodeCacheHit:
         # CSV without lat/lon — forces geocoding path
         csv_without_coords = (
             "order_id,address,customer_id,cylinder_type,quantity,priority\n"
-            'ORD-001,"Edappally Junction, Kochi",CUST-001,domestic,1,2\n'
-            'ORD-002,"Palarivattom, Kochi",CUST-002,domestic,2,1\n'
+            'ORD-001,"Vatakara Bus Stand, Vatakara",CUST-001,domestic,1,2\n'
+            'ORD-002,"Vatakara Railway Station, Vatakara",CUST-002,domestic,2,1\n'
         )
 
         # The cache will return a Location for both addresses
         cached_location = Location(
-            latitude=9.9816, longitude=76.2996, address_text="Cached address"
+            latitude=11.5950, longitude=75.5700, address_text="Cached address"
         )
 
         with (
@@ -901,8 +901,8 @@ class TestAuthentication:
             "/api/telemetry",
             json={
                 "vehicle_id": "VEH-01",
-                "latitude": 9.9716,
-                "longitude": 76.2846,
+                "latitude": 11.6244,
+                "longitude": 75.5796,
                 "speed_kmh": 30.0,
             },
         )
@@ -1012,7 +1012,7 @@ class TestAuthentication:
         with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
              patch("apps.kerala_delivery.api.main.to_shape") as mock_to_shape:
             mock_repo.get_vehicle_by_vehicle_id = AsyncMock(return_value=mock_v)
-            mock_to_shape.return_value = MagicMock(y=9.97, x=76.28)
+            mock_to_shape.return_value = MagicMock(y=11.62, x=75.58)
             resp = auth_client.get(
                 "/api/vehicles/VEH-01",
                 headers={"X-API-Key": "test-secret-key-123"},
@@ -1179,7 +1179,7 @@ class TestFleetTelemetry:
         with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
              patch("apps.kerala_delivery.api.main.to_shape") as mock_to_shape:
             mock_repo.get_fleet_latest_telemetry = AsyncMock(return_value=mock_pings)
-            mock_point = MagicMock(y=9.97, x=76.28)
+            mock_point = MagicMock(y=11.62, x=75.58)
             mock_to_shape.return_value = mock_point
 
             resp = client.get("/api/telemetry/fleet")
@@ -1226,9 +1226,9 @@ class TestTelemetryBatch:
                 "/api/telemetry/batch",
                 json={
                     "pings": [
-                        {"vehicle_id": "VEH-01", "latitude": 9.97, "longitude": 76.28},
-                        {"vehicle_id": "VEH-01", "latitude": 9.975, "longitude": 76.285},
-                        {"vehicle_id": "VEH-01", "latitude": 9.98, "longitude": 76.29},
+                        {"vehicle_id": "VEH-01", "latitude": 11.62, "longitude": 75.58},
+                        {"vehicle_id": "VEH-01", "latitude": 11.625, "longitude": 75.585},
+                        {"vehicle_id": "VEH-01", "latitude": 11.63, "longitude": 75.59},
                     ]
                 },
             )
@@ -1253,9 +1253,9 @@ class TestTelemetryBatch:
                 "/api/telemetry/batch",
                 json={
                     "pings": [
-                        {"vehicle_id": "VEH-01", "latitude": 9.97, "longitude": 76.28},
-                        {"vehicle_id": "VEH-01", "latitude": 9.975, "longitude": 76.285, "accuracy_m": 100},
-                        {"vehicle_id": "VEH-01", "latitude": 9.98, "longitude": 76.29, "speed_kmh": 55},
+                        {"vehicle_id": "VEH-01", "latitude": 11.62, "longitude": 75.58},
+                        {"vehicle_id": "VEH-01", "latitude": 11.625, "longitude": 75.585, "accuracy_m": 100},
+                        {"vehicle_id": "VEH-01", "latitude": 11.63, "longitude": 75.59, "speed_kmh": 55},
                     ]
                 },
             )
@@ -1267,7 +1267,7 @@ class TestTelemetryBatch:
     def test_batch_rejects_over_100_pings(self, client):
         """Batch with >100 pings should return 422 (max_length=100)."""
         pings = [
-            {"vehicle_id": "VEH-01", "latitude": 9.97, "longitude": 76.28}
+            {"vehicle_id": "VEH-01", "latitude": 11.62, "longitude": 75.58}
             for _ in range(101)
         ]
         resp = client.post("/api/telemetry/batch", json={"pings": pings})
@@ -1316,7 +1316,7 @@ class TestFleetManagement:
         with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
              patch("apps.kerala_delivery.api.main.to_shape") as mock_to_shape:
             mock_repo.get_all_vehicles = AsyncMock(return_value=mock_vehicles)
-            mock_to_shape.return_value = MagicMock(y=9.97, x=76.28)
+            mock_to_shape.return_value = MagicMock(y=11.62, x=75.58)
             resp = client.get("/api/vehicles")
 
         assert resp.status_code == 200
@@ -1329,7 +1329,7 @@ class TestFleetManagement:
         with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
              patch("apps.kerala_delivery.api.main.to_shape") as mock_to_shape:
             mock_repo.get_active_vehicles = AsyncMock(return_value=[])
-            mock_to_shape.return_value = MagicMock(y=9.97, x=76.28)
+            mock_to_shape.return_value = MagicMock(y=11.62, x=75.58)
             resp = client.get("/api/vehicles?active_only=true")
 
         assert resp.status_code == 200
@@ -1353,7 +1353,7 @@ class TestFleetManagement:
         with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
              patch("apps.kerala_delivery.api.main.to_shape") as mock_to_shape:
             mock_repo.get_vehicle_by_vehicle_id = AsyncMock(return_value=mock_v)
-            mock_to_shape.return_value = MagicMock(y=9.97, x=76.28)
+            mock_to_shape.return_value = MagicMock(y=11.62, x=75.58)
             resp = client.get("/api/vehicles/VEH-01")
 
         assert resp.status_code == 200
@@ -1386,14 +1386,14 @@ class TestFleetManagement:
              patch("apps.kerala_delivery.api.main.to_shape") as mock_to_shape:
             mock_repo.get_vehicle_by_vehicle_id = AsyncMock(return_value=None)
             mock_repo.create_vehicle = AsyncMock(return_value=mock_v)
-            mock_to_shape.return_value = MagicMock(y=9.97, x=76.28)
+            mock_to_shape.return_value = MagicMock(y=11.62, x=75.58)
 
             resp = client.post(
                 "/api/vehicles",
                 json={
                     "vehicle_id": "VEH-14",
-                    "depot_latitude": 9.97,
-                    "depot_longitude": 76.28,
+                    "depot_latitude": 11.62,
+                    "depot_longitude": 75.58,
                     "registration_no": "KL-07-CD-9999",
                 },
             )
@@ -1409,7 +1409,7 @@ class TestFleetManagement:
             )
             resp = client.post(
                 "/api/vehicles",
-                json={"vehicle_id": "VEH-01", "depot_latitude": 9.97, "depot_longitude": 76.28},
+                json={"vehicle_id": "VEH-01", "depot_latitude": 11.62, "depot_longitude": 75.58},
             )
 
         assert resp.status_code == 409
@@ -1466,8 +1466,8 @@ class TestFleetManagement:
             "/api/vehicles",
             json={
                 "vehicle_id": "VEH-99",
-                "depot_latitude": 9.9312,
-                "depot_longitude": 76.2673,
+                "depot_latitude": 11.6350,
+                "depot_longitude": 75.5900,
                 "vehicle_type": "banana",
             },
             headers={"X-API-Key": "test-key"},
@@ -1505,7 +1505,7 @@ class TestDeliveryWindowEnforcement:
         mock_order.delivery_window_end = dt_time(9, 10)
         mock_order.order_id = "ORD-001"
         mock_order.location = MagicMock(
-            latitude=9.97, longitude=76.28,
+            latitude=11.62, longitude=75.58,
             geocode_confidence=0.9, address_text="Test"
         )
         mock_order.weight_kg = 14.2
@@ -1558,7 +1558,7 @@ class TestDeliveryWindowEnforcement:
         mock_order.delivery_window_end = dt_time(10, 0)  # 60 min — valid
         mock_order.order_id = "ORD-001"
         mock_order.location = MagicMock(
-            latitude=9.97, longitude=76.28,
+            latitude=11.62, longitude=75.58,
             geocode_confidence=0.9, address_text="Test"
         )
         mock_order.weight_kg = 14.2
@@ -1710,11 +1710,11 @@ class TestCdcmsAutoDetection:
                     "distance": 1500,
                     "duration": 200,
                     "steps": [
-                        {"type": "start", "location": [76.2846, 9.9716],
+                        {"type": "start", "location": [75.5796, 11.6244],
                          "arrival": 0, "distance": 0, "duration": 0},
                         {"type": "job", "id": 0, "location": [75.6853, 11.7050],
                          "arrival": 200, "duration": 200, "distance": 1500, "service": 300},
-                        {"type": "end", "location": [76.2846, 9.9716],
+                        {"type": "end", "location": [75.5796, 11.6244],
                          "arrival": 400, "distance": 3000, "duration": 400},
                     ],
                 },
@@ -1903,12 +1903,12 @@ class TestGoogleMapsUrlHelpers:
         from apps.kerala_delivery.api.qr_helpers import build_google_maps_url
 
         stops = [
-            {"latitude": 9.97, "longitude": 76.28},
-            {"latitude": 9.98, "longitude": 76.29},
+            {"latitude": 11.62, "longitude": 75.58},
+            {"latitude": 11.63, "longitude": 75.59},
         ]
         url = build_google_maps_url(stops)
-        assert "origin=9.97,76.28" in url
-        assert "destination=9.98,76.29" in url
+        assert "origin=11.62,75.58" in url
+        assert "destination=11.63,75.59" in url
         assert "waypoints" not in url
         assert "travelmode=driving" in url
 
@@ -1917,14 +1917,14 @@ class TestGoogleMapsUrlHelpers:
         from apps.kerala_delivery.api.qr_helpers import build_google_maps_url
 
         stops = [
-            {"latitude": 9.97, "longitude": 76.28},
-            {"latitude": 9.975, "longitude": 76.285},
-            {"latitude": 9.98, "longitude": 76.29},
+            {"latitude": 11.62, "longitude": 75.58},
+            {"latitude": 11.625, "longitude": 75.585},
+            {"latitude": 11.63, "longitude": 75.59},
         ]
         url = build_google_maps_url(stops)
-        assert "origin=9.97,76.28" in url
-        assert "destination=9.98,76.29" in url
-        assert "waypoints=9.975,76.285" in url
+        assert "origin=11.62,75.58" in url
+        assert "destination=11.63,75.59" in url
+        assert "waypoints=11.625,75.585" in url
 
     def testbuild_google_maps_url_empty_stops(self):
         """Empty stop list should return empty string."""
@@ -1956,7 +1956,7 @@ class TestGoogleMapsUrlHelpers:
         """Route with ≤11 stops→ 1 segment."""
         from apps.kerala_delivery.api.qr_helpers import split_route_into_segments
 
-        stops = [{"latitude": 9.97 + i * 0.001, "longitude": 76.28} for i in range(8)]
+        stops = [{"latitude": 11.62 + i * 0.001, "longitude": 75.58} for i in range(8)]
         segments = split_route_into_segments(stops)
         assert len(segments) == 1
         assert segments[0]["segment"] == 1
@@ -1971,7 +1971,7 @@ class TestGoogleMapsUrlHelpers:
         """
         from apps.kerala_delivery.api.qr_helpers import split_route_into_segments
 
-        stops = [{"latitude": 9.97 + i * 0.001, "longitude": 76.28} for i in range(15)]
+        stops = [{"latitude": 11.62 + i * 0.001, "longitude": 75.58} for i in range(15)]
         segments = split_route_into_segments(stops)
         assert len(segments) >= 2
         # Each segment has a QR code and URL
@@ -1987,7 +1987,7 @@ class TestGoogleMapsUrlHelpers:
         """Route with exactly 11 stops → 1 segment (fits in one URL)."""
         from apps.kerala_delivery.api.qr_helpers import split_route_into_segments
 
-        stops = [{"latitude": 9.97 + i * 0.001, "longitude": 76.28} for i in range(11)]
+        stops = [{"latitude": 11.62 + i * 0.001, "longitude": 75.58} for i in range(11)]
         segments = split_route_into_segments(stops)
         assert len(segments) == 1
         assert segments[0]["stop_count"] == 11
@@ -1996,10 +1996,10 @@ class TestGoogleMapsUrlHelpers:
         """Single stop → origin and destination are the same point."""
         from apps.kerala_delivery.api.qr_helpers import build_google_maps_url
 
-        stops = [{"latitude": 9.97, "longitude": 76.28}]
+        stops = [{"latitude": 11.62, "longitude": 75.58}]
         url = build_google_maps_url(stops)
-        assert "origin=9.97,76.28" in url
-        assert "destination=9.97,76.28" in url
+        assert "origin=11.62,75.58" in url
+        assert "destination=11.62,75.58" in url
 
 
 class TestGoogleMapsRouteEndpoint:
@@ -2024,7 +2024,7 @@ class TestGoogleMapsRouteEndpoint:
             mock_stop = MagicMock()
             mock_stop.order = MagicMock()
             mock_stop.order.order_id = f"ORD-{i:03d}"
-            mock_stop.location = from_shape(Point(76.28 + i * 0.01, 9.97 + i * 0.01), srid=4326)
+            mock_stop.location = from_shape(Point(75.58 + i * 0.01, 11.62 + i * 0.01), srid=4326)
             mock_stop.address_display = f"Stop {i + 1}"
             mock_stop.sequence = i + 1
             mock_stop.distance_from_prev_km = 1.0
@@ -2108,7 +2108,7 @@ class TestQrSheetEndpoint:
             mock_stop = MagicMock()
             mock_stop.order = MagicMock()
             mock_stop.order.order_id = f"ORD-{i:03d}"
-            mock_stop.location = from_shape(Point(76.28 + i * 0.01, 9.97 + i * 0.01), srid=4326)
+            mock_stop.location = from_shape(Point(75.58 + i * 0.01, 11.62 + i * 0.01), srid=4326)
             mock_stop.address_display = f"Stop {i + 1}"
             mock_stop.sequence = i + 1
             mock_stop.distance_from_prev_km = 1.0
@@ -2177,7 +2177,7 @@ class TestQrSheetEndpoint:
         mock_stop = MagicMock()
         mock_stop.order = MagicMock()
         mock_stop.order.order_id = "ORD-XSS"
-        mock_stop.location = from_shape(Point(76.28, 9.97), srid=4326)
+        mock_stop.location = from_shape(Point(75.58, 11.62), srid=4326)
         mock_stop.address_display = "Test Stop"
         mock_stop.sequence = 1
         mock_stop.distance_from_prev_km = 1.0

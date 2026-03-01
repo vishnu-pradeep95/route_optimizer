@@ -45,9 +45,9 @@ def sample_csv(tmp_path: Path) -> str:
     """
     csv_content = (
         "order_id,address,customer_id,cylinder_type,quantity,latitude,longitude\n"
-        "ORD-001,Edappally Junction Kochi,CUST-001,domestic,2,9.9816,76.2996\n"
-        "ORD-002,Marine Drive Kochi,CUST-002,domestic,1,9.9312,76.2673\n"
-        "ORD-003,MG Road Kochi,CUST-003,commercial,1,,\n"
+        "ORD-001,Vatakara Bus Stand Vatakara,CUST-001,domestic,2,11.5950,75.5700\n"
+        "ORD-002,Chorode Vatakara,CUST-002,domestic,1,11.6350,75.5900\n"
+        "ORD-003,Memunda Vatakara,CUST-003,commercial,1,,\n"
     )
     csv_file = tmp_path / "test_orders.csv"
     csv_file.write_text(csv_content)
@@ -68,16 +68,16 @@ def geocoded_orders() -> list[Order]:
     return [
         Order(
             order_id="ORD-001",
-            location=Location(latitude=9.9816, longitude=76.2996),
-            address_raw="Edappally Junction Kochi",
+            location=Location(latitude=11.5950, longitude=75.5700),
+            address_raw="Vatakara Bus Stand Vatakara",
             customer_ref="CUST-001",
             weight_kg=28.4,
             quantity=2,
         ),
         Order(
             order_id="ORD-002",
-            location=Location(latitude=9.9312, longitude=76.2673),
-            address_raw="Marine Drive Kochi",
+            location=Location(latitude=11.6350, longitude=75.5900),
+            address_raw="Chorode Vatakara",
             customer_ref="CUST-002",
             weight_kg=14.2,
             quantity=1,
@@ -95,8 +95,8 @@ def mixed_orders() -> list[Order]:
     return [
         Order(
             order_id="ORD-001",
-            location=Location(latitude=9.9816, longitude=76.2996),
-            address_raw="Edappally Junction Kochi",
+            location=Location(latitude=11.5950, longitude=75.5700),
+            address_raw="Vatakara Bus Stand Vatakara",
             customer_ref="CUST-001",
             weight_kg=28.4,
             quantity=2,
@@ -104,7 +104,7 @@ def mixed_orders() -> list[Order]:
         Order(
             order_id="ORD-002",
             location=None,
-            address_raw="MG Road Kochi",
+            address_raw="Memunda Vatakara",
             customer_ref="CUST-002",
             weight_kg=14.2,
             quantity=1,
@@ -199,9 +199,9 @@ class TestImportOrdersGeocoding:
         from scripts.import_orders import import_orders
 
         mock_result = GeocodingResult(
-            location=Location(latitude=9.9674, longitude=76.2855),
+            location=Location(latitude=11.5800, longitude=75.5850),
             confidence=0.85,
-            formatted_address="MG Road, Kochi, Kerala",
+            formatted_address="Memunda, Vatakara, Kerala",
         )
 
         # Patch at the source module — import_orders does a lazy
@@ -222,7 +222,7 @@ class TestImportOrdersGeocoding:
             ) as f:
                 f.write(
                     "order_id,address,customer_id,cylinder_type,quantity\n"
-                    "ORD-001,MG Road Kochi,CUST-001,domestic,1\n"
+                    "ORD-001,Memunda Vatakara,CUST-001,domestic,1\n"
                 )
                 csv_path = f.name
 
@@ -333,8 +333,8 @@ class TestPrintStats:
         orders = [
             Order(
                 order_id="ORD-TEST",
-                location=Location(latitude=9.9716, longitude=76.2846),
-                address_raw="Test Address Kochi",
+                location=Location(latitude=11.6244, longitude=75.5796),
+                address_raw="Test Address Vatakara",
                 customer_ref="CUST-TEST",
                 weight_kg=14.2,
             ),
@@ -342,4 +342,4 @@ class TestPrintStats:
         _print_sample_orders(orders)
         captured = capsys.readouterr()
         assert "ORD-TEST" in captured.out
-        assert "9.9716" in captured.out
+        assert "11.6244" in captured.out

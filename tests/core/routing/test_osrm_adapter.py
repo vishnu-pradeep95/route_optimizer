@@ -22,9 +22,9 @@ from core.routing.osrm_adapter import OsrmAdapter
 # Fixtures
 # =============================================================================
 
-KOCHI_DEPOT = Location(latitude=9.9716, longitude=76.2846, address_text="Depot")
-EDAPPALLY = Location(latitude=9.9816, longitude=76.2996, address_text="Edappally")
-MARINE_DRIVE = Location(latitude=9.9312, longitude=76.2673, address_text="Marine Drive")
+KOCHI_DEPOT = Location(latitude=11.6244, longitude=75.5796, address_text="Depot")
+EDAPPALLY = Location(latitude=11.5950, longitude=75.5700, address_text="Vatakara Bus Stand")
+MARINE_DRIVE = Location(latitude=11.6350, longitude=75.5900, address_text="Chorode")
 
 
 @pytest.fixture
@@ -41,7 +41,7 @@ def osrm_route_response():
     """Simulated OSRM Route API response.
 
     Based on: https://project-osrm.org/docs/v5.24.0/api/#route-service
-    Duration 300s (5 min), distance 3000m (3 km) — typical intra-Kochi trip.
+    Duration 300s (5 min), distance 3000m (3 km) — typical intra-Vatakara trip.
     """
     return {
         "code": "Ok",
@@ -58,7 +58,7 @@ def osrm_route_response():
 def osrm_table_response():
     """Simulated OSRM Table API response for 3 locations.
 
-    3×3 matrix with realistic Kochi travel times.
+    3×3 matrix with realistic Vatakara travel times.
     Diagonal is 0 (same location).
     """
     return {
@@ -206,7 +206,7 @@ class TestOsrmAdapter:
 
         # Check the URL that was called — should be lon,lat;lon,lat
         call_url = mock_get.call_args[0][0]
-        # KOCHI_DEPOT: lon=76.2846, lat=9.9716
-        assert "76.2846,9.9716" in call_url
-        # EDAPPALLY: lon=76.2996, lat=9.9816
-        assert "76.2996,9.9816" in call_url
+        # VATAKARA_DEPOT: lon=75.5796, lat=11.6244
+        assert "75.5796,11.6244" in call_url
+        # VATAKARA_BUS_STAND: lon=75.57, lat=11.595 (trailing zeros stripped)
+        assert "75.57,11.595" in call_url

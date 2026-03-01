@@ -196,7 +196,7 @@ class TestConversionHelpers:
         We can't verify the actual geometry without a DB, but we can verify
         the function doesn't crash and returns a SQLAlchemy element.
         """
-        loc = Location(latitude=9.9716, longitude=76.2846)
+        loc = Location(latitude=11.6244, longitude=75.5796)
         point = _make_point(loc)
         # Should return a SQLAlchemy clause element, not None
         assert point is not None
@@ -212,21 +212,21 @@ class TestConversionHelpers:
         from geoalchemy2.shape import from_shape
 
         # Create a WKB geometry that _point_to_location can parse
-        shape = Point(76.2846, 9.9716)  # (lon, lat)
+        shape = Point(75.5796, 11.6244)  # (lon, lat)
         geom = from_shape(shape, srid=4326)
 
         result = _point_to_location(geom, address_text="Test Address")
         assert result is not None
         assert result.address_text == "Test Address"
-        assert abs(result.latitude - 9.9716) < 0.001
-        assert abs(result.longitude - 76.2846) < 0.001
+        assert abs(result.latitude - 11.6244) < 0.001
+        assert abs(result.longitude - 75.5796) < 0.001
 
     def test_point_to_location_preserves_confidence(self):
         """_point_to_location passes through geocode confidence."""
         from shapely.geometry import Point
         from geoalchemy2.shape import from_shape
 
-        shape = Point(76.2846, 9.9716)
+        shape = Point(75.5796, 11.6244)
         geom = from_shape(shape, srid=4326)
 
         result = _point_to_location(geom, confidence=0.85)
@@ -246,14 +246,14 @@ class TestVehicleConversion:
         vdb.max_weight_kg = 446.0
         vdb.max_items = 30
         vdb.speed_limit_kmh = 40.0
-        vdb.depot_location = from_shape(Point(76.2846, 9.9716), srid=4326)
+        vdb.depot_location = from_shape(Point(75.5796, 11.6244), srid=4326)
 
         vehicle = vehicle_db_to_pydantic(vdb)
         assert vehicle.vehicle_id == "VEH-01"
         assert vehicle.max_weight_kg == 446.0
         assert vehicle.max_items == 30
-        assert abs(vehicle.depot.latitude - 9.9716) < 0.001
-        assert abs(vehicle.depot.longitude - 76.2846) < 0.001
+        assert abs(vehicle.depot.latitude - 11.6244) < 0.001
+        assert abs(vehicle.depot.longitude - 75.5796) < 0.001
 
 
 class TestRouteConversion:
@@ -286,7 +286,7 @@ class TestRouteConversion:
         stop_db = MagicMock(spec=RouteStopDB)
         stop_db.order = MagicMock()
         stop_db.order.order_id = "ORD-001"
-        stop_db.location = from_shape(Point(76.2846, 9.9716), srid=4326)
+        stop_db.location = from_shape(Point(75.5796, 11.6244), srid=4326)
         stop_db.address_display = "Test Stop"
         stop_db.sequence = 1
         stop_db.distance_from_prev_km = 2.5
@@ -312,7 +312,7 @@ class TestRouteConversion:
         assert route.stop_count == 1
         assert route.stops[0].order_id == "ORD-001"
         assert route.stops[0].address_display == "Test Stop"
-        assert abs(route.stops[0].location.latitude - 9.9716) < 0.001
+        assert abs(route.stops[0].location.latitude - 11.6244) < 0.001
 
 
 # =============================================================================
@@ -416,12 +416,12 @@ class TestCsvTimeWindowImport:
         csv_content = (
             "order_id,address,customer_id,quantity,cylinder_type,"
             "latitude,longitude,delivery_window_start,delivery_window_end\n"
-            'ORD-001,Marine Drive,CUST-001,2,domestic,'
-            '9.9312,76.2673,09:00,12:00\n'
-            'ORD-002,MG Road,CUST-002,1,domestic,'
-            '9.9674,76.2855,14:00,17:30\n'
+            'ORD-001,Chorode,CUST-001,2,domestic,'
+            '11.6350,75.5900,09:00,12:00\n'
+            'ORD-002,Memunda,CUST-002,1,domestic,'
+            '11.5800,75.5850,14:00,17:30\n'
             'ORD-003,Panampilly,CUST-003,1,domestic,'
-            '9.9478,76.2870,,\n'
+            '11.6200,75.5500,,\n'
         )
         csv_file = tmp_path / "orders_with_tw.csv"
         csv_file.write_text(csv_content)
