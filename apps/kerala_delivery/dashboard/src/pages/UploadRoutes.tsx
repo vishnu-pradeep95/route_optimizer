@@ -22,8 +22,164 @@ import {
   type UploadResponse,
   type GoogleMapsRouteResponse,
 } from "../lib/api";
-import type { RouteSummary, RouteDetail } from "../types";
+import type { RouteSummary, RouteDetail, ImportFailure } from "../types";
 import "./UploadRoutes.css";
+
+// --- Import Summary Component ---
+
+/**
+ * ImportSummary — displays between upload area and route cards.
+ *
+ * Three visual states:
+ * 1. All succeed (zero failures): green bar "All N orders geocoded successfully"
+ * 2. Partial success: amber bar with counts + expandable failure detail table
+ * 3. Zero success (all fail): failure details, no route cards, clear message
+ *
+ * Uses DaisyUI 5 components with tw- prefix alongside existing CSS patterns.
+ */
+function ImportSummary({ uploadResult }: { uploadResult: UploadResponse }) {
+  const [failuresOpen, setFailuresOpen] = useState(false);
+  const [warningsOpen, setWarningsOpen] = useState(false);
+
+  // Backward-compatible field access: fall back to existing fields
+  // if the server hasn't been updated to include new diagnostic fields
+  const totalRows = uploadResult.total_rows ?? uploadResult.total_orders ?? 0;
+  const failures: ImportFailure[] = uploadResult.failures ?? [];
+  const warnings: ImportFailure[] = uploadResult.warnings ?? [];
+  const geocoded = uploadResult.geocoded ?? uploadResult.orders_assigned ?? 0;
+  const failedCount =
+    (uploadResult.failed_geocoding ?? 0) + (uploadResult.failed_validation ?? 0);
+
+  // No diagnostic data available (pre-Phase-3 server) — don't render
+  if (totalRows === 0 && failures.length === 0) {
+    return null;
+  }
+
+  // --- All-success state: green confirmation bar ---
+  if (failures.length === 0) {
+    return (
+      <div className="import-summary">
+        <div className="tw-alert tw-alert-success">
+          <svg xmlns="http://www.w3.org/2000/svg" className="tw-h-5 tw-w-5 tw-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>All {totalRows} orders geocoded successfully</span>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Partial-success or zero-success: amber bar with counts + failure table ---
+  return (
+    <div className="import-summary">
+      {/* Summary counts bar */}
+      <div className="tw-alert tw-alert-warning">
+        <svg xmlns="http://www.w3.org/2000/svg" className="tw-h-5 tw-w-5 tw-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <div className="summary-counts">
+          <span>
+            <strong>{uploadResult.orders_assigned}</strong> routed
+          </span>
+          {uploadResult.orders_unassigned > 0 && (
+            <span>
+              <strong>{uploadResult.orders_unassigned}</strong> unassigned
+            </span>
+          )}
+          <span className="failed-count">
+            <strong>{failedCount}</strong> failed
+          </span>
+        </div>
+      </div>
+
+      {/* Zero-success message */}
+      {geocoded === 0 && failures.length > 0 && (
+        <div className="tw-alert tw-alert-error tw-mt-4">
+          <svg xmlns="http://www.w3.org/2000/svg" className="tw-h-5 tw-w-5 tw-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>No orders could be geocoded -- check addresses below</span>
+        </div>
+      )}
+
+      {/* Expandable failure detail table */}
+      {failures.length > 0 && (
+        <div className="tw-collapse tw-collapse-arrow tw-bg-base-200 tw-mt-4">
+          <input
+            type="checkbox"
+            checked={failuresOpen}
+            onChange={() => setFailuresOpen(!failuresOpen)}
+          />
+          <div className="tw-collapse-title tw-font-semibold">
+            {failures.length} failed row{failures.length !== 1 ? "s" : ""} -- click to expand
+          </div>
+          <div className="tw-collapse-content">
+            <div className="tw-overflow-x-auto">
+              <table className="tw-table tw-table-sm">
+                <thead>
+                  <tr>
+                    <th>Row</th>
+                    <th>Address</th>
+                    <th>Reason</th>
+                    <th>Stage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {failures.map((f, idx) => (
+                    <tr key={`fail-${f.row_number}-${idx}`}>
+                      <td>{f.row_number}</td>
+                      <td>{f.address_snippet || "--"}</td>
+                      <td>{f.reason}</td>
+                      <td>{f.stage}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Warnings section */}
+      {warnings.length > 0 && (
+        <div className="tw-collapse tw-collapse-arrow tw-bg-base-100 tw-mt-3 tw-border tw-border-base-300">
+          <input
+            type="checkbox"
+            checked={warningsOpen}
+            onChange={() => setWarningsOpen(!warningsOpen)}
+          />
+          <div className="tw-collapse-title tw-font-semibold tw-text-sm">
+            {warnings.length} warning{warnings.length !== 1 ? "s" : ""} -- defaults applied
+          </div>
+          <div className="tw-collapse-content">
+            <div className="tw-overflow-x-auto">
+              <table className="tw-table tw-table-sm">
+                <thead>
+                  <tr>
+                    <th>Row</th>
+                    <th>Address</th>
+                    <th>Reason</th>
+                    <th>Stage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {warnings.map((w, idx) => (
+                    <tr key={`warn-${w.row_number}-${idx}`}>
+                      <td>{w.row_number}</td>
+                      <td>{w.address_snippet || "--"}</td>
+                      <td>{w.reason}</td>
+                      <td>{w.stage}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Workflow states — drives the UI transitions. */
 type WorkflowState =
@@ -115,35 +271,41 @@ export function UploadRoutes() {
       const result = await uploadAndOptimize(selectedFile);
       setUploadResult(result);
 
-      // Step 2: Fetch route summaries
-      setUploadProgress("Loading route details...");
-      const routesRes = await fetchRoutes();
-      setRoutes(routesRes.routes);
+      // Derive geocoded count with backward-compat fallback
+      const geocodedCount = result.geocoded ?? result.orders_assigned ?? 0;
 
-      // Step 3: Fetch details for all vehicles in parallel
-      const detailResults = await Promise.allSettled(
-        routesRes.routes.map((r) => fetchRouteDetail(r.vehicle_id))
-      );
-      const detailsMap = new Map<string, RouteDetail>();
-      detailResults.forEach((result, index) => {
-        if (result.status === "fulfilled") {
-          detailsMap.set(routesRes.routes[index].vehicle_id, result.value);
-        }
-      });
-      setRouteDetails(detailsMap);
+      // Only fetch routes if some orders were geocoded successfully
+      if (geocodedCount > 0) {
+        // Step 2: Fetch route summaries
+        setUploadProgress("Loading route details...");
+        const routesRes = await fetchRoutes();
+        setRoutes(routesRes.routes);
 
-      // Step 4: Fetch QR codes for all vehicles in parallel
-      setUploadProgress("Generating QR codes...");
-      const qrResults = await Promise.allSettled(
-        routesRes.routes.map((r) => fetchGoogleMapsRoute(r.vehicle_id))
-      );
-      const newQrData = new Map<string, GoogleMapsRouteResponse>();
-      qrResults.forEach((result, index) => {
-        if (result.status === "fulfilled") {
-          newQrData.set(routesRes.routes[index].vehicle_id, result.value);
-        }
-      });
-      setQrData(newQrData);
+        // Step 3: Fetch details for all vehicles in parallel
+        const detailResults = await Promise.allSettled(
+          routesRes.routes.map((r) => fetchRouteDetail(r.vehicle_id))
+        );
+        const detailsMap = new Map<string, RouteDetail>();
+        detailResults.forEach((result, index) => {
+          if (result.status === "fulfilled") {
+            detailsMap.set(routesRes.routes[index].vehicle_id, result.value);
+          }
+        });
+        setRouteDetails(detailsMap);
+
+        // Step 4: Fetch QR codes for all vehicles in parallel
+        setUploadProgress("Generating QR codes...");
+        const qrResults = await Promise.allSettled(
+          routesRes.routes.map((r) => fetchGoogleMapsRoute(r.vehicle_id))
+        );
+        const newQrData = new Map<string, GoogleMapsRouteResponse>();
+        qrResults.forEach((result, index) => {
+          if (result.status === "fulfilled") {
+            newQrData.set(routesRes.routes[index].vehicle_id, result.value);
+          }
+        });
+        setQrData(newQrData);
+      }
 
       setWorkflowState("success");
       setUploadProgress("");
@@ -312,55 +474,59 @@ export function UploadRoutes() {
       )}
 
       {/* Results Section */}
-      {workflowState === "success" && (
+      {workflowState === "success" && uploadResult && (
         <div className="results-section">
-          {/* Summary Bar */}
-          <div className="results-header">
-            <div className="results-summary">
-              <h2>Routes Generated</h2>
-              {uploadResult && (
-                <div className="summary-stats">
-                  <div className="summary-stat">
-                    <span className="stat-val">{uploadResult.orders_assigned}</span>
-                    <span className="stat-lbl">Orders Assigned</span>
-                  </div>
-                  <div className="summary-stat">
-                    <span className="stat-val">{uploadResult.vehicles_used}</span>
-                    <span className="stat-lbl">Vehicles</span>
-                  </div>
-                  {uploadResult.orders_unassigned > 0 && (
-                    <div className="summary-stat warning">
-                      <span className="stat-val">{uploadResult.orders_unassigned}</span>
-                      <span className="stat-lbl">Unassigned</span>
+          {/* Import Summary — placed BETWEEN upload and route cards */}
+          <ImportSummary uploadResult={uploadResult} />
+
+          {/* Only show routes header + cards if there are geocoded orders */}
+          {(uploadResult.geocoded ?? uploadResult.orders_assigned ?? 0) > 0 && (
+            <>
+              {/* Summary Bar */}
+              <div className="results-header">
+                <div className="results-summary">
+                  <h2>Routes Generated</h2>
+                  <div className="summary-stats">
+                    <div className="summary-stat">
+                      <span className="stat-val">{uploadResult.orders_assigned}</span>
+                      <span className="stat-lbl">Orders Assigned</span>
                     </div>
-                  )}
-                  <div className="summary-stat">
-                    <span className="stat-val">
-                      {uploadResult.optimization_time_ms.toFixed(0)} ms
-                    </span>
-                    <span className="stat-lbl">Solve Time</span>
+                    <div className="summary-stat">
+                      <span className="stat-val">{uploadResult.vehicles_used}</span>
+                      <span className="stat-lbl">Vehicles</span>
+                    </div>
+                    {uploadResult.orders_unassigned > 0 && (
+                      <div className="summary-stat warning">
+                        <span className="stat-val">{uploadResult.orders_unassigned}</span>
+                        <span className="stat-lbl">Unassigned</span>
+                      </div>
+                    )}
+                    <div className="summary-stat">
+                      <span className="stat-val">
+                        {uploadResult.optimization_time_ms.toFixed(0)} ms
+                      </span>
+                      <span className="stat-lbl">Solve Time</span>
+                    </div>
                   </div>
                 </div>
-              )}
-            </div>
 
-            <div className="results-actions">
-              <a
-                href={getQrSheetUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="print-sheet-btn"
-              >
-                🖨️ Print QR Sheet
-              </a>
-              <button className="new-upload-btn" onClick={handleReset}>
-                Upload New File
-              </button>
-            </div>
-          </div>
+                <div className="results-actions">
+                  <a
+                    href={getQrSheetUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="print-sheet-btn"
+                  >
+                    🖨️ Print QR Sheet
+                  </a>
+                  <button className="new-upload-btn" onClick={handleReset}>
+                    Upload New File
+                  </button>
+                </div>
+              </div>
 
-          {/* Vehicle Route Cards */}
-          <div className="route-cards">
+              {/* Vehicle Route Cards */}
+              <div className="route-cards">
             {routes.map((route) => {
               const detail = routeDetails.get(route.vehicle_id);
               const vehicleQr = qrData.get(route.vehicle_id);
@@ -468,7 +634,18 @@ export function UploadRoutes() {
                 </div>
               );
             })}
-          </div>
+              </div>
+            </>
+          )}
+
+          {/* Zero-success: show Upload New File button when no routes */}
+          {(uploadResult.geocoded ?? uploadResult.orders_assigned ?? 0) === 0 && (
+            <div className="import-summary-actions">
+              <button className="new-upload-btn" onClick={handleReset}>
+                Upload New File
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

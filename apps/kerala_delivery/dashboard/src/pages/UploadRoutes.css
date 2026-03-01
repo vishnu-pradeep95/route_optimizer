@@ -246,6 +246,35 @@
   background: #FEF2F2;
 }
 
+/* ---- Import Summary ---- */
+
+.import-summary {
+  margin-bottom: 1.5rem;
+}
+
+.import-summary .summary-counts {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.import-summary .summary-counts span {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.import-summary .failed-count {
+  color: var(--color-error, #dc2626);
+  font-weight: 600;
+}
+
+.import-summary-actions {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 10px;
+}
+
 /* ---- Results Section ---- */
 
 .results-section {
