@@ -27,10 +27,12 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from Secweb import SecWeb
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.middleware.base import BaseHTTPMiddleware
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
@@ -58,6 +60,35 @@ from core.optimizer.vroom_adapter import VroomAdapter
 from geoalchemy2.shape import to_shape
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Custom Middleware: Permissions-Policy
+# =============================================================================
+
+
+class PermissionsPolicyMiddleware(BaseHTTPMiddleware):
+    """Add Permissions-Policy header to all responses.
+
+    Allows geolocation (driver PWA GPS) and denies all other features.
+    SecWeb stable (1.30.x) does not include Permissions-Policy support,
+    so we implement it as a lightweight custom middleware.
+    """
+
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["Permissions-Policy"] = (
+            "geolocation=(self), "
+            "camera=(), "
+            "microphone=(), "
+            "payment=(), "
+            "usb=(), "
+            "magnetometer=(), "
+            "gyroscope=(), "
+            "accelerometer=()"
+        )
+        return response
+
 
 # =============================================================================
 # App setup with lifespan (manages DB engine lifecycle)
@@ -148,6 +179,7 @@ async def lifespan(app: FastAPI):
 #   curl http://localhost:8000/docs  (internal-only, not exposed through Caddy)
 _env_name = os.environ.get("ENVIRONMENT", "development")
 _docs_url = "/docs" if _env_name != "production" else None
+_redoc_url = "/redoc" if _env_name != "production" else None
 _openapi_url = "/openapi.json" if _env_name != "production" else None
 
 app = FastAPI(
@@ -160,6 +192,7 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan,
     docs_url=_docs_url,
+    redoc_url=_redoc_url,
     openapi_url=_openapi_url,
 )
 
@@ -191,18 +224,77 @@ limiter = Limiter(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# =============================================================================
+# Security headers — SecWeb + Permissions-Policy
+# =============================================================================
+# Middleware ordering is CRITICAL. FastAPI/Starlette wraps in reverse
+# registration order (last registered = outermost = processes first).
+# Registration order in code:
+#   1. SecWeb (outermost — every response gets security headers)
+#   2. PermissionsPolicyMiddleware (adds Permissions-Policy header)
+#   3. CORSMiddleware (handles cross-origin requests)
+#   4. License enforcement (@app.middleware("http"), below)
+#   5. Rate limiter (app.state.limiter, above)
+
+_secweb_options = {
+    "csp": {
+        "default-src": ["'self'"],
+        "script-src": ["'self'"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "img-src": [
+            "'self'",
+            "data:",
+            "blob:",
+            "https://*.tile.openstreetmap.org",
+            "https://unpkg.com",
+        ],
+        "connect-src": ["'self'"],
+        "font-src": ["'self'"],
+        "frame-ancestors": ["'none'"],
+    },
+    "xframe": "DENY",
+    "referrer": ["strict-origin-when-cross-origin"],
+    # xcto (X-Content-Type-Options: nosniff) is enabled by default in SecWeb
+}
+
+# HSTS: only in non-development environments to prevent localhost HTTPS lock-in.
+# Caddy already handles HSTS at the proxy level in production, but defense-in-depth
+# at the app layer ensures coverage even if the proxy is misconfigured.
+if _env_name != "development":
+    _secweb_options["hsts"] = {
+        "max-age": 31536000,
+        "includeSubDomains": True,
+        "preload": True,
+    }
+
+SecWeb(app=app, Option=_secweb_options)
+app.add_middleware(PermissionsPolicyMiddleware)
+
 # CORS: restrict origins to known frontends.
 # SECURITY: never use allow_origins=["*"] in production — it lets any website
 # make authenticated requests to this API. Use a whitelist from environment.
 # See: https://owasp.org/www-community/attacks/csrf
-_allowed_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "http://localhost:8000,http://localhost:3000").split(",")
+_cors_origins_raw = os.environ.get("CORS_ALLOWED_ORIGINS", "")
+if _env_name == "development" and not _cors_origins_raw:
+    # Dev default: allow common local origins
+    _allowed_origins = [
+        "http://localhost:8000",
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ]
+else:
+    # Production/staging: explicit whitelist only (empty = no cross-origin allowed)
+    _allowed_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in _allowed_origins],
+    allow_origins=_allowed_origins,
     # PUT and DELETE needed for fleet management CRUD endpoints.
     # Phase 2 added vehicle CRUD — browser preflight checks these.
     allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["*"],
+    # Tighten from ["*"] to explicit list matching actual API headers
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
+    expose_headers=["X-License-Warning", "Retry-After"],
 )
 
 
@@ -267,6 +359,29 @@ async def license_enforcement_middleware(request: Request, call_next):
 # Serve the driver PWA as static files at /driver/
 # Drivers open http://<server>:8000/driver/ on their phone
 _driver_app_dir = pathlib.Path(__file__).parent.parent / "driver_app"
+
+# Service worker MUST be served with Cache-Control: no-cache so the browser
+# always fetches the latest sw.js and can detect CACHE_VERSION bumps.
+# If sw.js is HTTP-cached, the browser won't notice the version change and
+# will keep serving the old app shell indefinitely.
+# This route intercepts /driver/sw.js before the StaticFiles mount handles it.
+from fastapi.responses import Response as _Response
+
+@app.get("/driver/sw.js", include_in_schema=False)
+async def serve_sw_js():
+    """Serve service worker with no-cache headers so version bumps take effect immediately."""
+    sw_path = _driver_app_dir / "sw.js"
+    if not sw_path.exists():
+        raise HTTPException(status_code=404, detail="sw.js not found")
+    return _Response(
+        content=sw_path.read_bytes(),
+        media_type="application/javascript",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
+
 if _driver_app_dir.exists():
     app.mount("/driver", StaticFiles(directory=str(_driver_app_dir), html=True), name="driver_app")
 
