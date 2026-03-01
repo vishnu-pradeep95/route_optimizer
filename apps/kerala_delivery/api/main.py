@@ -699,7 +699,8 @@ async def upload_and_optimize(
                 cylinder_weight_lookup=config.CYLINDER_WEIGHTS,
                 coordinate_bounds=config.INDIA_COORDINATE_BOUNDS,
             )
-            orders = importer.import_orders(preprocessed_path)
+            import_result = importer.import_orders(preprocessed_path)
+            orders = import_result.orders
             # Clean up the intermediate preprocessed file immediately.
             # Also cleaned in finally block in case import_orders() throws.
             os.unlink(preprocessed_path)
@@ -711,7 +712,8 @@ async def upload_and_optimize(
                 cylinder_weight_lookup=config.CYLINDER_WEIGHTS,
                 coordinate_bounds=config.INDIA_COORDINATE_BOUNDS,
             )
-            orders = importer.import_orders(tmp_path)
+            import_result = importer.import_orders(tmp_path)
+            orders = import_result.orders
 
         if not orders:
             raise HTTPException(status_code=400, detail="No valid orders found in file")

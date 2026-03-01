@@ -430,7 +430,8 @@ class TestCsvTimeWindowImport:
             default_cylinder_weight_kg=14.2,
             cylinder_weight_lookup={"domestic": 14.2},
         )
-        orders = importer.import_orders(str(csv_file))
+        import_result = importer.import_orders(str(csv_file))
+        orders = import_result.orders
 
         assert len(orders) == 3
         # First order: 09:00 to 12:00

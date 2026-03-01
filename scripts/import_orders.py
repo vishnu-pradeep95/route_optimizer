@@ -89,8 +89,10 @@ async def import_orders(
         coordinate_bounds=config.INDIA_COORDINATE_BOUNDS,
     )
 
-    orders = importer.import_orders(file_path)
-    logger.info("Parsed %d orders from file", len(orders))
+    import_result = importer.import_orders(file_path)
+    orders = import_result.orders
+    logger.info("Parsed %d orders from file (%d errors, %d warnings)",
+                len(orders), len(import_result.errors), len(import_result.warnings))
 
     if not orders:
         logger.warning("No orders found in file")

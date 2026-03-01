@@ -188,7 +188,8 @@ def main():
         cylinder_weight_lookup=config.CYLINDER_WEIGHTS,
         default_cylinder_weight_kg=config.DEFAULT_CYLINDER_KG,
     )
-    orders = importer.import_orders(args.csv_file)
+    import_result = importer.import_orders(args.csv_file)
+    orders = import_result.orders
     geocoded = [o for o in orders if o.location is not None]
     print(f"  {len(orders)} orders loaded, {len(geocoded)} with coordinates")
 

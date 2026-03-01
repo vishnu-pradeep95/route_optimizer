@@ -356,7 +356,8 @@ class TestFullPipeline:
             cylinder_weight_lookup=config.CYLINDER_WEIGHTS,
             default_cylinder_weight_kg=config.DEFAULT_CYLINDER_KG,
         )
-        orders = importer.import_orders(csv_path)
+        import_result = importer.import_orders(csv_path)
+        orders = import_result.orders
         assert len(orders) == 30, f"Expected 30 orders from sample CSV, got {len(orders)}"
 
         # All orders should have coordinates (we added lat/lon to sample CSV)

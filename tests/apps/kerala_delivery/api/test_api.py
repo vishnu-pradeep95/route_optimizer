@@ -1135,7 +1135,7 @@ class TestUploadValidation:
         """
         with patch("apps.kerala_delivery.api.main._is_cdcms_format", return_value=False), \
              patch("apps.kerala_delivery.api.main.CsvImporter") as mock_importer:
-            mock_importer.return_value.import_orders.return_value = []
+            mock_importer.return_value.import_orders.return_value = MagicMock(orders=[], errors=[], warnings=[])
             resp = client.post(
                 "/api/upload-orders",
                 files={"file": ("orders.csv", b"order_id,address\n1,test", "application/octet-stream")},
@@ -1584,7 +1584,7 @@ class TestDeliveryWindowEnforcement:
              patch("apps.kerala_delivery.api.main._build_fleet") as mock_fleet:
 
             mock_importer = MagicMock()
-            mock_importer.import_orders.return_value = [mock_order]
+            mock_importer.import_orders.return_value = MagicMock(orders=[mock_order], errors=[], warnings=[])
             mock_importer_cls.return_value = mock_importer
 
             mock_optimizer = MagicMock()
@@ -1609,7 +1609,7 @@ class TestDeliveryWindowEnforcement:
                 files={"file": ("orders.csv", b"dummy", "text/csv")},
             )
 
-        # The window should have been widened: 09:00 → 09:30
+        # The window should have been widened: 09:00 -> 09:30
         assert mock_order.delivery_window_end == dt_time(9, 30)
 
     def test_valid_window_is_not_modified(self, client):
@@ -1619,7 +1619,7 @@ class TestDeliveryWindowEnforcement:
         mock_order = MagicMock()
         mock_order.is_geocoded = True
         mock_order.delivery_window_start = dt_time(9, 0)
-        mock_order.delivery_window_end = dt_time(10, 0)  # 60 min — valid
+        mock_order.delivery_window_end = dt_time(10, 0)  # 60 min -- valid
         mock_order.order_id = "ORD-001"
         mock_order.location = MagicMock(
             latitude=11.62, longitude=75.58,
@@ -1637,7 +1637,7 @@ class TestDeliveryWindowEnforcement:
              patch("apps.kerala_delivery.api.main._build_fleet") as mock_fleet:
 
             mock_importer = MagicMock()
-            mock_importer.import_orders.return_value = [mock_order]
+            mock_importer.import_orders.return_value = MagicMock(orders=[mock_order], errors=[], warnings=[])
             mock_importer_cls.return_value = mock_importer
 
             mock_optimizer = MagicMock()

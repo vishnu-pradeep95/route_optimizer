@@ -155,7 +155,8 @@ class TestCsvToOrderPipeline:
             cylinder_weight_lookup={"domestic": 14.2, "commercial": 19.0},
             coordinate_bounds=(6.0, 37.0, 68.0, 97.5),
         )
-        orders = importer.import_orders(str(csv_path))
+        import_result = importer.import_orders(str(csv_path))
+        orders = import_result.orders
 
         assert len(orders) == 5
         assert all(o.is_geocoded for o in orders), "All orders must be geocoded"
@@ -172,7 +173,8 @@ class TestCsvToOrderPipeline:
         importer = CsvImporter(
             cylinder_weight_lookup={"domestic": 14.2},
         )
-        orders = importer.import_orders(str(csv_path))
+        import_result = importer.import_orders(str(csv_path))
+        orders = import_result.orders
 
         for order in orders:
             # Each order has quantity 1-3, weight should be 14.2 × quantity

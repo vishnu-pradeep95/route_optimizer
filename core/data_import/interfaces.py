@@ -3,12 +3,15 @@
 Why an interface?
 Different businesses use different sources: CSV files, Google Sheets,
 ERP APIs, etc. By defining a common interface, the optimizer and API
-don't care where the data came from — they just get a list of Orders.
+don't care where the data came from — they just get structured results.
 """
 
-from typing import Protocol, runtime_checkable
+from __future__ import annotations
 
-from core.models.order import Order
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from core.data_import.csv_importer import ImportResult
 
 
 @runtime_checkable
@@ -20,7 +23,7 @@ class DataImporter(Protocol):
     - (Future) ApiImporter: pulls from a booking system's REST API
     """
 
-    def import_orders(self, source: str) -> list[Order]:
+    def import_orders(self, source: str) -> ImportResult:
         """Import orders from a data source.
 
         Args:
@@ -28,7 +31,7 @@ class DataImporter(Protocol):
                 on the implementation.
 
         Returns:
-            List of Order objects ready for geocoding and optimization.
+            ImportResult with valid orders and structured row-level errors.
             Orders may have location=None if addresses need geocoding.
 
         Raises:
