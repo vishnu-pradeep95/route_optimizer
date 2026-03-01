@@ -31,12 +31,13 @@ import { getVehicleColor, STATUS_COLORS } from "../types";
 import "./RouteMap.css";
 
 /**
- * Kochi, Kerala center coordinates — the hub for our LPG delivery area.
+ * Vatakara, Kozhikode district — center of our LPG delivery area.
  * All deliveries are within ~5 km radius of this point.
+ * Must stay in sync with apps/kerala_delivery/config.py DEPOT_LOCATION.
  */
-const KOCHI_CENTER = {
-  longitude: 76.2846,
-  latitude: 9.9716,
+const VATAKARA_CENTER = {
+  longitude: 75.5796,
+  latitude: 11.6244,
 } as const;
 
 const DEFAULT_ZOOM = 12;
@@ -166,7 +167,7 @@ export function RouteMap({
       <Map
         ref={handleMapRef}
         initialViewState={{
-          ...KOCHI_CENTER,
+          ...VATAKARA_CENTER,
           zoom: DEFAULT_ZOOM,
         }}
         style={{ width: "100%", height: "100%" }}

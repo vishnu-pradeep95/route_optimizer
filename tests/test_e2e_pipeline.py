@@ -40,7 +40,7 @@ from core.optimizer.vroom_adapter import VroomAdapter
 # Fixtures
 # =============================================================================
 
-KOCHI_DEPOT = Location(latitude=11.6244, longitude=75.5796, address_text="Depot")
+VATAKARA_DEPOT = Location(latitude=11.6244, longitude=75.5796, address_text="Depot")
 
 # Realistic delivery locations within 5km of Vatakara depot
 DELIVERY_LOCATIONS = [
@@ -200,7 +200,7 @@ class TestOrderToVroomPipeline:
         ]
         fleet = [
             Vehicle(vehicle_id=f"VEH-{v:02d}", max_weight_kg=446.0,
-                    max_items=30, depot=KOCHI_DEPOT)
+                    max_items=30, depot=VATAKARA_DEPOT)
             for v in range(1, 3)
         ]
 
@@ -233,7 +233,7 @@ class TestOrderToVroomPipeline:
         ]
         fleet = [
             Vehicle(vehicle_id=f"VEH-{v:02d}", max_weight_kg=446.0,
-                    max_items=30, depot=KOCHI_DEPOT)
+                    max_items=30, depot=VATAKARA_DEPOT)
             for v in range(1, 3)
         ]
 

@@ -101,24 +101,24 @@ class TestOrder:
 class TestVehicle:
     """Vehicle model validation."""
 
-    def test_create_ape_xtra(self, kochi_depot):
+    def test_create_ape_xtra(self, vatakara_depot):
         """Create a Piaggio Ape Xtra LDX with Kerala config values."""
         vehicle = Vehicle(
             vehicle_id="VEH-01",
             max_weight_kg=446.0,
             max_items=30,
-            depot=kochi_depot,
+            depot=vatakara_depot,
         )
         assert vehicle.max_weight_kg == 446.0
         assert vehicle.speed_limit_kmh == 40.0  # default
 
-    def test_weight_must_be_positive(self, kochi_depot):
+    def test_weight_must_be_positive(self, vatakara_depot):
         """Vehicle weight capacity must be positive."""
         with pytest.raises(ValidationError):
             Vehicle(
                 vehicle_id="BAD",
                 max_weight_kg=0,
-                depot=kochi_depot,
+                depot=vatakara_depot,
             )
 
 

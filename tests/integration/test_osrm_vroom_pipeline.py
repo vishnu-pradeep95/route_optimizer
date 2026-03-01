@@ -89,7 +89,7 @@ def vroom():
 
 
 @pytest.fixture
-def kochi_depot():
+def vatakara_depot():
     """Depot location in central Vatakara for integration tests.
 
     Why not use config.DEPOT_LOCATION?
@@ -143,7 +143,7 @@ def sample_orders_for_optimization(kochi_delivery_points):
 
 
 @pytest.fixture
-def fleet_3_vehicles(kochi_depot):
+def fleet_3_vehicles(vatakara_depot):
     """Fleet of 3 Ape Xtra LDX vehicles."""
     return [
         Vehicle(
@@ -151,7 +151,7 @@ def fleet_3_vehicles(kochi_depot):
             driver_name=f"Driver {i}",
             max_weight_kg=config.VEHICLE_MAX_WEIGHT_KG,
             max_items=config.VEHICLE_MAX_CYLINDERS,
-            depot=kochi_depot,
+            depot=vatakara_depot,
         )
         for i in range(1, 4)
     ]
@@ -173,14 +173,14 @@ class TestOsrmIntegration:
     """
 
     @requires_osrm
-    def test_osrm_returns_travel_time_for_kochi(self, osrm, kochi_depot):
+    def test_osrm_returns_travel_time_for_vatakara(self, osrm, vatakara_depot):
         """Basic smoke test: OSRM should route between known Vatakara locations.
 
         Depot (Memunda) → Vatakara Bus Stand is ~3-5 km by road.
         Expected: 5-20 min drive (with multiplier), 2-8 km.
         """
         edappally = Location(latitude=11.5950, longitude=75.5700, address_text="Vatakara Bus Stand")
-        result = osrm.get_travel_time(kochi_depot, edappally)
+        result = osrm.get_travel_time(vatakara_depot, edappally)
 
         # Sanity checks — if these fail, OSRM probably has wrong data
         assert result.duration_seconds > 0, "Duration must be positive"
@@ -226,7 +226,7 @@ class TestOsrmIntegration:
         assert ratio < 2.0, f"A→B / B→A ratio {ratio:.2f} too high — possible data issue"
 
     @requires_osrm
-    def test_farther_points_take_longer(self, osrm, kochi_depot):
+    def test_farther_points_take_longer(self, osrm, vatakara_depot):
         """Closer destinations should have shorter travel times.
 
         Vatakara Bus Stand (~3km from depot) should be faster than Thalassery (~8km).
@@ -234,8 +234,8 @@ class TestOsrmIntegration:
         edappally = Location(latitude=11.5950, longitude=75.5700, address_text="Vatakara Bus Stand")
         tripunithura = Location(latitude=11.5650, longitude=75.6100, address_text="Thalassery")
 
-        to_edappally = osrm.get_travel_time(kochi_depot, edappally)
-        to_tripunithura = osrm.get_travel_time(kochi_depot, tripunithura)
+        to_edappally = osrm.get_travel_time(vatakara_depot, edappally)
+        to_tripunithura = osrm.get_travel_time(vatakara_depot, tripunithura)
 
         assert to_tripunithura.duration_seconds > to_edappally.duration_seconds, \
             "Thalassery (farther) should take longer than Vatakara Bus Stand (closer)"
@@ -338,7 +338,7 @@ class TestFullPipeline:
     """
 
     @requires_all
-    def test_csv_to_optimized_routes(self, kochi_depot):
+    def test_csv_to_optimized_routes(self, vatakara_depot):
         """Full pipeline: load sample CSV → import orders → run optimizer → verify routes.
 
         This is the core Phase 1 validation: does the system produce
@@ -371,7 +371,7 @@ class TestFullPipeline:
                 driver_name=f"Driver {i}",
                 max_weight_kg=config.VEHICLE_MAX_WEIGHT_KG,
                 max_items=config.VEHICLE_MAX_CYLINDERS,
-                depot=kochi_depot,
+                depot=vatakara_depot,
             )
             for i in range(1, config.NUM_VEHICLES + 1)
         ]

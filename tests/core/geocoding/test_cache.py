@@ -51,7 +51,7 @@ def mock_session():
 
 
 @pytest.fixture
-def kochi_location():
+def vatakara_location():
     """A geocoded location in central Vatakara for cache test data."""
     return Location(
         latitude=11.5950,
@@ -62,7 +62,7 @@ def kochi_location():
 
 
 @pytest.fixture
-def mock_upstream(kochi_location):
+def mock_upstream(vatakara_location):
     """Mock upstream geocoder (e.g., GoogleGeocoder) that always succeeds.
 
     Returns a GeocodingResult with the Vatakara location for any address.
@@ -70,7 +70,7 @@ def mock_upstream(kochi_location):
     """
     upstream = MagicMock()
     upstream.geocode.return_value = GeocodingResult(
-        location=kochi_location,
+        location=vatakara_location,
         confidence=0.95,
         formatted_address="Vatakara Bus Stand, Vatakara, Kerala 682024",
     )
@@ -109,7 +109,7 @@ class TestCacheHit:
 
     @pytest.mark.asyncio
     async def test_returns_cached_location(
-        self, cached_geocoder, mock_upstream, kochi_location
+        self, cached_geocoder, mock_upstream, vatakara_location
     ):
         """A cached address should return the PostGIS result, not call Google.
 
@@ -119,7 +119,7 @@ class TestCacheHit:
         with patch(
             PATCH_GET_CACHED,
             new_callable=AsyncMock,
-            return_value=kochi_location,
+            return_value=vatakara_location,
         ):
             result = await cached_geocoder.geocode("Vatakara Bus Stand, Vatakara")
 
@@ -130,7 +130,7 @@ class TestCacheHit:
         mock_upstream.geocode.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_increments_hit_counter(self, cached_geocoder, kochi_location):
+    async def test_increments_hit_counter(self, cached_geocoder, vatakara_location):
         """Cache hit should increment the stats.hits counter.
 
         We track hits to monitor cache value over time — if hit rate is
@@ -139,7 +139,7 @@ class TestCacheHit:
         with patch(
             PATCH_GET_CACHED,
             new_callable=AsyncMock,
-            return_value=kochi_location,
+            return_value=vatakara_location,
         ):
             await cached_geocoder.geocode("Vatakara Bus Stand, Vatakara")
 
@@ -203,7 +203,7 @@ class TestCacheMiss:
         mock_upstream.geocode.assert_called_once_with("New Address, Vatakara")
 
     @pytest.mark.asyncio
-    async def test_saves_result_to_cache(self, cached_geocoder, kochi_location):
+    async def test_saves_result_to_cache(self, cached_geocoder, vatakara_location):
         """Successful upstream result should be persisted to PostGIS cache.
 
         After this, the same address will be a cache hit next time.
@@ -223,7 +223,7 @@ class TestCacheMiss:
         assert call_kwargs["source"] == "google"
         assert call_kwargs["confidence"] == 0.95
         assert call_kwargs["address_raw"] == "New Address, Vatakara"
-        assert call_kwargs["location"] == kochi_location
+        assert call_kwargs["location"] == vatakara_location
 
     @pytest.mark.asyncio
     async def test_increments_miss_counter(self, cached_geocoder):
@@ -419,14 +419,14 @@ class TestStatsAndBatch:
         assert all(r.success for r in results)
 
     @pytest.mark.asyncio
-    async def test_batch_tracks_cumulative_stats(self, cached_geocoder, kochi_location):
+    async def test_batch_tracks_cumulative_stats(self, cached_geocoder, vatakara_location):
         """Batch geocoding should accumulate stats across all addresses.
 
         After a batch of 3 where 1 is cached and 2 are misses,
         stats should show hits=1, misses=2.
         """
         # First call: cache hit, second & third: cache miss
-        get_mock = AsyncMock(side_effect=[kochi_location, None, None])
+        get_mock = AsyncMock(side_effect=[vatakara_location, None, None])
         with patch(
             PATCH_GET_CACHED,
             new=get_mock,

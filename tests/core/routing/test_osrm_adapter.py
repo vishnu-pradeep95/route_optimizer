@@ -22,7 +22,7 @@ from core.routing.osrm_adapter import OsrmAdapter
 # Fixtures
 # =============================================================================
 
-KOCHI_DEPOT = Location(latitude=11.6244, longitude=75.5796, address_text="Depot")
+VATAKARA_DEPOT = Location(latitude=11.6244, longitude=75.5796, address_text="Depot")
 EDAPPALLY = Location(latitude=11.5950, longitude=75.5700, address_text="Vatakara Bus Stand")
 MARINE_DRIVE = Location(latitude=11.6350, longitude=75.5900, address_text="Chorode")
 
@@ -107,7 +107,7 @@ class TestOsrmAdapter:
                 json=lambda: osrm_route_response,
                 raise_for_status=lambda: None,
             )
-            travel_time = osrm.get_travel_time(KOCHI_DEPOT, EDAPPALLY)
+            travel_time = osrm.get_travel_time(VATAKARA_DEPOT, EDAPPALLY)
 
         # 300s × 1.3 = 390s
         assert travel_time.duration_seconds == pytest.approx(390.0)
@@ -124,7 +124,7 @@ class TestOsrmAdapter:
                 json=lambda: osrm_route_response,
                 raise_for_status=lambda: None,
             )
-            result = osrm.get_travel_time(KOCHI_DEPOT, EDAPPALLY)
+            result = osrm.get_travel_time(VATAKARA_DEPOT, EDAPPALLY)
 
         assert isinstance(result, TravelTime)
         # Check convenience properties work
@@ -139,7 +139,7 @@ class TestOsrmAdapter:
         The optimizer uses these durations to plan routes. If they're
         too optimistic, drivers will be late at every stop.
         """
-        locations = [KOCHI_DEPOT, EDAPPALLY, MARINE_DRIVE]
+        locations = [VATAKARA_DEPOT, EDAPPALLY, MARINE_DRIVE]
         with patch("core.routing.osrm_adapter.httpx.get") as mock_get:
             mock_get.return_value = MagicMock(
                 status_code=200,
@@ -159,7 +159,7 @@ class TestOsrmAdapter:
         self, osrm, osrm_table_response
     ):
         """get_distance_matrix should return a DistanceMatrix Pydantic model."""
-        locations = [KOCHI_DEPOT, EDAPPALLY, MARINE_DRIVE]
+        locations = [VATAKARA_DEPOT, EDAPPALLY, MARINE_DRIVE]
         with patch("core.routing.osrm_adapter.httpx.get") as mock_get:
             mock_get.return_value = MagicMock(
                 status_code=200,
@@ -176,7 +176,7 @@ class TestOsrmAdapter:
     def test_distance_matrix_rejects_single_location(self, osrm):
         """Matrix requires at least 2 locations — 1×1 makes no sense."""
         with pytest.raises(ValueError, match="at least 2 locations"):
-            osrm.get_distance_matrix([KOCHI_DEPOT])
+            osrm.get_distance_matrix([VATAKARA_DEPOT])
 
     def test_osrm_error_raises_runtime_error(self, osrm):
         """OSRM errors (bad coords, server down) should raise RuntimeError."""
@@ -188,7 +188,7 @@ class TestOsrmAdapter:
                 raise_for_status=lambda: None,
             )
             with pytest.raises(RuntimeError, match="OSRM"):
-                osrm.get_travel_time(KOCHI_DEPOT, EDAPPALLY)
+                osrm.get_travel_time(VATAKARA_DEPOT, EDAPPALLY)
 
     def test_coordinate_order_is_lon_lat(self, osrm, osrm_route_response):
         """OSRM uses lon,lat (not lat,lon). Verify we pass coords correctly.
@@ -202,7 +202,7 @@ class TestOsrmAdapter:
                 json=lambda: osrm_route_response,
                 raise_for_status=lambda: None,
             )
-            osrm.get_travel_time(KOCHI_DEPOT, EDAPPALLY)
+            osrm.get_travel_time(VATAKARA_DEPOT, EDAPPALLY)
 
         # Check the URL that was called — should be lon,lat;lon,lat
         call_url = mock_get.call_args[0][0]
