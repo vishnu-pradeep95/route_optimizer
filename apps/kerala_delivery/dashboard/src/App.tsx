@@ -1,12 +1,18 @@
 /**
  * App — Root component for the Kerala LPG Delivery Ops Dashboard.
  *
- * Layout: fixed header + sidebar nav + main content area.
+ * Layout: collapsible left sidebar (64px → 220px on hover) + main content area.
+ *
+ * Why a left sidebar instead of a horizontal header nav:
+ * - Better horizontal space utilization for map-heavy pages (LiveMap)
+ * - Scalable to more nav items without cramping the header
+ * - Industry-standard for ops dashboards / command centers
+ * - Sidebar collapses to icons-only on narrow focus, expands on hover
  *
  * Why client-side "routing" with state instead of react-router:
- * We only have 2 pages — adding a router library for 2 pages is overkill.
+ * We only have 4 pages — adding a router library is overkill.
  * A simple state toggle is easier to understand and has zero bundle cost.
- * If the app grows beyond 3-4 pages, migrate to react-router.
+ * If the app grows beyond 5-6 pages, migrate to react-router.
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -27,17 +33,32 @@ import "./App.css";
  */
 type Page = "upload" | "live-map" | "run-history" | "fleet";
 
+/**
+ * Navigation items configuration.
+ *
+ * Why a data-driven nav instead of hardcoded JSX:
+ * - Single source of truth for page labels, icons, and order
+ * - Easy to add/remove pages without touching layout code
+ * - Keeps the render function clean and scannable
+ */
+const NAV_ITEMS: { page: Page; icon: string; label: string }[] = [
+  { page: "upload", icon: "📤", label: "Upload & Routes" },
+  { page: "live-map", icon: "🗺️", label: "Live Map" },
+  { page: "run-history", icon: "📋", label: "Run History" },
+  { page: "fleet", icon: "🚛", label: "Fleet" },
+];
+
 function App() {
   const [activePage, setActivePage] = useState<Page>("upload");
   const [apiHealthy, setApiHealthy] = useState<boolean | null>(null);
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
 
   /**
    * Check API health on mount and every 30 seconds.
    *
    * Why poll health instead of relying on data fetch errors:
-   * A dedicated health indicator in the header gives operators
-   * immediate visibility into backend status without interpreting
-   * ambiguous error messages.
+   * A dedicated health indicator gives operators immediate visibility
+   * into backend status without interpreting ambiguous error messages.
    */
   const checkHealth = useCallback(async () => {
     try {
@@ -56,63 +77,57 @@ function App() {
 
   return (
     <div className="app">
-      {/* Header — always visible */}
-      <header className="app-header">
-        <div className="app-title">
-          <h1>Kerala LPG Delivery</h1>
-          <span className="app-subtitle">Ops Dashboard</span>
+      {/* Sidebar — collapses to 64px icons, expands to 220px on hover */}
+      <aside
+        className={`app-sidebar ${sidebarExpanded ? "expanded" : ""}`}
+        onMouseEnter={() => setSidebarExpanded(true)}
+        onMouseLeave={() => setSidebarExpanded(false)}
+      >
+        {/* Brand — logo area at top of sidebar */}
+        <div className="sidebar-brand">
+          <span className="sidebar-brand-icon">⛽</span>
+          <span className="sidebar-brand-text">Kerala LPG</span>
         </div>
 
-        {/* Navigation tabs */}
-        <nav className="app-nav">
-          <button
-            className={`nav-tab ${activePage === "upload" ? "active" : ""}`}
-            onClick={() => setActivePage("upload")}
-          >
-            📤 Upload & Routes
-          </button>
-          <button
-            className={`nav-tab ${activePage === "live-map" ? "active" : ""}`}
-            onClick={() => setActivePage("live-map")}
-          >
-            🗺 Live Map
-          </button>
-          <button
-            className={`nav-tab ${activePage === "run-history" ? "active" : ""}`}
-            onClick={() => setActivePage("run-history")}
-          >
-            📋 Run History
-          </button>
-          <button
-            className={`nav-tab ${activePage === "fleet" ? "active" : ""}`}
-            onClick={() => setActivePage("fleet")}
-          >
-            🚛 Fleet
-          </button>
+        {/* Navigation items */}
+        <nav className="sidebar-nav">
+          {NAV_ITEMS.map(({ page, icon, label }) => (
+            <button
+              key={page}
+              className={`sidebar-nav-item ${activePage === page ? "active" : ""}`}
+              onClick={() => setActivePage(page)}
+              title={label}
+            >
+              <span className="sidebar-nav-icon">{icon}</span>
+              <span className="sidebar-nav-label">{label}</span>
+            </button>
+          ))}
         </nav>
 
-        {/* Health status indicator */}
-        <div className="app-health">
-          <span
-            className={`health-dot ${
-              apiHealthy === null
-                ? "checking"
+        {/* Health status indicator — pinned to bottom of sidebar */}
+        <div className="sidebar-footer">
+          <div className="sidebar-health">
+            <span
+              className={`health-dot ${
+                apiHealthy === null
+                  ? "checking"
+                  : apiHealthy
+                    ? "healthy"
+                    : "unhealthy"
+              }`}
+            />
+            <span className="sidebar-health-label">
+              {apiHealthy === null
+                ? "Checking..."
                 : apiHealthy
-                  ? "healthy"
-                  : "unhealthy"
-            }`}
-          />
-          <span className="health-label">
-            {apiHealthy === null
-              ? "Checking..."
-              : apiHealthy
-                ? "API Connected"
-                : "API Offline"}
-          </span>
+                  ? "Connected"
+                  : "Offline"}
+            </span>
+          </div>
         </div>
-      </header>
+      </aside>
 
-      {/* Main content — switches based on active page */}
+      {/* Main content — fills remaining space to the right of sidebar */}
       <main className="app-main">
         {activePage === "upload" && <UploadRoutes />}
         {activePage === "live-map" && <LiveMap />}

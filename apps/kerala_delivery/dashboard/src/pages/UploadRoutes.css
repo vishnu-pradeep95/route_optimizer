@@ -28,51 +28,51 @@
 .upload-header h2 {
   font-size: 22px;
   font-weight: 700;
-  color: #1C1917;
+  color: var(--color-text-primary);
   margin-bottom: 6px;
 }
 
 .upload-subtitle {
   font-size: 14px;
-  color: #78716C;
+  color: var(--color-text-muted);
 }
 
 /* ---- Drop Zone ---- */
 
 .drop-zone {
-  border: 2px dashed #A8A29E;
-  border-radius: 12px;
+  border: 2px dashed var(--color-text-muted);
+  border-radius: var(--radius-lg);
   padding: 48px 24px;
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
-  background: #FAFAF9;
+  background: var(--color-surface);
   position: relative;
 }
 
 .drop-zone:hover {
-  border-color: #D97706;
-  background: #FFFBEB;
+  border-color: var(--color-accent);
+  background: var(--color-accent-bg);
 }
 
 .drop-zone.drag-over {
-  border-color: #D97706;
+  border-color: var(--color-accent);
   background: #FEF3C7;
   border-style: solid;
   transform: scale(1.01);
 }
 
 .drop-zone.has-file {
-  border-color: #16A34A;
+  border-color: var(--color-success);
   border-style: solid;
   background: #F0FDF4;
   padding: 24px;
 }
 
 .drop-zone.uploading {
-  border-color: #D97706;
+  border-color: var(--color-accent);
   border-style: solid;
-  background: #FFFBEB;
+  background: var(--color-accent-bg);
   cursor: default;
   pointer-events: none;
 }
@@ -90,23 +90,23 @@
 }
 
 .drop-icon {
-  color: #A8A29E;
+  color: var(--color-text-muted);
   transition: color 0.2s;
 }
 
 .drop-zone:hover .drop-icon {
-  color: #D97706;
+  color: var(--color-accent);
 }
 
 .drop-text {
   font-size: 16px;
   font-weight: 600;
-  color: #44403C;
+  color: var(--color-text-secondary);
 }
 
 .drop-hint {
   font-size: 12px;
-  color: #A8A29E;
+  color: var(--color-text-muted);
 }
 
 /* File Selected */
@@ -130,23 +130,23 @@
 .file-name {
   font-size: 15px;
   font-weight: 600;
-  color: #1C1917;
+  color: var(--color-text-primary);
   word-break: break-all;
 }
 
 .file-size {
   font-size: 12px;
-  color: #78716C;
+  color: var(--color-text-muted);
 }
 
 .change-file-btn {
   padding: 6px 14px;
   font-size: 13px;
   font-weight: 600;
-  color: #78716C;
-  background: white;
-  border: 1px solid #D6D3D1;
-  border-radius: 6px;
+  color: var(--color-text-muted);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -168,7 +168,7 @@
   width: 36px;
   height: 36px;
   border: 3px solid #FDE68A;
-  border-top-color: #D97706;
+  border-top-color: var(--color-accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -191,16 +191,16 @@
   padding: 14px 24px;
   font-size: 16px;
   font-weight: 700;
-  color: white;
-  background: #D97706;
+  color: #FFFFFF;
+  background: var(--color-accent);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .upload-btn:hover {
-  background: #B45309;
+  background: var(--color-accent-hover);
 }
 
 .upload-btn:active {
@@ -214,9 +214,9 @@
   gap: 10px;
   margin-top: 16px;
   padding: 12px 16px;
-  background: #FEF2F2;
+  background: var(--color-danger-bg);
   border: 1px solid #FECACA;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .error-icon {
@@ -263,7 +263,7 @@
   align-items: flex-start;
   margin-bottom: 24px;
   padding-bottom: 16px;
-  border-bottom: 2px solid #E7E5E4;
+  border-bottom: 2px solid var(--color-border);
   flex-wrap: wrap;
   gap: 16px;
 }
@@ -271,7 +271,7 @@
 .results-summary h2 {
   font-size: 22px;
   font-weight: 700;
-  color: #1C1917;
+  color: var(--color-text-primary);
   margin-bottom: 10px;
 }
 
@@ -295,13 +295,13 @@
 .stat-val {
   font-size: 22px;
   font-weight: 800;
-  color: #1C1917;
-  font-family: 'Courier New', monospace;
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
 }
 
 .stat-lbl {
   font-size: 11px;
-  color: #78716C;
+  color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -319,34 +319,34 @@
   padding: 10px 20px;
   font-size: 14px;
   font-weight: 700;
-  color: white;
-  background: #D97706;
+  color: #FFFFFF;
+  background: var(--color-accent);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   text-decoration: none;
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .print-sheet-btn:hover {
-  background: #B45309;
+  background: var(--color-accent-hover);
 }
 
 .new-upload-btn {
   padding: 10px 20px;
   font-size: 14px;
   font-weight: 600;
-  color: #44403C;
-  background: white;
-  border: 1px solid #D6D3D1;
-  border-radius: 8px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .new-upload-btn:hover {
-  border-color: #78716C;
-  background: #F5F5F4;
+  border-color: var(--color-text-muted);
+  background: var(--color-surface);
 }
 
 /* ---- Route Cards ---- */
@@ -358,9 +358,9 @@
 }
 
 .route-card {
-  border: 1px solid #E7E5E4;
-  border-radius: 8px;
-  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-card);
   overflow: hidden;
   transition: box-shadow 0.15s;
 }
@@ -370,7 +370,7 @@
 }
 
 .route-card.expanded {
-  border-color: #D97706;
+  border-color: var(--color-accent);
   box-shadow: 0 2px 12px rgba(217, 119, 6, 0.1);
 }
 
@@ -384,7 +384,7 @@
 }
 
 .route-card-header:hover {
-  background: #FAFAF9;
+  background: var(--color-surface);
 }
 
 .route-card-title {
@@ -399,15 +399,15 @@
   padding: 3px 10px;
   font-size: 13px;
   font-weight: 800;
-  font-family: 'Courier New', monospace;
+  font-family: var(--font-mono);
   color: #92400E;
   background: #FEF3C7;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .driver-label {
   font-size: 14px;
-  color: #44403C;
+  color: var(--color-text-secondary);
   font-weight: 500;
 }
 
@@ -420,18 +420,18 @@
 
 .meta-item {
   font-size: 13px;
-  color: #78716C;
+  color: var(--color-text-muted);
   white-space: nowrap;
 }
 
 .meta-item strong {
-  color: #1C1917;
+  color: var(--color-text-primary);
   font-weight: 700;
 }
 
 .expand-arrow {
   font-size: 12px;
-  color: #A8A29E;
+  color: var(--color-text-muted);
   transition: transform 0.2s;
   flex-shrink: 0;
 }
@@ -455,19 +455,19 @@
 /* QR Section */
 .qr-section {
   padding: 16px 0;
-  border-top: 1px solid #F5F5F4;
+  border-top: 1px solid var(--color-surface);
 }
 
 .qr-heading {
   font-size: 15px;
   font-weight: 700;
-  color: #1C1917;
+  color: var(--color-text-primary);
   margin-bottom: 6px;
 }
 
 .qr-note {
   font-size: 12px;
-  color: #78716C;
+  color: var(--color-text-muted);
   margin-bottom: 12px;
 }
 
@@ -483,15 +483,15 @@
   align-items: center;
   gap: 8px;
   padding: 12px;
-  border: 1px solid #E7E5E4;
-  border-radius: 8px;
-  background: #FAFAF9;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
 }
 
 .qr-segment-label {
   font-size: 12px;
   font-weight: 700;
-  color: #44403C;
+  color: var(--color-text-secondary);
 }
 
 .qr-image {
@@ -510,25 +510,25 @@
 .maps-link {
   font-size: 13px;
   font-weight: 600;
-  color: #D97706;
+  color: var(--color-accent);
   text-decoration: none;
 }
 
 .maps-link:hover {
   text-decoration: underline;
-  color: #B45309;
+  color: var(--color-accent-hover);
 }
 
 /* Stops Section */
 .stops-section {
   padding: 16px 0 0;
-  border-top: 1px solid #F5F5F4;
+  border-top: 1px solid var(--color-surface);
 }
 
 .stops-heading {
   font-size: 15px;
   font-weight: 700;
-  color: #1C1917;
+  color: var(--color-text-primary);
   margin-bottom: 10px;
 }
 
@@ -543,12 +543,12 @@
   gap: 12px;
   align-items: flex-start;
   padding: 8px 10px;
-  border-radius: 6px;
-  background: #FAFAF9;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
 }
 
 .stop-row:nth-child(even) {
-  background: #F5F5F4;
+  background: var(--color-surface-alt);
 }
 
 .stop-seq {
@@ -559,8 +559,8 @@
   height: 28px;
   font-size: 13px;
   font-weight: 800;
-  color: white;
-  background: #44403C;
+  color: #FFFFFF;
+  background: var(--color-text-secondary);
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -574,13 +574,13 @@
 
 .stop-address {
   font-size: 14px;
-  color: #1C1917;
+  color: var(--color-text-primary);
   word-break: break-word;
 }
 
 .stop-meta {
   font-size: 12px;
-  color: #A8A29E;
+  color: var(--color-text-muted);
 }
 
 /* ---- Responsive ---- */

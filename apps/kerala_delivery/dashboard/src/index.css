@@ -1,13 +1,15 @@
 /*
  * Global styles for the Kerala LPG Delivery Ops Dashboard.
  *
- * Why we reset margins/padding globally:
- * The dashboard fills the full viewport. Default browser margins
- * would cause scrollbars and misaligned layouts.
+ * Design system: Industrial-utilitarian meets logistics precision.
+ * Typography: DM Sans (headings/UI) + IBM Plex Mono (data/numbers).
+ * Palette: Dark charcoal sidebar, warm amber accent, cool slate content.
  *
- * Why system-ui font stack:
- * Renders with the platform's native font (SF Pro on Mac, Segoe on Windows,
- * Roboto on Android) — snappy, no font download, familiar to the user.
+ * Why DM Sans + IBM Plex Mono instead of Inter/system-ui?
+ * - DM Sans has a geometric, purpose-built feel appropriate for a command center
+ * - IBM Plex Mono gives data and numbers a technical, high-precision look
+ * - Together they create a distinctive logistics identity, not generic SaaS
+ * See: PLAN.md Phase A design direction
  */
 
 *,
@@ -17,27 +19,86 @@
 }
 
 :root {
-  /* Color tokens — easy to adjust for theming later */
-  --color-bg: #f1f5f9;
-  --color-text: #1e293b;
-  --color-text-muted: #64748b;
-  --color-border: #e2e8f0;
-  --color-primary: #3b82f6;
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
-  --color-danger: #ef4444;
+  /* ── Surface colors ─────────────────────────────────────────── */
+  --color-surface-dark: #1C1917;   /* Stone 900 — sidebar, header */
+  --color-surface: #FAFAF9;        /* Stone 50 — content background */
+  --color-surface-alt: #F5F5F4;    /* Stone 100 — alternating rows */
+  --color-surface-card: #FFFFFF;   /* Pure white — card backgrounds */
 
-  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
-    Helvetica, Arial, sans-serif;
+  /* ── Accent colors ──────────────────────────────────────────── */
+  --color-accent: #D97706;         /* Amber 600 — primary accent */
+  --color-accent-hover: #B45309;   /* Amber 700 — hover state */
+  --color-accent-light: #FDE68A;   /* Amber 200 — subtle highlights */
+  --color-accent-bg: rgba(217, 119, 6, 0.1); /* Amber transparent */
+
+  /* ── Text colors ────────────────────────────────────────────── */
+  --color-text-primary: #1C1917;   /* Stone 900 */
+  --color-text-secondary: #57534E; /* Stone 600 */
+  --color-text-muted: #78716C;     /* Stone 500 */
+  --color-text-inverse: #FAFAF9;   /* Stone 50 — on dark backgrounds */
+
+  /* ── Status colors ──────────────────────────────────────────── */
+  --color-success: #16A34A;        /* Green 600 */
+  --color-success-bg: rgba(22, 163, 74, 0.1);
+  --color-danger: #DC2626;         /* Red 600 */
+  --color-danger-bg: rgba(220, 38, 38, 0.1);
+  --color-info: #0284C7;           /* Sky 600 */
+  --color-info-bg: rgba(2, 132, 199, 0.1);
+  --color-warning: #D97706;        /* Amber 600 (same as accent) */
+  --color-warning-bg: rgba(217, 119, 6, 0.1);
+
+  /* ── Border colors ──────────────────────────────────────────── */
+  --color-border: #E7E5E4;         /* Stone 200 */
+  --color-border-strong: #D6D3D1;  /* Stone 300 */
+
+  /* ── Legacy aliases (keep for components not yet migrated) ─── */
+  --color-bg: var(--color-surface);
+  --color-text: var(--color-text-primary);
+  --color-primary: var(--color-accent);
+
+  /* ── Typography ─────────────────────────────────────────────── */
+  --font-heading: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-body: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  font-family: var(--font-body);
   line-height: 1.5;
   font-weight: 400;
-  color: var(--color-text);
-  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  background-color: var(--color-surface);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* ── Spacing scale ──────────────────────────────────────────── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* ── Radii ──────────────────────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* ── Shadows ────────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.06);
+  --shadow-md: 0 2px 8px rgba(28, 25, 23, 0.08);
+  --shadow-lg: 0 4px 16px rgba(28, 25, 23, 0.1);
+
+  /* ── Sidebar dimensions ─────────────────────────────────────── */
+  --sidebar-collapsed: 64px;
+  --sidebar-expanded: 220px;
+
+  /* ── Transitions ────────────────────────────────────────────── */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 html,

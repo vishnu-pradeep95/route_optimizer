@@ -1,16 +1,19 @@
 /* VehicleList — Sidebar panel for vehicle selection and stats.
  *
- * Why a fixed-width sidebar instead of a responsive collapsible panel:
- * This is an ops dashboard used on desktop monitors. Fixed width
- * gives consistent layout and avoids complex toggle UI.
+ * Design: Clean card-style vehicle items with amber accent on selection,
+ * mini progress bars (amber in-progress, green 100%), and efficiency indicators.
+ *
+ * Why CSS custom properties (design tokens) for all colors:
+ * Ensures consistency with the global design system and makes
+ * future theme changes trivial — change one variable, all components update.
  */
 
 .vehicle-list {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #ffffff;
-  border-right: 1px solid #e2e8f0;
+  background: var(--color-surface-card);
+  border-right: 1px solid var(--color-border);
   overflow: hidden;
 }
 
@@ -18,65 +21,67 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
 }
 
 .vehicle-list-header h3 {
   margin: 0;
-  font-size: 14px;
+  font-family: var(--font-heading);
+  font-size: 13px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-text-primary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .clear-selection {
   background: none;
-  border: 1px solid #cbd5e1;
-  border-radius: 4px;
-  padding: 4px 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
   font-size: 11px;
-  color: #64748b;
+  font-family: var(--font-body);
+  color: var(--color-text-muted);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .clear-selection:hover {
-  background: #f1f5f9;
-  color: #1e293b;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
 }
 
 .vehicle-list-items {
   flex: 1;
   overflow-y: auto;
-  /* Custom scrollbar for a cleaner look */
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-color: var(--color-border-strong) transparent;
 }
 
 .vehicle-item {
-  padding: 12px 16px;
-  border-bottom: 1px solid #f1f5f9;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-surface-alt);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
+  border-left: 3px solid transparent;
 }
 
 .vehicle-item:hover {
-  background: #f8fafc;
+  background: var(--color-surface);
 }
 
+/* Selected vehicle: amber left border accent */
 .vehicle-item.selected {
-  background: #eff6ff;
-  border-left: 3px solid #3b82f6;
-  padding-left: 13px; /* Compensate for border */
+  background: var(--color-accent-bg);
+  border-left-color: var(--color-accent);
 }
 
 .vehicle-item-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .vehicle-color-dot {
@@ -87,74 +92,90 @@
 }
 
 .vehicle-id {
+  font-family: var(--font-heading);
   font-weight: 600;
   font-size: 13px;
-  color: #1e293b;
+  color: var(--color-text-primary);
 }
 
+/* Speed alert badge — pulses amber/red for urgency */
 .speed-alert-badge {
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   margin-left: auto;
-  animation: pulse 1.5s infinite;
+  color: var(--color-danger);
+  animation: vehicle-pulse 1.5s infinite;
 }
 
-@keyframes pulse {
+@keyframes vehicle-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
 
 .vehicle-driver {
   font-size: 12px;
-  color: #64748b;
+  color: var(--color-text-muted);
   margin-top: 2px;
-  padding-left: 18px; /* Align with text after dot */
+  padding-left: 18px;
 }
 
 .vehicle-stats {
   display: flex;
-  gap: 12px;
-  margin-top: 8px;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
   padding-left: 18px;
 }
 
 .vehicle-stat {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
+  font-family: var(--font-mono);
   font-size: 11px;
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .stat-icon {
   font-size: 12px;
 }
 
-.vehicle-eta {
-  font-size: 11px;
-  color: #64748b;
-  margin-top: 6px;
+/* Route efficiency indicator — km per delivery */
+.vehicle-efficiency {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
   padding-left: 18px;
-  font-style: italic;
 }
 
+/* ETA range — never a countdown (Kerala MVD directive) */
+.vehicle-eta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: var(--space-2);
+  padding-left: 18px;
+}
+
+/* Progress bar: amber = in-progress, green = 100% complete */
 .vehicle-progress {
-  height: 3px;
-  background: #e2e8f0;
+  height: 4px;
+  background: var(--color-border);
   border-radius: 2px;
-  margin-top: 8px;
+  margin-top: var(--space-2);
   overflow: hidden;
 }
 
 .vehicle-progress-bar {
   height: 100%;
   border-radius: 2px;
-  transition: width 0.3s ease;
+  transition: width 0.3s ease, background-color 0.3s ease;
 }
 
 .vehicle-list-empty {
-  padding: 24px 16px;
+  padding: var(--space-6) var(--space-4);
   text-align: center;
-  color: #94a3b8;
+  color: var(--color-text-muted);
   font-size: 13px;
 }

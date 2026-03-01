@@ -33,6 +33,12 @@ const APP_SHELL = [
     // Leaflet library — pinned version to avoid CDN dependency at runtime
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+    // Google Fonts CSS — pre-cache the stylesheet so font-face declarations
+    // are available offline. The actual .woff2 files are fetched lazily and
+    // cached by the network-first strategy below. If fonts fail to load,
+    // the CSS font stack falls back to system fonts (DM Sans → system sans,
+    // IBM Plex Mono → Courier New).
+    'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap',
 ];
 
 // ============================================================

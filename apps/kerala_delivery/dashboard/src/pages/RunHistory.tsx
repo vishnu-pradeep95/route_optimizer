@@ -13,10 +13,22 @@
  */
 
 import { useState, useEffect, useCallback, Fragment } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { fetchRuns, fetchRunRoutes } from "../lib/api";
 import type { OptimizationRun, RouteSummary } from "../types";
-import { STATUS_COLORS } from "../types";
 import "./RunHistory.css";
+
+/**
+ * Status-to-CSS-color mapping — uses design tokens instead of the
+ * legacy STATUS_COLORS from types.ts. These map run statuses to
+ * inline background colors for status pills.
+ */
+const RUN_STATUS_STYLES: Record<string, string> = {
+  completed: "#16a34a",   // green-600 — success
+  failed: "#dc2626",      // red-600 — danger
+  running: "#d97706",     // amber-600 — accent (in progress)
+  pending: "#78716c",     // stone-500 — neutral
+};
 
 export function RunHistory() {
   const [runs, setRuns] = useState<OptimizationRun[]>([]);
@@ -102,16 +114,7 @@ export function RunHistory() {
 
   /** Get a color for the run status badge. */
   function statusColor(status: string): string {
-    switch (status) {
-      case "completed":
-        return STATUS_COLORS.delivered;
-      case "failed":
-        return STATUS_COLORS.failed;
-      case "running":
-        return STATUS_COLORS.active;
-      default:
-        return STATUS_COLORS.idle;
-    }
+    return RUN_STATUS_STYLES[status] ?? "#78716c";
   }
 
   // --- Render ---
@@ -165,10 +168,28 @@ export function RunHistory() {
                 >
                   <td>{formatDateTime(run.created_at)}</td>
                   <td className="numeric">{run.total_orders}</td>
-                  <td className="numeric">{run.orders_assigned}</td>
+                  <td className="numeric">
+                    {/* Mini assignment bar — shows ratio of assigned to total orders.
+                     * The track is 40px wide; fill width is proportional to the ratio.
+                     * Green fill = healthy assignment rate.
+                     */}
+                    <span className="assignment-bar">
+                      {run.orders_assigned}
+                      <span className="assignment-bar-track">
+                        <span
+                          className="assignment-bar-fill"
+                          style={{
+                            width: run.total_orders > 0
+                              ? `${(run.orders_assigned / run.total_orders) * 100}%`
+                              : "0%",
+                          }}
+                        />
+                      </span>
+                    </span>
+                  </td>
                   <td className="numeric">
                     {run.orders_unassigned > 0 ? (
-                      <span style={{ color: STATUS_COLORS.failed, fontWeight: 600 }}>
+                      <span style={{ color: "#dc2626", fontWeight: 600 }}>
                         {run.orders_unassigned}
                       </span>
                     ) : (
@@ -192,9 +213,20 @@ export function RunHistory() {
                   </td>
                 </tr>
 
-                {/* Expanded detail row showing routes for this run */}
+                {/* Expanded detail row — animated height via framer-motion.
+                 * Why AnimatePresence: it allows exit animations before the
+                 * element is removed from the DOM, giving a smooth collapse.
+                 */}
+                <AnimatePresence>
                 {expandedRunId === run.run_id && (
-                  <tr key={`${run.run_id}-detail`} className="detail-row">
+                  <motion.tr
+                    key={`${run.run_id}-detail`}
+                    className="detail-row"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
                     <td colSpan={8}>
                       {routesLoading ? (
                         <div className="detail-loading">Loading routes...</div>
@@ -244,8 +276,9 @@ export function RunHistory() {
                         </div>
                       )}
                     </td>
-                  </tr>
+                  </motion.tr>
                 )}
+                </AnimatePresence>
               </Fragment>
             ))}
 

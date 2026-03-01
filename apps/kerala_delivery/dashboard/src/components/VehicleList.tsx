@@ -102,6 +102,12 @@ export function VehicleList({
                 .reduce((sum, s) => sum + s.duration_from_prev_minutes, 0)
             : route.total_duration_minutes;
 
+          // Completion percentage for progress bar coloring
+          // Amber while in-progress, switches to green at 100%
+          const completionPct = route.total_stops > 0
+            ? (stopsCompleted / route.total_stops) * 100
+            : 0;
+
           return (
             <div
               key={route.vehicle_id}
@@ -149,6 +155,13 @@ export function VehicleList({
                 </div>
               </div>
 
+              {/* Efficiency indicator — km per delivery helps ops spot outliers */}
+              {route.total_stops > 0 && (
+                <div className="vehicle-efficiency">
+                  {(route.total_distance_km / route.total_stops).toFixed(1)} km/delivery
+                </div>
+              )}
+
               {/* ETA shown as range, never as a countdown (Kerala MVD directive) */}
               {stopsRemaining > 0 && (
                 <div className="vehicle-eta">
@@ -156,13 +169,15 @@ export function VehicleList({
                 </div>
               )}
 
-              {/* Progress bar showing completion percentage */}
+              {/* Progress bar: amber while in-progress, green at 100% */}
               <div className="vehicle-progress">
                 <div
                   className="vehicle-progress-bar"
                   style={{
-                    width: `${route.total_stops > 0 ? (stopsCompleted / route.total_stops) * 100 : 0}%`,
-                    backgroundColor: getVehicleColor(colorIndex),
+                    width: `${completionPct}%`,
+                    backgroundColor: completionPct >= 100
+                      ? "var(--color-success)"
+                      : "var(--color-accent)",
                   }}
                 />
               </div>

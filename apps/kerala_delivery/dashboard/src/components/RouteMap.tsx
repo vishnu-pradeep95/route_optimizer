@@ -1,11 +1,15 @@
 /**
  * RouteMap — MapLibre GL map showing vehicle routes, stops, and live positions.
  *
+ * Features:
+ * - Dark/light basemap toggle (CARTO Dark Matter / Positron)
+ * - SVG circle markers with drop shadow and sequence numbers
+ * - Larger pulsing ring animation for live vehicle markers
+ *
  * Why MapLibre GL JS instead of Mapbox GL JS:
  * - MapLibre is a free, open-source fork with no API key required
  * - No usage-based billing — important for a small delivery business
  * - Compatible with the same style specs and tile sources
- * - react-map-gl v8 supports MapLibre as a first-class backend
  *
  * Why we use react-map-gl instead of raw maplibre-gl:
  * - Declarative React API fits better with our component model
@@ -13,7 +17,7 @@
  * - Less boilerplate than imperative map.addLayer() calls
  */
 
-import { useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import Map, {
   Source,
   Layer,
@@ -38,11 +42,20 @@ const KOCHI_CENTER = {
 const DEFAULT_ZOOM = 12;
 
 /**
- * Free basemap style from CARTO (Positron).
- * Why Positron: clean, light style that doesn't distract from our route overlays.
- * No API key needed — CARTO provides this as a free community resource.
+ * Available basemap styles.
+ *
+ * Why two options instead of one:
+ * - Positron (light): better for reading street labels and addresses
+ * - Dark Matter (dark): better contrast for colored route overlays,
+ *   reduces eye strain during extended monitoring sessions
+ * Both are free from CARTO with no API key required.
  */
-const MAP_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+const MAP_STYLES = {
+  light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+  dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+} as const;
+
+type MapTheme = keyof typeof MAP_STYLES;
 
 interface RouteMapProps {
   /** Detailed routes to display as polylines and stop markers. */
@@ -90,6 +103,13 @@ export function RouteMap({
   onMapRef,
 }: RouteMapProps) {
   /**
+   * Map theme state — persists during the session.
+   * Default: light (Positron) matches the overall dashboard aesthetic.
+   * Dark (Dark Matter) available for extended monitoring sessions.
+   */
+  const [mapTheme, setMapTheme] = useState<MapTheme>("light");
+
+  /**
    * Memoize GeoJSON to avoid rebuilding on every render.
    * Route data only changes when routeDetails changes.
    */
@@ -134,6 +154,15 @@ export function RouteMap({
 
   return (
     <div className="route-map">
+      {/* Dark/light theme toggle — top-left corner */}
+      <button
+        className="map-theme-toggle"
+        onClick={() => setMapTheme(mapTheme === "light" ? "dark" : "light")}
+        title={`Switch to ${mapTheme === "light" ? "dark" : "light"} basemap`}
+      >
+        {mapTheme === "light" ? "🌙" : "☀️"}
+      </button>
+
       <Map
         ref={handleMapRef}
         initialViewState={{
@@ -141,7 +170,7 @@ export function RouteMap({
           zoom: DEFAULT_ZOOM,
         }}
         style={{ width: "100%", height: "100%" }}
-        mapStyle={MAP_STYLE}
+        mapStyle={MAP_STYLES[mapTheme]}
         /**
          * attributionControl is required by OpenStreetMap license.
          * We keep it enabled (default) as good open-data citizenship.

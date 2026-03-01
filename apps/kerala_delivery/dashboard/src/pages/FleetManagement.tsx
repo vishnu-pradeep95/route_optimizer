@@ -677,7 +677,7 @@ export function FleetManagement() {
                   <td>{v.vehicle_id}</td>
                   <td>{v.registration_no ?? "—"}</td>
                   <td>
-                    <span className="fleet-type-badge">{v.vehicle_type}</span>
+                    <span className="fleet-type-badge" data-type={v.vehicle_type}>{v.vehicle_type}</span>
                   </td>
                   <td className="numeric">{v.max_weight_kg}</td>
                   <td className="numeric">{v.max_items}</td>

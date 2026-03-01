@@ -1,6 +1,6 @@
 /* LiveMap — Layout for the main operational view.
  *
- * Uses CSS Grid for the three-panel layout:
+ * Uses CSS Flexbox for the three-panel layout:
  * ┌──────────────────────────────────┐
  * │          Stats Bar (top)         │
  * ├──────────┬───────────────────────┤
@@ -9,9 +9,9 @@
  * │ (sidebar)│                       │
  * └──────────┴───────────────────────┘
  *
- * Why CSS Grid instead of flexbox:
- * Grid gives us explicit row/column sizing that's easier
- * to reason about for a fixed dashboard layout.
+ * Why flexbox for this layout:
+ * The stats bar and content area have simple stacking,
+ * and the sidebar/map split is a straightforward flex row.
  */
 
 .live-map-page {
@@ -25,9 +25,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
-  background: #fef2f2;
-  border-bottom: 1px solid #fecaca;
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-danger-bg);
+  border-bottom: 1px solid rgba(220, 38, 38, 0.2);
   color: #991b1b;
   font-size: 13px;
 }
@@ -36,8 +36,8 @@
   background: #991b1b;
   color: #ffffff;
   border: none;
-  border-radius: 4px;
-  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
   font-size: 12px;
   cursor: pointer;
 }
@@ -71,15 +71,15 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  gap: 16px;
-  color: #64748b;
+  gap: var(--space-4);
+  color: var(--color-text-muted);
 }
 
 .loading-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid #e2e8f0;
-  border-top-color: #3b82f6;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }

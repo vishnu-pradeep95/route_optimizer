@@ -1,8 +1,9 @@
 /**
- * StatsBar — Summary statistics cards displayed at the top of the Live Map page.
+ * StatsBar — Elevated metric tiles displayed at the top of the Live Map page.
  *
- * Shows aggregate delivery metrics from the latest optimization run.
- * Each card is a simple count with a label and color accent.
+ * Design: Industrial-utilitarian tiles with 4px left accent borders,
+ * large DM Sans numbers, and IBM Plex Mono labels. Each card has a
+ * subtle elevation shadow to separate it from the background.
  *
  * Why a separate component instead of inline in LiveMap:
  * - Reusable across pages (Live Map, Run History detail)
@@ -11,7 +12,6 @@
  */
 
 import type { RouteSummary, RouteDetail } from "../types";
-import { STATUS_COLORS } from "../types";
 import "./StatsBar.css";
 
 interface StatsBarProps {
@@ -54,6 +54,23 @@ function countByStatus(routeDetails: RouteDetail[]) {
   return { delivered, pending, failed, total: delivered + pending + failed };
 }
 
+/**
+ * Color mapping for stat card accent borders.
+ *
+ * Why separate from STATUS_COLORS?
+ * These are design-system accent colors (amber/green/red) that match
+ * the new design tokens, not the legacy blue-based status colors.
+ * Each stat type gets a distinct left-border accent for quick scanning.
+ */
+const STAT_ACCENTS = {
+  total: "var(--color-info)",
+  delivered: "var(--color-success)",
+  pending: "var(--color-accent)",
+  failed: "var(--color-danger)",
+  active: "var(--color-accent)",
+  unassigned: "var(--color-danger)",
+} as const;
+
 export function StatsBar({ routes, routeDetails, unassignedOrders }: StatsBarProps) {
   const counts = countByStatus(routeDetails);
 
@@ -62,32 +79,33 @@ export function StatsBar({ routes, routeDetails, unassignedOrders }: StatsBarPro
       <StatCard
         label="Total Deliveries"
         value={counts.total}
-        color={STATUS_COLORS.active}
+        accent={STAT_ACCENTS.total}
       />
       <StatCard
         label="Completed"
         value={counts.delivered}
-        color={STATUS_COLORS.delivered}
+        accent={STAT_ACCENTS.delivered}
       />
       <StatCard
         label="Pending"
         value={counts.pending}
-        color={STATUS_COLORS.pending}
+        accent={STAT_ACCENTS.pending}
       />
       <StatCard
         label="Failed"
         value={counts.failed}
-        color={STATUS_COLORS.failed}
+        accent={STAT_ACCENTS.failed}
       />
       <StatCard
         label="Vehicles Active"
         value={routes.length}
-        color={STATUS_COLORS.active}
+        accent={STAT_ACCENTS.active}
+        showPulse
       />
       <StatCard
         label="Unassigned"
         value={unassignedOrders}
-        color={STATUS_COLORS.failed}
+        accent={STAT_ACCENTS.unassigned}
       />
     </div>
   );
@@ -97,18 +115,21 @@ export function StatsBar({ routes, routeDetails, unassignedOrders }: StatsBarPro
 function StatCard({
   label,
   value,
-  color,
+  accent,
+  showPulse = false,
 }: {
   label: string;
   value: number;
-  color: string;
+  accent: string;
+  showPulse?: boolean;
 }) {
   return (
-    <div className="stat-card" style={{ borderTopColor: color }}>
-      <div className="stat-value" style={{ color }}>
-        {value}
+    <div className="stat-card" style={{ borderLeftColor: accent }}>
+      <div className="stat-value">{value}</div>
+      <div className="stat-label">
+        {showPulse && value > 0 && <span className="stat-pulse" />}
+        {label}
       </div>
-      <div className="stat-label">{label}</div>
     </div>
   );
 }

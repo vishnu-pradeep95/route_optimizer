@@ -1,7 +1,8 @@
 /* FleetManagement — Vehicle fleet table and inline forms.
  *
- * Follows the same design language as RunHistory.css:
- * muted header bar, sticky table headers, status badges.
+ * Design: Alternating row shading (Stone 100/50), amber focus rings on edit
+ * fields, vehicle type badges as colored chips (diesel=slate, CNG=teal,
+ * electric=sky), and design-token-driven styling throughout.
  *
  * Why not a shared CSS module for both tables?
  * Each page has slightly different column widths and interactive elements.
@@ -20,24 +21,25 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
-  border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .fleet-header h2 {
   margin: 0;
+  font-family: var(--font-heading);
   font-size: 18px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-text-primary);
 }
 
 .fleet-header-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 /* Toggle switch for "Active only" filter */
@@ -45,74 +47,76 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  font-family: var(--font-body);
   font-size: 13px;
-  color: #475569;
+  color: var(--color-text-secondary);
   cursor: pointer;
   user-select: none;
 }
 
 .filter-toggle input[type="checkbox"] {
-  accent-color: #3b82f6;
+  accent-color: var(--color-accent);
   width: 15px;
   height: 15px;
   cursor: pointer;
 }
 
-/* Reuse the same button style as RunHistory for visual consistency */
+/* Button styles — design system tokens */
 .fleet-btn {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
   padding: 6px 14px;
+  font-family: var(--font-body);
   font-size: 13px;
-  color: #475569;
+  color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .fleet-btn:hover {
-  background: #f1f5f9;
-  color: #1e293b;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
 }
 
 .fleet-btn-primary {
-  background: #3b82f6;
-  border-color: #3b82f6;
+  background: var(--color-accent);
+  border-color: var(--color-accent);
   color: #ffffff;
 }
 
 .fleet-btn-primary:hover {
-  background: #2563eb;
+  background: var(--color-accent-hover);
 }
 
 .fleet-btn-danger {
-  color: #dc2626;
-  border-color: #fca5a5;
+  color: var(--color-danger);
+  border-color: rgba(220, 38, 38, 0.3);
 }
 
 .fleet-btn-danger:hover {
-  background: #fef2f2;
+  background: var(--color-danger-bg);
   color: #991b1b;
 }
 
 .fleet-btn-success {
-  color: #16a34a;
-  border-color: #86efac;
+  color: var(--color-success);
+  border-color: rgba(22, 163, 74, 0.3);
 }
 
 .fleet-btn-success:hover {
-  background: #f0fdf4;
+  background: var(--color-success-bg);
   color: #15803d;
 }
 
-/* Error banner — matches RunHistory.css pattern */
+/* Error banner */
 .fleet-error {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 24px;
-  background: #fef2f2;
-  border-bottom: 1px solid #fecaca;
+  padding: var(--space-2) var(--space-6);
+  background: var(--color-danger-bg);
+  border-bottom: 1px solid rgba(220, 38, 38, 0.2);
   color: #991b1b;
   font-size: 13px;
 }
@@ -121,8 +125,8 @@
   background: #991b1b;
   color: #ffffff;
   border: none;
-  border-radius: 4px;
-  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
   font-size: 12px;
   cursor: pointer;
 }
@@ -132,9 +136,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 24px;
-  background: #f0fdf4;
-  border-bottom: 1px solid #bbf7d0;
+  padding: var(--space-2) var(--space-6);
+  background: var(--color-success-bg);
+  border-bottom: 1px solid rgba(22, 163, 74, 0.2);
   color: #166534;
   font-size: 13px;
 }
@@ -145,14 +149,14 @@
   color: #166534;
   cursor: pointer;
   font-size: 15px;
-  padding: 0 4px;
+  padding: 0 var(--space-1);
 }
 
 /* Table wrapper — scrollable body with sticky header */
 .fleet-table-wrapper {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 24px;
+  padding: var(--space-4) var(--space-6);
 }
 
 .fleet-table {
@@ -164,54 +168,81 @@
 .fleet-table thead th {
   position: sticky;
   top: 0;
-  background: #f1f5f9;
+  background: var(--color-surface);
   padding: 10px 12px;
   text-align: left;
+  font-family: var(--font-mono);
   font-weight: 600;
-  color: #475569;
+  color: var(--color-text-secondary);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  border-bottom: 2px solid #e2e8f0;
+  border-bottom: 2px solid var(--color-border);
   white-space: nowrap;
 }
 
 .fleet-table tbody td {
   padding: 10px 12px;
-  border-bottom: 1px solid #f1f5f9;
-  color: #1e293b;
+  border-bottom: 1px solid var(--color-surface-alt);
+  color: var(--color-text-primary);
+}
+
+/* Alternating row shading — Stone 100 / transparent */
+.fleet-table tbody tr:nth-child(even) {
+  background: var(--color-surface-alt);
 }
 
 .fleet-table tbody tr:hover {
-  background: #f8fafc;
+  background: var(--color-accent-bg);
 }
 
-/* Reuse RunHistory's numeric alignment and status badge styles */
+/* Numeric alignment and monospaced numbers */
 .fleet-table .numeric {
   text-align: right;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
 .fleet-status-badge {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
   color: #ffffff;
   text-transform: uppercase;
 }
 
+/* Vehicle type badges as colored chips */
 .fleet-type-badge {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 12px;
+  padding: 2px 10px;
+  border-radius: var(--radius-lg);
+  font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Type-specific chip colors (diesel=slate, cng=teal, electric=sky) */
+.fleet-type-badge[data-type="diesel"] {
   color: #475569;
   background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  text-transform: capitalize;
+  border: 1px solid #cbd5e1;
+}
+
+.fleet-type-badge[data-type="cng"] {
+  color: #0f766e;
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+}
+
+.fleet-type-badge[data-type="electric"] {
+  color: #0369a1;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
 }
 
 .fleet-actions {
@@ -225,46 +256,47 @@
   font-size: 12px;
 }
 
-/* Depot coordinates — compact monospace */
+/* Depot coordinates — monospaced for alignment */
 .depot-coords {
-  font-family: "Fira Code", "Consolas", monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 /* --- Inline form (add / edit) --- */
 
 .fleet-form-container {
-  padding: 16px 24px;
-  border-bottom: 1px solid #e2e8f0;
-  background: #eff6ff;
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-accent-bg);
 }
 
 .fleet-form-container h3 {
-  margin: 0 0 12px 0;
+  margin: 0 0 var(--space-3) 0;
+  font-family: var(--font-heading);
   font-size: 14px;
   font-weight: 600;
-  color: #1e40af;
+  color: var(--color-accent-hover);
 }
 
 .fleet-form {
   display: grid;
-  /* Responsive grid: auto-fit columns that are at least 180px wide */
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
   align-items: end;
 }
 
 .fleet-form-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .fleet-form-field label {
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
-  color: #475569;
+  color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -272,41 +304,43 @@
 .fleet-form-field input,
 .fleet-form-field select {
   padding: 6px 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 4px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
   font-size: 13px;
-  color: #1e293b;
-  background: #ffffff;
+  color: var(--color-text-primary);
+  background: var(--color-surface-card);
 }
 
+/* Amber focus ring — matches design system accent */
 .fleet-form-field input:focus,
 .fleet-form-field select:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-bg);
 }
 
 .fleet-form-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: end;
-  padding-top: 4px;
+  padding-top: var(--space-1);
 }
 
 /* Empty state */
 .fleet-empty {
   text-align: center;
-  padding: 40px 24px;
-  color: #94a3b8;
+  padding: 40px var(--space-6);
+  color: var(--color-text-muted);
 }
 
-/* Loading state — consistent with RunHistory */
+/* Loading state */
 .fleet-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100%;
-  gap: 16px;
-  color: #64748b;
+  gap: var(--space-4);
+  color: var(--color-text-muted);
 }
