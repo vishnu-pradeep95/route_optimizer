@@ -46,6 +46,7 @@ from core.data_import.cdcms_preprocessor import preprocess_cdcms, get_cdcms_colu
 from core.database.connection import engine, get_session
 from core.database import repository as repo
 from core.geocoding.google_adapter import GoogleGeocoder
+from core.licensing.license_manager import validate_license, LicenseStatus, LicenseInfo, GRACE_PERIOD_DAYS
 from core.models.location import Location
 from core.models.order import Order
 from core.models.route import Route, RouteAssignment
@@ -84,6 +85,50 @@ async def lifespan(app: FastAPI):
         )
     elif api_key:
         logger.info("API key authentication enabled for POST and sensitive GET endpoints")
+
+    # ── License validation ────────────────────────────────────────────
+    # Check hardware-bound license on startup. In production, an invalid
+    # license blocks all API endpoints with 503. In development, licensing
+    # is optional (no key = no enforcement).
+    # See: core/licensing/license_manager.py for the full validation logic.
+    license_info = validate_license()
+    app.state.license_info = license_info  # Store for middleware access
+
+    if license_info.status == LicenseStatus.VALID:
+        logger.info(
+            "License valid — customer=%s, expires=%s, %d days remaining",
+            license_info.customer_id,
+            license_info.expires_at.strftime("%Y-%m-%d"),
+            license_info.days_remaining,
+        )
+    elif license_info.status == LicenseStatus.GRACE:
+        logger.warning(
+            "⚠️  LICENSE IN GRACE PERIOD — %s. "
+            "System will stop working in %d days. Renew immediately.",
+            license_info.message,
+            GRACE_PERIOD_DAYS - abs(license_info.days_remaining),
+        )
+    else:
+        # INVALID — but only enforce in production. In dev, just warn.
+        if env == "production":
+            logger.error(
+                "❌ LICENSE INVALID: %s. All endpoints will return 503.",
+                license_info.message,
+            )
+        else:
+            logger.info(
+                "License not configured (dev mode) — running without license enforcement"
+            )
+            # In dev mode, override to VALID so the middleware doesn't block
+            license_info = LicenseInfo(
+                customer_id="dev-mode",
+                fingerprint="",
+                expires_at=license_info.expires_at,
+                status=LicenseStatus.VALID,
+                days_remaining=999,
+                message="Development mode — no license required",
+            )
+            app.state.license_info = license_info
 
     logger.info("Starting up — DB engine pool initialized")
     yield
@@ -156,6 +201,65 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
+
+
+# =============================================================================
+# License enforcement middleware
+# =============================================================================
+# Checks app.state.license_info (set during lifespan) on every request.
+# - VALID: pass through normally
+# - GRACE: pass through but add X-License-Warning header
+# - INVALID: return 503 on all endpoints except /health (for diagnostics)
+
+
+@app.middleware("http")
+async def license_enforcement_middleware(request: Request, call_next):
+    """Block all requests if license is invalid (production only).
+
+    Why middleware instead of a dependency?
+    - Dependencies only run on endpoints that declare them. A middleware
+      catches ALL requests, including static files and undeclared routes.
+    - We want the /health endpoint to still work (for debugging), so we
+      exclude it explicitly.
+
+    Why 503 (Service Unavailable) instead of 403 (Forbidden)?
+    - 503 signals "the server can't handle the request right now" which
+      is semantically correct for a licensing issue.
+    - It also tells monitoring tools that the service is down, triggering
+      alerts that help the customer notice and renew.
+    """
+    license_info = getattr(request.app.state, "license_info", None)
+
+    if license_info is None:
+        # No license info = not yet initialized, pass through
+        return await call_next(request)
+
+    # Always allow health checks (for debugging license issues)
+    if request.url.path == "/health":
+        response = await call_next(request)
+        # Add license status to health response header for diagnostics
+        if license_info.status != LicenseStatus.VALID:
+            response.headers["X-License-Status"] = license_info.status.value
+        return response
+
+    if license_info.status == LicenseStatus.INVALID:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "License expired or invalid. Contact support.",
+                "license_status": "invalid",
+            },
+        )
+
+    # Process the request normally
+    response = await call_next(request)
+
+    # Add warning header during grace period
+    if license_info.status == LicenseStatus.GRACE:
+        response.headers["X-License-Warning"] = license_info.message
+
+    return response
+
 
 # Serve the driver PWA as static files at /driver/
 # Drivers open http://<server>:8000/driver/ on their phone

@@ -215,10 +215,17 @@ services:
       # so the API sees requests from https://your-domain.com.
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://localhost}
       - RATE_LIMIT_ENABLED=true
+      # License key — read from LICENSE_KEY env var or mounted license.key file
+      - LICENSE_KEY=${LICENSE_KEY:-}
     volumes:
       # Data directory for uploaded CSVs and geocode cache.
       # Bind mount so files persist across container rebuilds.
       - ./data:/app/data
+      # License key file — alternative to LICENSE_KEY env var.
+      # Mount as read-only so the app can't modify it.
+      # If the file doesn't exist, Docker creates an empty directory — that's
+      # fine, the license manager handles "file not found" gracefully.
+      - ./license.key:/app/license.key:ro
     depends_on:
       db-init:
         condition: service_completed_successfully
