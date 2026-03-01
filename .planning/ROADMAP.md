@@ -11,8 +11,8 @@ This is a hardening and polish milestone on a working logistics system. The rout
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Foundation** - Install Tailwind 4 + DaisyUI 5 collision-safe; establish test baseline (Vatakara coordinates, asyncio config)
-- [ ] **Phase 2: Security Hardening** - HTTP security headers, CORS hardening, API doc gating, input validation, dependency replacement
-- [ ] **Phase 3: Data Integrity** - Fix silent geocoding drops; surface row-level failures with structured import summary
+- [x] **Phase 2: Security Hardening** - HTTP security headers, CORS hardening, API doc gating, input validation, dependency replacement
+- [x] **Phase 3: Data Integrity** - Fix silent geocoding drops; surface row-level failures with structured import summary
 - [ ] **Phase 4: Dashboard UI Migration** - Migrate all dashboard pages to Tailwind/DaisyUI; add empty states and toast notifications
 - [ ] **Phase 5: Driver PWA Update** - Pre-compiled Tailwind CSS; professional mobile layout; updated service worker cache
 - [ ] **Phase 6: Quality and Documentation** - Property-based tests, factory fixtures, external API mocks, coverage gate, dead code removal, main.py refactor, README + docs
@@ -49,8 +49,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Add Secweb security headers middleware, Permissions-Policy custom middleware, harden CORS to env-var whitelist, fix /redoc gating, verify deprecated libraries absent
-- [ ] 02-02-PLAN.md — Enhance file upload validation (MIME-type, descriptive errors, row count limit), isolate rate limiter state in tests, update .env.example
+- [x] 02-01-PLAN.md — Add Secweb security headers middleware, Permissions-Policy custom middleware, harden CORS to env-var whitelist, fix /redoc gating, verify deprecated libraries absent
+- [x] 02-02-PLAN.md — Enhance file upload validation (MIME-type, descriptive errors, row count limit), isolate rate limiter state in tests, update .env.example
 
 ### Phase 3: Data Integrity
 **Goal**: Every geocoding failure is visible to the office user with a per-row reason — no order silently disappears from the map
@@ -65,9 +65,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Add ImportResult model and row-level validation to CsvImporter; audit depot coordinates
-- [ ] 03-02-PLAN.md — Enrich OptimizationSummary with failure data; collect geocoding errors; zero-success structured response
-- [ ] 03-03-PLAN.md — Import summary UI with counts, expandable failure table, three visual states (DaisyUI)
+- [x] 03-01-PLAN.md — Add ImportResult model and row-level validation to CsvImporter; audit depot coordinates
+- [x] 03-02-PLAN.md — Enrich OptimizationSummary with failure data; collect geocoding errors; zero-success structured response
+- [x] 03-03-PLAN.md — Import summary UI with counts, expandable failure table, three visual states (DaisyUI)
 
 ### Phase 4: Dashboard UI Migration
 **Goal**: Every dashboard page looks like a professional logistics SaaS product (Onfleet/Routific style) with consistent Tailwind/DaisyUI styling
@@ -128,8 +128,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete    | 2026-03-01 |
-| 2. Security Hardening | 0/2 | Not started | - |
-| 3. Data Integrity | 0/3 | Not started | - |
+| 2. Security Hardening | 2/2 | Complete | 2026-03-01 |
+| 3. Data Integrity | 3/3 | Complete | 2026-03-01 |
 | 4. Dashboard UI Migration | 0/3 | Not started | - |
 | 5. Driver PWA Update | 0/2 | Not started | - |
 | 6. Quality and Documentation | 0/4 | Not started | - |
