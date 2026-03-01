@@ -4,6 +4,39 @@
 /* DaisyUI component library (classes also use tw: prefix) */
 @plugin "daisyui";
 
+/* Custom logistics theme -- maps project's amber/stone palette to DaisyUI semantics */
+@plugin "daisyui/theme" {
+  name: "logistics";
+  default: true;
+  color-scheme: light;
+  /* Base surfaces -- warm stone tones matching existing --color-surface family */
+  --color-base-100: oklch(98% 0.01 75);
+  --color-base-200: oklch(96% 0.01 75);
+  --color-base-300: oklch(93% 0.02 60);
+  --color-base-content: oklch(22% 0.02 60);
+  /* Primary -- amber 600 matching existing --color-accent #D97706 */
+  --color-primary: oklch(62% 0.17 65);
+  --color-primary-content: oklch(98% 0.01 60);
+  /* Secondary -- stone 600 for neutral interactive elements */
+  --color-secondary: oklch(45% 0.02 60);
+  --color-secondary-content: oklch(98% 0.01 60);
+  /* Accent -- same as primary for this project (amber) */
+  --color-accent: oklch(62% 0.17 65);
+  --color-accent-content: oklch(98% 0.01 60);
+  /* Neutral -- dark stone for sidebar/header backgrounds */
+  --color-neutral: oklch(22% 0.02 60);
+  --color-neutral-content: oklch(96% 0.01 60);
+  /* Status colors matching existing --color-success/danger/info/warning */
+  --color-success: oklch(55% 0.2 145);
+  --color-success-content: oklch(98% 0.01 145);
+  --color-warning: oklch(70% 0.17 70);
+  --color-warning-content: oklch(22% 0.02 70);
+  --color-error: oklch(55% 0.22 25);
+  --color-error-content: oklch(98% 0.01 25);
+  --color-info: oklch(55% 0.17 230);
+  --color-info-content: oklch(98% 0.01 230);
+}
+
 /*
  * Global styles for the Kerala LPG Delivery Ops Dashboard.
  *
