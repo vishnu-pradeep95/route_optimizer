@@ -22,17 +22,23 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - Docker Compose orchestration (API, OSRM, VROOM, PostgreSQL) — existing
 - React/TypeScript dashboard with route upload, live map, fleet management — existing
 - Telemetry ingestion from driver devices — existing
+- ✓ Tailwind 4 + DaisyUI 5 installed with collision-safe prefix — v1.0
+- ✓ HTTP security headers (CSP, CORS hardening, Permissions-Policy) — v1.0
+- ✓ Geocoding failure reporting with per-row reasons — v1.0
+- ✓ Import summary UI (success/partial/zero states) — v1.0
+- ✓ Depot coordinates audited (Vatakara 11.62°N throughout pipeline) — v1.0
+- ✓ CSV row-level validation before geocoding — v1.0
 
 ### Active
 
-- [ ] Professional UI overhaul — clean logistics SaaS look (Onfleet/Routific style) for both dashboard and driver PWA
-- [ ] Fix silent geocoding failures — orders that fail geocoding are silently dropped, causing locations to disappear from map after routing
-- [ ] Audit preprocessing/depot logic — verify Vatakara depot config flows correctly through the entire pipeline, no Kozhikode coordinates leaking
-- [ ] Security audit and hardening — address OWASP concerns, review auth, input validation, XSS, injection vectors
-- [ ] Code quality cleanup — remove AI-generated slop, dead code, unnecessary abstractions
-- [ ] Well-rounded unit tests — cover edge cases, improve coverage, remove shallow/redundant tests
-- [ ] Streamlined installation and documentation — easy setup guide, clear README, docker-compose just works
-- [ ] CSV import validation reporting — show users which rows failed and why (not just "No valid orders")
+- [ ] Professional UI redesign — sleek logistics dashboard aesthetic (research best themes)
+- [ ] Geocoding cache normalization fix — inconsistent DB vs file cache causing duplicate locations
+- [ ] Duplicate location detection — flag orders resolving to same GPS coordinates
+- [ ] Geocoding cost tracking — cache hit vs API call indicator per address
+- [ ] Elegant error handling across pipeline — structured errors, retries, graceful degradation
+- [ ] Code quality cleanup — remove dead code, refactor main.py, fix driver names
+- [ ] Well-rounded unit tests — property-based, factory fixtures, external API mocks, coverage gate
+- [ ] Streamlined installation and documentation — easy setup guide, clear README
 
 ### Out of Scope
 
@@ -48,8 +54,8 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: Functional prototype with working optimization pipeline, but tacky UI, silent failures, and code quality issues from AI-assisted development
-- **Known critical bug**: Geocoding failures silently drop orders — user sees fewer pins on map than CSV rows after routing runs
+- **Current state**: v1.0 shipped — foundation, security, and data integrity complete. 380 tests passing. 16.6k Python LOC, 3.3k TypeScript LOC.
+- **Known issues**: Geocoding cache normalization inconsistency causes duplicate map locations; UI needs professional redesign
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
 ## Constraints
@@ -70,4 +76,4 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | Fix geocoding before UI overhaul | Silent order drops are data-integrity bugs; UI polish on broken data is wasted effort | — Pending |
 
 ---
-*Last updated: 2026-03-01 after initialization*
+*Last updated: 2026-03-01 after v1.0 milestone*
