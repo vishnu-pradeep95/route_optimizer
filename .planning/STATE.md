@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-last_updated: "2026-03-01T17:34:50Z"
+last_updated: "2026-03-01T17:42:38.115Z"
 progress:
   total_phases: 2
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -22,29 +22,29 @@ See: .planning/PROJECT.md (updated 2026-03-01)
 
 ## Current Position
 
-Phase: 2 of 6 (Security Hardening)
-Plan: 1 of 2 in current phase
-Status: 02-01 complete, 02-02 pending
-Last activity: 2026-03-01 — Completed 02-01 (Security headers, CORS hardening, /redoc gating)
+Phase: 2 of 6 (Security Hardening) -- COMPLETE
+Plan: 2 of 2 in current phase
+Status: Phase 2 complete, ready for Phase 3
+Last activity: 2026-03-01 — Completed 02-02 (Upload validation, MIME-type check, rate limiter isolation)
 
-Progress: [████░░░░░░] 22%
+Progress: [█████░░░░░] 28%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
+- Total plans completed: 5
 - Average duration: 4 min
-- Total execution time: 0.27 hours
+- Total execution time: 0.32 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 3 | 13 min | 4 min |
-| 02-security-hardening | 1 | 3 min | 3 min |
+| 02-security-hardening | 2 | 6 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3 min), 01-02 (4 min), 01-03 (6 min), 02-01 (3 min)
+- Last 5 plans: 01-02 (4 min), 01-03 (6 min), 02-01 (3 min), 02-02 (3 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -72,6 +72,9 @@ Recent decisions affecting current work:
 - [02-01]: CORS origins use environment-aware defaults: dev permits localhost:8000/3000/5173, production requires explicit whitelist
 - [02-01]: HSTS only enabled in non-development environments to prevent localhost HTTPS lock-in
 - [02-01]: CSP allows unsafe-inline styles (required for Leaflet inline map styles)
+- [02-02]: pathlib.Path(filename).suffix.lower() for extension extraction -- more robust than str.endswith()
+- [02-02]: application/octet-stream accepted as valid content-type -- browsers commonly send this for CSV
+- [02-02]: limiter.reset() in fixture teardown prevents cross-test 429 counter leakage
 
 ### Pending Todos
 
@@ -87,5 +90,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 02-01-PLAN.md
+Stopped at: Completed 02-02-PLAN.md (Phase 2 complete)
 Resume file: None
