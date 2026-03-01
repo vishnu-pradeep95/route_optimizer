@@ -57,6 +57,49 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # ─── OSRM Init: auto-download and preprocess Kerala map data ────────
+  # Idempotent init container: checks if OSRM data exists, downloads and
+  # preprocesses Kerala OpenStreetMap data if missing. Exits immediately
+  # if data already exists. This eliminates the manual OSRM setup step.
+  #
+  # Why an init container instead of baking data into the image?
+  # - OSRM preprocessed data is ~1.5 GB — too large for a Docker image
+  # - Data needs periodic updates (quarterly OSM refreshes)
+  # - Init container runs once, then exits, consuming zero resources
+  # See: SETUP.md Step 9 for the manual equivalent
+  osrm-init:
+    image: osrm/osrm-backend:latest
+    container_name: osrm-init
+    volumes:
+      - ./data/osrm:/data
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        # Check if OSRM data already exists (idempotent)
+        if [ -f /data/kerala-latest.osrm.mldgr ]; then
+          echo "✓ OSRM data already preprocessed — skipping"
+          exit 0
+        fi
+        echo "→ OSRM data not found — downloading and preprocessing Kerala map..."
+        # Install wget if not present (some OSRM images have curl only)
+        apt-get update -qq && apt-get install -y -qq wget > /dev/null 2>&1 || true
+        # Download Kerala OSM extract (~150 MB)
+        if [ ! -f /data/kerala-latest.osm.pbf ]; then
+          echo "→ Downloading Kerala OpenStreetMap data (~150 MB)..."
+          wget -q --show-progress -O /data/kerala-latest.osm.pbf \
+            https://download.openstreetmap.fr/extracts/asia/india/kerala.osm.pbf
+        fi
+        # OSRM preprocessing pipeline (extract → partition → customize)
+        echo "→ Step 1/3: Extracting road network..."
+        osrm-extract -p /opt/car.lua /data/kerala-latest.osm.pbf
+        echo "→ Step 2/3: Partitioning graph..."
+        osrm-partition /data/kerala-latest.osrm
+        echo "→ Step 3/3: Customizing graph..."
+        osrm-customize /data/kerala-latest.osrm
+        echo "✓ OSRM preprocessing complete"
+    restart: "no"
+
   # ─── OSRM: provides travel time/distance matrix ─────────────────────
   # Uses Kerala OpenStreetMap data. Preprocessed with Multi-Level Dijkstra
   # for fastest queries. Runs on port 5000.
@@ -68,6 +111,9 @@ services:
     volumes:
       - ./data/osrm:/data
     command: osrm-routed --algorithm mld /data/kerala-latest.osrm
+    depends_on:
+      osrm-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
@@ -92,6 +138,35 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  # ─── Database Init: auto-run Alembic migrations ──────────────────────
+  # Runs `alembic upgrade head` automatically on startup. Idempotent:
+  # if schema is already up-to-date, Alembic is a no-op.
+  # This eliminates the manual `alembic upgrade head` step.
+  #
+  # Why a separate container instead of running migrations in the API?
+  # - Separation of concerns: migrations run once, API runs continuously
+  # - If migrations fail, the API container doesn't start (clear error)
+  # - Multiple API replicas won't race on migration execution
+  db-init:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+    container_name: lpg-db-init
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://routing:${POSTGRES_PASSWORD:-routing_dev_pass}@db:5432/routing_opt
+    # Override the default CMD (uvicorn) to run migrations instead.
+    # Uses the sync driver because Alembic doesn't support async natively.
+    command: >
+      sh -c "
+        echo '→ Running database migrations...' &&
+        alembic upgrade head &&
+        echo '✓ Database schema up to date'
+      "
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   # ─── Backend API ─────────────────────────────────────────────────────
   # FastAPI server: handles CSV upload, geocoding, optimization trigger,
   # and serves driver routes. Also serves the driver PWA.
@@ -112,8 +187,8 @@ services:
     volumes:
       - ./data:/app/data
     depends_on:
-      db:
-        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
       osrm:
         condition: service_started
       vroom:

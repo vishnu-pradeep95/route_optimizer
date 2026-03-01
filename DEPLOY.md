@@ -10,6 +10,29 @@
 
 ---
 
+## Quick Start (3 Steps)
+
+If Docker and Git are already installed, setup is just:
+
+```bash
+# 1. Open Ubuntu / WSL terminal and go to the project folder
+cd routing_opt
+
+# 2. Run the installer (creates config, downloads map data, starts everything)
+./scripts/install.sh
+
+# 3. Open the dashboard in Chrome
+#    http://localhost:8000/dashboard/
+```
+
+The installer handles everything: creates secure passwords, downloads Kerala map
+data, sets up the database, and starts all services. First run takes ~15 minutes;
+subsequent runs take ~1 minute.
+
+**Need Docker/Git?** Follow Section 2 below for the full one-time setup.
+
+---
+
 ## Table of Contents
 
 1. [What You Need](#1-what-you-need)
@@ -88,84 +111,33 @@ docker run --rm hello-world
 
 You should see "Hello from Docker!" — that means it's working.
 
-### Step 2.3: Download the Route Optimizer
+### Step 2.3: Download and Install the Route Optimizer
 
 ```bash
 # Clone the project (replace URL with the actual repository URL)
 git clone <REPO_URL> routing_opt
 cd routing_opt
 
-# Set up Python
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+# Run the installer — handles everything automatically
+./scripts/install.sh
 ```
 
-### Step 2.4: Configure Settings
+The installer will:
+- Ask you for a database password and API key (press Enter for auto-generated secure ones)
+- Ask for your Google Maps API key (optional — ask technical team)
+- Download Kerala map data (~150 MB)
+- Set up the database
+- Start all services
 
-```bash
-# Create configuration file
-cp .env.example .env
-nano .env
-```
+**Save the API key it shows you** — you'll need it for the dashboard.
 
-A text editor will open. Change these values:
+First run takes ~15 minutes. When you see "Installation complete!", you're done.
 
-| Setting | What to Put | Where to Get It |
-|---------|-------------|-----------------|
-| `GOOGLE_MAPS_API_KEY` | Your Google API key | Ask the technical team |
-| `POSTGRES_PASSWORD` | A password (mix letters + numbers, 12+ chars, e.g., `kX9m2pL7qR4z`) | Choose your own — write it down somewhere safe |
-| `API_KEY` | A password for the API (mix letters + numbers, 12+ chars, e.g., `rT5nW8jK2mP9`) | Choose your own — write it down somewhere safe |
+### Step 2.4: Verify It Works
 
-Press `Ctrl+O` to save, then `Ctrl+X` to exit.
-
-### Step 2.5: Set Up the Map Data
-
-This downloads Kerala road map data so the system can calculate driving distances.
-Takes about 10 minutes.
-
-```bash
-# Start Docker
-sudo service docker start
-
-# Download Kerala map data
-mkdir -p data/osrm
-wget -O data/osrm/kerala-latest.osm.pbf \
-  https://download.openstreetmap.fr/extracts/asia/india/kerala.osm.pbf
-
-# Process the map data (takes 5-10 minutes — wait for it to finish)
-docker run --rm -v $(pwd)/data/osrm:/data osrm/osrm-backend:latest \
-  osrm-extract -p /opt/car.lua /data/kerala-latest.osm.pbf
-
-docker run --rm -v $(pwd)/data/osrm:/data osrm/osrm-backend:latest \
-  osrm-partition /data/kerala-latest.osrm
-
-docker run --rm -v $(pwd)/data/osrm:/data osrm/osrm-backend:latest \
-  osrm-customize /data/kerala-latest.osrm
-```
-
-### Step 2.6: Start Everything
-
-```bash
-# Start all services
-docker compose up -d
-
-# Set up the database
-source .venv/bin/activate
-alembic upgrade head
-```
-
-### Step 2.7: Verify It Works
-
-```bash
-# Check if the system is running
-curl http://localhost:8000/health
-```
-
-You should see `{"status": "ok", ...}`. If yes — setup is complete!
-
-Open Chrome and go to: **http://localhost:8000/driver/** — you should see the driver app.
+Open Chrome and go to: **http://localhost:8000/dashboard/** — you should see the
+operations dashboard. Go to **http://localhost:8000/driver/** — you should see the
+driver app.
 
 ---
 
