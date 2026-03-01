@@ -2,14 +2,16 @@
 
 Verifies that GoogleGeocoder correctly:
 - Implements the Geocoder protocol
-- Caches results locally to save API costs
+- Calls the Google Maps API and parses responses
 - Handles API errors gracefully
 - Maps Google's location_type to our confidence scores
 
-All tests mock the HTTP layer — no real Google API calls.
+GoogleGeocoder is now a pure stateless API caller -- no file cache.
+Caching is handled by CachedGeocoder (see test_cache.py).
+
+All tests mock the HTTP layer -- no real Google API calls.
 """
 
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -24,11 +26,10 @@ from core.geocoding.interfaces import GeocodingResult
 
 
 @pytest.fixture
-def geocoder(tmp_path):
-    """GoogleGeocoder with a temp cache directory (no real API calls)."""
+def geocoder():
+    """GoogleGeocoder instance (no real API calls)."""
     return GoogleGeocoder(
         api_key="test-key-not-real",
-        cache_dir=str(tmp_path / "cache"),
     )
 
 
@@ -105,7 +106,7 @@ class TestGoogleGeocoder:
         """ROOFTOP location_type should map to 0.95 confidence.
 
         Why this mapping? ROOFTOP means Google resolved to a specific
-        building — the highest accuracy level. We use 0.95 (not 1.0)
+        building -- the highest accuracy level. We use 0.95 (not 1.0)
         because even ROOFTOP can have ~10m error in Indian addresses.
         """
         with patch("core.geocoding.google_adapter.httpx.get") as mock_get:
@@ -124,7 +125,7 @@ class TestGoogleGeocoder:
     def test_approximate_accuracy_gives_low_confidence(
         self, geocoder, google_approximate_response
     ):
-        """APPROXIMATE location_type maps to 0.40 — lowest confidence.
+        """APPROXIMATE location_type maps to 0.40 -- lowest confidence.
 
         APPROXIMATE means Google only resolved to a general area.
         Many Kerala addresses (e.g., "near temple, Vatakara") get this.
@@ -155,13 +156,12 @@ class TestGoogleGeocoder:
         assert result.location is None
         assert result.confidence == 0.0
 
-    def test_cache_prevents_duplicate_api_calls(
+    def test_each_geocode_call_hits_api(
         self, geocoder, google_rooftop_response
     ):
-        """Second geocode for the same address should hit cache, not API.
+        """Every geocode() call should hit the API since GoogleGeocoder is stateless.
 
-        Why test this? At $5 per 1000 calls, caching repeat addresses
-        (common for regular LPG customers) saves significant money.
+        Caching is handled by CachedGeocoder at a higher level.
         """
         with patch("core.geocoding.google_adapter.httpx.get") as mock_get:
             mock_get.return_value = MagicMock(
@@ -169,19 +169,18 @@ class TestGoogleGeocoder:
                 json=lambda: google_rooftop_response,
                 raise_for_status=lambda: None,
             )
-            # First call hits API
+            # Both calls hit API -- no file cache
             result1 = geocoder.geocode("Vatakara Bus Stand, Vatakara")
-            # Second call should use cache
             result2 = geocoder.geocode("Vatakara Bus Stand, Vatakara")
 
-        # API was called only once
-        assert mock_get.call_count == 1
+        # API was called twice (no caching in GoogleGeocoder)
+        assert mock_get.call_count == 2
         # Both results are the same
         assert result1.location.latitude == result2.location.latitude
         assert result1.location.longitude == result2.location.longitude
 
     def test_network_error_returns_failed_result(self, geocoder):
-        """HTTP errors should not crash — return a failed GeocodingResult.
+        """HTTP errors should not crash -- return a failed GeocodingResult.
 
         This happens when the driver's phone has no signal. The caller
         can decide what to do (skip this order, retry later, etc.).
@@ -222,49 +221,16 @@ class TestGoogleGeocoder:
 
         assert "Vatakara Bus Stand" in result.formatted_address
 
-    def test_cache_persists_to_disk(self, geocoder, google_rooftop_response, tmp_path):
-        """Cache file should be written to disk after a successful geocode.
+    def test_constructor_accepts_only_api_key_and_region_bias(self):
+        """GoogleGeocoder is a pure API caller -- no cache_dir parameter."""
+        import inspect
 
-        This ensures if the app restarts, cached results are preserved.
-        """
-        with patch("core.geocoding.google_adapter.httpx.get") as mock_get:
-            mock_get.return_value = MagicMock(
-                status_code=200,
-                json=lambda: google_rooftop_response,
-                raise_for_status=lambda: None,
-            )
-            geocoder.geocode("Test Address")
+        sig = inspect.signature(GoogleGeocoder.__init__)
+        params = set(sig.parameters.keys()) - {"self"}
+        assert params == {"api_key", "region_bias"}
 
-        # Cache file should exist
-        cache_file = tmp_path / "cache" / "google_cache.json"
-        assert cache_file.exists()
-        cache_data = json.loads(cache_file.read_text())
-        assert len(cache_data) > 0
-
-    def test_corrupt_cache_file_recovered(self, tmp_path):
-        """A corrupt cache file should not crash the geocoder.
-
-        If the app crashed mid-write (unlikely with atomic saves, but possible),
-        the next startup should recover gracefully by starting with an empty cache.
-        """
-        cache_dir = tmp_path / "corrupt_cache"
-        cache_dir.mkdir()
-        cache_file = cache_dir / "google_cache.json"
-        cache_file.write_text("{invalid json content!!!}")
-
-        # Should not raise — starts with empty cache
-        geocoder = GoogleGeocoder(api_key="test-key", cache_dir=str(cache_dir))
-        assert geocoder._cache == {}
-
-    def test_cache_with_non_dict_content_recovered(self, tmp_path):
-        """If cache file contains valid JSON but not a dict, start fresh.
-
-        Edge case: a file containing a JSON array [] instead of a dict {}.
-        """
-        cache_dir = tmp_path / "bad_cache"
-        cache_dir.mkdir()
-        cache_file = cache_dir / "google_cache.json"
-        cache_file.write_text("[1, 2, 3]")
-
-        geocoder = GoogleGeocoder(api_key="test-key", cache_dir=str(cache_dir))
-        assert geocoder._cache == {}
+    def test_no_file_cache_methods(self):
+        """Verify file cache methods have been removed."""
+        assert not hasattr(GoogleGeocoder, "_load_cache")
+        assert not hasattr(GoogleGeocoder, "_save_cache")
+        assert not hasattr(GoogleGeocoder, "_address_hash")

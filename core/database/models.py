@@ -30,6 +30,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -382,6 +383,9 @@ class GeocodeCacheDB(Base):
     """
 
     __tablename__ = "geocode_cache"
+    __table_args__ = (
+        UniqueConstraint("address_norm", "source", name="geocode_cache_address_norm_source_key"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
