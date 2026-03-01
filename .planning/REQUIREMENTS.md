@@ -3,97 +3,78 @@
 **Defined:** 2026-03-01
 **Core Value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route — no silent drops, no missing stops.
 
-## v1 Requirements
+## v1.1 Requirements
 
-Requirements for this milestone. Each maps to roadmap phases.
+Requirements for v1.1 Polish & Reliability milestone. Each maps to roadmap phases.
 
-### Data Integrity
+### Geocoding
 
-- [x] **DATA-01**: User sees which orders failed geocoding, with reason per row (not silently dropped)
-- [x] **DATA-02**: Upload response includes import summary: N succeeded, M failed, with downloadable failure report
-- [x] **DATA-03**: Partially-geocoded batches still optimize the successful orders (not all-or-nothing)
-- [x] **DATA-04**: Depot coordinates from config.py (Vatakara 11.52°N) flow correctly through entire pipeline — audit and fix any leaks
-- [x] **DATA-05**: CSV import validation shows row-level errors (missing fields, bad formats) before geocoding starts
+- [ ] **GEO-01**: Geocoding uses a single normalized address key across all cache layers (no duplicate locations from normalization mismatch)
+- [ ] **GEO-02**: All geocoding cache reads/writes go through DB only (file-based JSON cache deprecated)
+- [ ] **GEO-03**: User sees a warning when two or more orders in an upload resolve to GPS coordinates within 15m of each other
+- [ ] **GEO-04**: Upload results show how many addresses were cache hits (free) vs Google API calls, with estimated cost
 
-### UI/UX — Dashboard
+### Dashboard UI
 
-- [x] **DASH-01**: Install Tailwind 4 + DaisyUI 5 with collision-safe prefix (`tw`) in Vite pipeline
-- [x] **DASH-02**: Define logistics SaaS theme (clean colors, professional typography, consistent spacing)
-- [ ] **DASH-03**: Migrate Upload/Routes page to Tailwind/DaisyUI — file upload, progress, results table
-- [ ] **DASH-04**: Migrate Live Map page — clean map container, vehicle sidebar, status indicators
-- [ ] **DASH-05**: Migrate Fleet Management page — vehicle cards/table, driver info, capacity indicators
-- [ ] **DASH-06**: Migrate Run History page — sortable run table, expandable route details
-- [ ] **DASH-07**: Empty states for all pages (no routes yet, no vehicles, no history)
-- [ ] **DASH-08**: Toast notification system for success, error, and warning feedback
+- [ ] **DASH-01**: All 4 dashboard pages use DaisyUI component vocabulary consistently (no mixed raw CSS + DaisyUI)
+- [ ] **DASH-02**: Sidebar uses SVG icons (lucide-react) instead of emoji for navigation items
+- [ ] **DASH-03**: Every page shows a skeleton loading state while data loads and a meaningful empty state when no data exists
+- [ ] **DASH-04**: Numeric values (distances, weights, counts) use tabular-number font variant for column alignment
+- [ ] **DASH-05**: Route cards display color-coded status badges (green=complete, amber=in-progress, red=issues)
+- [ ] **DASH-06**: Sidebar collapses to icon-only on screens below 1280px and uses DaisyUI drawer on mobile
+- [ ] **DASH-07**: QR sheet prints cleanly with large QR codes, vehicle name, and driver name via @media print
 
-### UI/UX — Driver PWA
+### Driver PWA
 
-- [x] **PWA-01**: Pre-compiled Tailwind CSS via standalone CLI (no CDN, offline-capable)
-- [ ] **PWA-02**: Professional mobile layout — clean route list, map, delivery cards
-- [ ] **PWA-03**: Service worker cache updated for new CSS assets
-- [ ] **PWA-04**: Toast/alert system for delivery status feedback on mobile
+- [ ] **PWA-01**: Next stop is displayed as a prominent hero card at top of stop list with large address, distance, and Navigate button
+- [ ] **PWA-02**: Header shows delivery progress as "X of Y delivered" with a visual progress bar
+- [ ] **PWA-03**: Driver can tap a visible Refresh button to reload route data, with "Last updated" timestamp shown
+- [ ] **PWA-04**: All primary action buttons (Delivered, Failed, Navigate, Call Office) are 60px+ touch targets
+- [ ] **PWA-05**: All text/background color combinations meet WCAG AAA contrast ratio (7:1 body, 4.5:1 large text)
+- [ ] **PWA-06**: Route data persists offline — loading, viewing stops, and marking deliveries work without network
 
-### Security
-
-- [x] **SEC-01**: HTTP security headers via middleware — CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
-- [x] **SEC-02**: CORS hardened — no wildcard origins, explicit whitelist from env var
-- [x] **SEC-03**: API docs (/docs, /redoc) gated behind environment check — hidden in production
-- [x] **SEC-04**: Input validation audit — all file upload endpoints check file type, size, content
-- [x] **SEC-05**: Replace deprecated security libraries if present (python-jose → PyJWT, passlib → pwdlib)
-- [x] **SEC-06**: Rate limiter state isolated in tests — no cross-test bleed
-
-### Code Quality
-
-- [ ] **QUAL-01**: Dead code removal — identify and remove unused functions, AI-generated slop using vulture + ruff
-- [ ] **QUAL-02**: main.py refactored — break 1760-line file into focused modules (routes, upload, telemetry, auth)
-- [ ] **QUAL-03**: Remove hardcoded placeholder driver names — read from config or database
-- [ ] **QUAL-04**: Thread-safety fix — asyncio.Lock for geocoder singleton initialization
-
-### Testing
-
-- [x] **TEST-01**: Fix E2E test coordinates — use Vatakara (11.52°N) instead of Kochi (9.97°N)
-- [ ] **TEST-02**: Add hypothesis property-based tests for CSV parsing edge cases
-- [ ] **TEST-03**: Add factory_boy factories for Order, Vehicle, Route test data
-- [ ] **TEST-04**: Add respx mocks for Google Geocoding, VROOM, OSRM external API calls
-- [ ] **TEST-05**: pytest-cov coverage gate — establish baseline and prevent regression
-- [x] **TEST-06**: Async test configuration — set asyncio_mode=auto in pytest.ini
-
-### Documentation
-
-- [ ] **DOCS-01**: README rewrite — clear project description, one-command Docker setup, screenshots
-- [ ] **DOCS-02**: Environment variable guide — all vars documented with defaults and examples
-- [ ] **DOCS-03**: Troubleshooting section — OSRM startup order, common Docker issues, geocoding API setup
-- [ ] **DOCS-04**: Developer guide — project structure, how to run tests, how to add new features
-
-## v2 Requirements
+## Future Requirements
 
 Deferred to future milestone. Tracked but not in current roadmap.
 
-### Advanced UI
+### Geocoding Enhancements
 
-- **ADV-01**: Dark mode toggle for dashboard
-- **ADV-02**: Route drag-and-drop reordering on map
-- **ADV-03**: Multi-file CSV upload in single batch
-- **ADV-04**: Real-time vehicle tracking on live map
+- **GEO-05**: Cache migration tool imports file cache entries into DB with correct normalization
+- **GEO-06**: Cache statistics show total cached addresses, hit rate, and estimated savings
+- **GEO-07**: Driver-verified GPS coordinates are promoted to cache entries on delivery confirmation
 
-### Advanced Features
+### Dashboard Enhancements
 
-- **ADV-05**: Customer-facing delivery tracking page
-- **ADV-06**: Push notifications for drivers
-- **ADV-07**: AI-powered address suggestion for failed geocoding
-- **ADV-08**: Automated re-geocoding queue for failed addresses
+- **DASH-08**: Theme switcher (light/dark) with preference stored in localStorage
+- **DASH-09**: At-a-glance daily summary card showing total deliveries, vehicles, failures, distance
+- **DASH-10**: Per-vehicle capacity utilization bar on route cards (weight vs 446kg max)
+
+### Driver PWA Enhancements
+
+- **PWA-07**: Focus mode — full-screen next-stop-only view with swipe to peek next
+- **PWA-08**: Auto-advance to next undelivered stop after marking delivery
+- **PWA-09**: Haptic feedback (vibration) on delivery confirmation
+- **PWA-10**: Offline sync queue indicator showing pending updates count
 
 ## Out of Scope
 
+Explicitly excluded. Documented to prevent scope creep.
+
 | Feature | Reason |
 |---------|--------|
-| Mobile native app | PWA sufficient for driver use case |
-| Real-time chat/messaging | Not needed for delivery workflow |
-| Multi-tenant/multi-region | Vatakara-only for now |
-| Payment processing | Handled outside this system |
-| Customer-facing tracking | Drivers and office staff only |
-| Leaflet 2.0 upgrade | Alpha-only, plugins not ported, would break existing map functionality |
-| React component libraries (MUI, Ant) | DaisyUI chosen for simplicity and no-build PWA compatibility |
+| Drag-and-drop route reordering | Undermines VROOM optimizer; manual overrides create sub-optimal routes |
+| Turn-by-turn navigation in-app | Google Maps handles this; building nav requires routing engine + voice guidance |
+| Photo proof-of-delivery | Camera API complexity, upload on spotty Kerala networks, privacy concerns |
+| Countdown timers for delivery windows | Prohibited for Kerala MVD compliance; creates unsafe driving pressure |
+| Pre-cached map tiles for entire route | 50-100MB+ storage; browser cache quotas unpredictable on low-memory Android |
+| Real-time chat with office | WebSocket infra overkill; drivers can call office via one-tap button |
+| Fuzzy address matching (Levenshtein) | False positives assign wrong coordinates; safety-critical system |
+| Multiple geocoding provider fallback | Different providers return different coords; mixing creates inconsistency |
+| Reverse geocoding for telemetry pings | 25K pings/day x $0.005 = $45K/year; show raw coords, reverse on demand |
+| Elegant error handling across pipeline | Deferred to future milestone |
+| Code quality cleanup / refactoring | Deferred to future milestone |
+| Property-based unit tests / coverage gate | Deferred to future milestone |
+| Streamlined installation docs / README | Deferred to future milestone |
 
 ## Traceability
 
@@ -101,49 +82,29 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DATA-01 | Phase 3 | Complete |
-| DATA-02 | Phase 3 | Complete |
-| DATA-03 | Phase 3 | Complete |
-| DATA-04 | Phase 3 | Complete |
-| DATA-05 | Phase 3 | Complete |
-| DASH-01 | Phase 1 | Complete |
-| DASH-02 | Phase 1 | Complete |
-| DASH-03 | Phase 4 | Pending |
-| DASH-04 | Phase 4 | Pending |
-| DASH-05 | Phase 4 | Pending |
-| DASH-06 | Phase 4 | Pending |
-| DASH-07 | Phase 4 | Pending |
-| DASH-08 | Phase 4 | Pending |
-| PWA-01 | Phase 1 | Complete |
-| PWA-02 | Phase 5 | Pending |
-| PWA-03 | Phase 5 | Pending |
-| PWA-04 | Phase 5 | Pending |
-| SEC-01 | Phase 2 | Complete |
-| SEC-02 | Phase 2 | Complete |
-| SEC-03 | Phase 2 | Complete |
-| SEC-04 | Phase 2 | Complete |
-| SEC-05 | Phase 2 | Complete |
-| SEC-06 | Phase 2 | Complete |
-| QUAL-01 | Phase 6 | Pending |
-| QUAL-02 | Phase 6 | Pending |
-| QUAL-03 | Phase 6 | Pending |
-| QUAL-04 | Phase 6 | Pending |
-| TEST-01 | Phase 1 | Complete |
-| TEST-02 | Phase 6 | Pending |
-| TEST-03 | Phase 6 | Pending |
-| TEST-04 | Phase 6 | Pending |
-| TEST-05 | Phase 6 | Pending |
-| TEST-06 | Phase 1 | Complete |
-| DOCS-01 | Phase 6 | Pending |
-| DOCS-02 | Phase 6 | Pending |
-| DOCS-03 | Phase 6 | Pending |
-| DOCS-04 | Phase 6 | Pending |
+| GEO-01 | — | Pending |
+| GEO-02 | — | Pending |
+| GEO-03 | — | Pending |
+| GEO-04 | — | Pending |
+| DASH-01 | — | Pending |
+| DASH-02 | — | Pending |
+| DASH-03 | — | Pending |
+| DASH-04 | — | Pending |
+| DASH-05 | — | Pending |
+| DASH-06 | — | Pending |
+| DASH-07 | — | Pending |
+| PWA-01 | — | Pending |
+| PWA-02 | — | Pending |
+| PWA-03 | — | Pending |
+| PWA-04 | — | Pending |
+| PWA-05 | — | Pending |
+| PWA-06 | — | Pending |
 
 **Coverage:**
-- v1 requirements: 37 total (note: initial count of 31 was incorrect — actual count is 37)
-- Mapped to phases: 37
-- Unmapped: 0
+- v1.1 requirements: 17 total
+- Mapped to phases: 0
+- Unmapped: 17 ⚠️
 
 ---
 *Requirements defined: 2026-03-01*
-*Last updated: 2026-03-01 — traceability populated by roadmapper*
+*Last updated: 2026-03-01 after initial definition*
