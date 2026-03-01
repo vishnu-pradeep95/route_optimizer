@@ -150,12 +150,12 @@ export interface HealthResponse {
  * See: https://www.typescriptlang.org/tsconfig#erasableSyntaxOnly
  */
 export const STATUS_COLORS = {
-  delivered: "#22c55e", // Green — delivery completed successfully
-  pending: "#f59e0b",  // Amber — awaiting delivery
-  failed: "#ef4444",   // Red — delivery attempt failed
-  active: "#3b82f6",   // Blue — vehicle currently en route
-  idle: "#6b7280",     // Gray — vehicle not moving
-  alert: "#ef4444",    // Red — speed or safety alert
+  delivered: "#16A34A", // Green — delivery completed successfully
+  pending: "#D97706",   // Amber — awaiting delivery (matches --color-accent)
+  failed: "#DC2626",    // Red — delivery attempt failed
+  active: "#1C1917",    // Charcoal — vehicle currently en route (matches --color-text-primary)
+  idle: "#78716C",      // Stone — vehicle not moving (matches --color-text-muted)
+  alert: "#DC2626",     // Red — speed or safety alert
 } as const;
 
 /**

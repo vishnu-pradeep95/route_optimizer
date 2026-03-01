@@ -11,19 +11,15 @@ This is the main API that:
 The driver app (PWA) calls this API to get today's route.
 """
 
+import hmac  # For timing-safe API key comparison (prevents timing attacks)
 import html as html_module  # For escaping user data in server-rendered HTML (XSS prevention)
 import logging
 import os
 import pathlib
 import tempfile
 import uuid
-import base64
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-
-import io
-import qrcode
-import qrcode.image.svg
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,6 +37,13 @@ if TYPE_CHECKING:
     from core.database.models import VehicleDB
 
 from apps.kerala_delivery import config
+from apps.kerala_delivery.api.qr_helpers import (
+    build_google_maps_url,
+    generate_qr_base64_png,
+    generate_qr_svg,
+    split_route_into_segments,
+    GOOGLE_MAPS_MAX_WAYPOINTS,
+)
 from core.data_import.csv_importer import CsvImporter, ColumnMapping
 from core.data_import.cdcms_preprocessor import preprocess_cdcms, get_cdcms_column_mapping, CDCMS_COL_ORDER_NO, CDCMS_COL_ADDRESS
 from core.database.connection import engine, get_session
@@ -290,8 +293,15 @@ def _check_api_key(api_key: str | None) -> None:
 
     Why a helper instead of duplicating in each dependency?
     Both verify_api_key and verify_read_key use the same key and logic.
-    Extracting the check means a future security fix (e.g., switching to
-    hmac.compare_digest for timing-safe comparison) only needs one change.
+    Extracting the check means a future security fix only needs one change.
+
+    Why hmac.compare_digest instead of ==?
+    String equality (==) short-circuits on the first mismatched character,
+    leaking timing information about how much of the key matched. An attacker
+    could measure response times to guess the key character-by-character.
+    hmac.compare_digest runs in constant time regardless of where the mismatch
+    occurs, preventing this class of timing side-channel attacks.
+    See: https://docs.python.org/3/library/hmac.html#hmac.compare_digest
 
     Raises HTTPException(401) if API_KEY is set and the provided key
     doesn't match. No-ops in dev mode (API_KEY unset).
@@ -299,7 +309,7 @@ def _check_api_key(api_key: str | None) -> None:
     expected_key = os.environ.get("API_KEY", "")
     if not expected_key:
         return  # Dev mode — no auth required
-    if not api_key or api_key != expected_key:
+    if not api_key or not hmac.compare_digest(api_key, expected_key):
         raise HTTPException(
             status_code=401,
             detail="Invalid or missing API key. Include X-API-Key header.",
@@ -905,169 +915,9 @@ async def update_stop_status(
 # =============================================================================
 # QR Code / Google Maps Route URLs
 # =============================================================================
-# Google Maps Directions URLs support a maximum of 9 waypoints between
-# the origin and destination (11 total stops). Routes with more stops
-# are automatically split into segments, each with its own URL and QR code.
-# See: https://developers.google.com/maps/documentation/urls/get-started
-#
-# Workflow: employee uploads CDCMS file → optimizer generates routes →
-# this endpoint generates QR codes → employee prints a sheet → drivers
-# scan QR codes with their phone camera → Google Maps opens with
-# turn-by-turn navigation.
-GOOGLE_MAPS_MAX_WAYPOINTS = 9  # origin + 9 waypoints + destination = 11 stops
-
-
-def _build_google_maps_url(stops: list[dict]) -> str:
-    """Build a Google Maps Directions URL from an ordered list of stops.
-
-    Args:
-        stops: List of dicts with 'latitude' and 'longitude' keys,
-               ordered by delivery sequence.
-
-    Returns:
-        Google Maps URL that opens navigation with all stops as waypoints.
-
-    Why Google Maps URL instead of our own map?
-    Drivers are familiar with Google Maps navigation. It handles traffic,
-    voice guidance, lane guidance, and offline maps. Building all that
-    ourselves would take months. Our value is in route OPTIMIZATION —
-    Google Maps handles NAVIGATION.
-    """
-    if not stops:
-        return ""
-
-    origin = stops[0]
-    destination = stops[-1]
-
-    url = (
-        "https://www.google.com/maps/dir/?api=1"
-        f"&origin={origin['latitude']},{origin['longitude']}"
-        f"&destination={destination['latitude']},{destination['longitude']}"
-        "&travelmode=driving"
-    )
-
-    # Add intermediate stops as waypoints (everything except first and last)
-    if len(stops) > 2:
-        waypoints = "|".join(
-            f"{s['latitude']},{s['longitude']}" for s in stops[1:-1]
-        )
-        url += f"&waypoints={waypoints}"
-
-    return url
-
-
-def _generate_qr_svg(data: str, box_size: int = 10) -> str:
-    """Generate a QR code as an SVG string.
-
-    Why SVG instead of PNG?
-    - Scales perfectly for print (no pixelation at any size)
-    - Smaller file size for embedding in HTML
-    - No need for image hosting or base64 encoding of binary data
-    - Can be styled with CSS if needed
-
-    Args:
-        data: The string to encode (typically a URL).
-        box_size: Size of each QR module in SVG units.
-
-    Returns:
-        Complete SVG markup as a string.
-    """
-    # SvgPathImage produces a single <path> element — cleaner than
-    # individual <rect> elements (SvgImage). Fewer DOM nodes = faster
-    # rendering when embedding multiple QR codes on a print sheet.
-    factory = qrcode.image.svg.SvgPathImage
-    qr = qrcode.QRCode(
-        version=None,  # Auto-detect smallest version that fits the data
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=box_size,
-        border=2,  # Minimum quiet zone for reliable scanning
-    )
-    qr.add_data(data)
-    qr.make(fit=True)
-
-    img = qr.make_image(image_factory=factory)
-    # Convert to string — SvgPathImage.to_string() returns bytes
-    return img.to_string(encoding="unicode")
-
-
-def _generate_qr_base64_png(data: str, box_size: int = 10) -> str:
-    """Generate a QR code as a base64-encoded PNG for embedding in HTML.
-
-    Used for the printable QR sheet where inline images are more reliable
-    across printers than inline SVG.
-
-    Returns:
-        Base64-encoded PNG string (without data: prefix).
-    """
-    qr = qrcode.QRCode(
-        version=None,
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=box_size,
-        border=2,
-    )
-    qr.add_data(data)
-    qr.make(fit=True)
-
-    img = qr.make_image(fill_color="black", back_color="white")
-    buffer = io.BytesIO()
-    img.save(buffer, format="PNG")
-    return base64.b64encode(buffer.getvalue()).decode("ascii")
-
-
-def _split_route_into_segments(stops: list[dict]) -> list[dict]:
-    """Split a route with many stops into Google Maps-compatible segments.
-
-    Google Maps URLs support max 9 waypoints (+ origin + destination = 11 stops).
-    Routes with more than 11 stops are split into overlapping segments so the
-    driver can navigate each part sequentially.
-
-    Why overlap? The destination of segment N is the origin of segment N+1.
-    This gives the driver a continuous path — Google Maps doesn't know about
-    our other segments, so overlapping prevents a gap.
-
-    Args:
-        stops: All stops in delivery order, each with latitude/longitude.
-
-    Returns:
-        List of segment dicts, each with: start_stop, end_stop, url, qr_svg.
-    """
-    # 11 stops fit in one URL (1 origin + 9 waypoints + 1 destination)
-    max_stops_per_segment = GOOGLE_MAPS_MAX_WAYPOINTS + 2  # = 11
-
-    if len(stops) <= max_stops_per_segment:
-        url = _build_google_maps_url(stops)
-        return [{
-            "segment": 1,
-            "start_stop": 1,
-            "end_stop": len(stops),
-            "stop_count": len(stops),
-            "url": url,
-            "qr_svg": _generate_qr_svg(url),
-        }]
-
-    segments = []
-    segment_num = 1
-    i = 0
-
-    while i < len(stops):
-        segment_stops = stops[i : i + max_stops_per_segment]
-        url = _build_google_maps_url(segment_stops)
-
-        segments.append({
-            "segment": segment_num,
-            "start_stop": i + 1,
-            "end_stop": i + len(segment_stops),
-            "stop_count": len(segment_stops),
-            "url": url,
-            "qr_svg": _generate_qr_svg(url),
-        })
-
-        # Advance by (max - 1) so the last stop of this segment becomes
-        # the first stop of the next segment (overlap for continuity)
-        i += max_stops_per_segment - 1
-        segment_num += 1
-
-    return segments
+# Helper functions (build_google_maps_url, generate_qr_svg/png,
+# split_route_into_segments) are in apps/kerala_delivery/api/qr_helpers.py.
+# Extracted to keep this module focused on HTTP endpoint concerns.
 
 
 @app.get("/api/routes/{vehicle_id}/google-maps", dependencies=[Depends(verify_read_key)])
@@ -1113,7 +963,7 @@ async def get_google_maps_route(
             "label": stop.address_display or f"Stop {stop.sequence}",
         })
 
-    segments = _split_route_into_segments(stops)
+    segments = split_route_into_segments(stops)
 
     return {
         "vehicle_id": vehicle_id,
@@ -1167,7 +1017,7 @@ async def get_qr_sheet(session: AsyncSession = SessionDep):
                 "label": stop.address_display or f"Stop {stop.sequence}",
             })
 
-        segments = _split_route_into_segments(stops)
+        segments = split_route_into_segments(stops)
 
         vehicle_cards.append({
             "vehicle_id": route.vehicle_id,
@@ -1179,7 +1029,7 @@ async def get_qr_sheet(session: AsyncSession = SessionDep):
             "segments": segments,
             # Generate PNG QR codes for print (more printer-compatible than SVG)
             "qr_pngs": [
-                _generate_qr_base64_png(seg["url"], box_size=6)
+                generate_qr_base64_png(seg["url"], box_size=6)
                 for seg in segments
             ],
         })

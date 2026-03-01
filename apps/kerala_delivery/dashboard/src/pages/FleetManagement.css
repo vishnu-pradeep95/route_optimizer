@@ -344,3 +344,36 @@
   gap: var(--space-4);
   color: var(--color-text-muted);
 }
+
+/* Inline edit inputs — replaces inline style={{ width, fontSize, padding }} */
+.fleet-edit-input {
+  font-size: 13px;
+  padding: 3px 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  color: var(--color-text-primary);
+  background: var(--color-surface-card);
+}
+
+.fleet-edit-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-bg);
+}
+
+.fleet-edit-input--id { width: 130px; }
+.fleet-edit-input--weight,
+.fleet-edit-input--speed { width: 80px; }
+.fleet-edit-input--items { width: 60px; }
+.fleet-edit-input--coord { width: 80px; font-size: 11px; }
+
+/* Status badge — active/inactive coloring via data attribute.
+ * Replaces inline style={{ backgroundColor: STATUS_COLORS.x }}
+ * so colors come from CSS, not JS. */
+.fleet-status-badge[data-status="active"] {
+  background-color: #16A34A;
+}
+.fleet-status-badge[data-status="inactive"] {
+  background-color: #78716C;
+}

@@ -14,9 +14,9 @@
  * └──────┴──────────────────────────────────┘
  *
  * Why CSS Grid with fixed sidebar + flexible main:
- * Grid gives us explicit column sizing. The sidebar width transition
- * (64px → 220px) is handled by grid-template-columns animation,
- * which is smoother than animating width properties.
+ * Grid gives us explicit column sizing. The sidebar expands by changing
+ * its own width (64px → 220px) and overlays the main area via z-index.
+ * The grid column stays at 64px — expanding doesn't push main content.
  */
 
 .app {
@@ -24,7 +24,6 @@
   grid-template-columns: var(--sidebar-collapsed) 1fr;
   height: 100vh;
   overflow: hidden;
-  transition: grid-template-columns var(--transition-smooth);
 }
 
 /* ── Sidebar ──────────────────────────────────────────────────── */

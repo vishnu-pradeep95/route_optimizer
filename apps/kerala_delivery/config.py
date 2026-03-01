@@ -21,8 +21,8 @@ from core.models.location import Location
 # TODO: Replace with actual godown GPS coordinates
 # This is a placeholder near Kochi — update before first real run
 DEPOT_LOCATION = Location(
-    latitude=9.9716,
-    longitude=76.2846,
+    latitude=11.624443730714066,
+    longitude=75.57964507762223,
     address_text="LPG Godown (Main Depot)",
 )
 

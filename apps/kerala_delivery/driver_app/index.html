@@ -544,6 +544,24 @@ async function replayOfflineQueue() {
 }
 
 // ============================================================
+// XSS Prevention — escape untrusted strings before HTML insertion
+// ============================================================
+// Why? renderStopList() and showVehicleSelector() use innerHTML with
+// server data (addresses, notes, driver names). If that data ever
+// contains HTML tags (e.g., a malicious address like
+// "<script>alert(1)</script>"), the browser would execute it.
+// This helper escapes the 5 HTML-significant characters.
+// See: https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+// ============================================================
 // App Initialization — restore cached state on load
 // ============================================================
 // On page load, check if we have cached route data from a previous session.
@@ -629,8 +647,8 @@ function showVehicleSelector(routes) {
 
     const list = document.getElementById('vehicle-list');
     list.innerHTML = routes.map(r => `
-        <button class="vehicle-btn" onclick="loadRoute('${r.vehicle_id}')">
-            <div class="v-name">🚛 ${r.driver_name} (${r.vehicle_id})</div>
+        <button class="vehicle-btn" onclick="loadRoute('${escapeHtml(r.vehicle_id)}')">
+            <div class="v-name">🚛 ${escapeHtml(r.driver_name)} (${escapeHtml(r.vehicle_id)})</div>
             <div class="v-stats">
                 ${r.total_stops} stops · ${r.total_distance_km} km · ~${Math.round(r.total_duration_minutes)} min · ${r.total_weight_kg} kg
             </div>
@@ -683,24 +701,24 @@ async function loadRoute(vehicleId) {
 function renderStopList() {
     const container = document.getElementById('stop-list');
     container.innerHTML = currentRoute.stops.map(stop => `
-        <div class="stop-card ${stop.status}" id="stop-${stop.order_id}">
+        <div class="stop-card ${escapeHtml(stop.status)}" id="stop-${escapeHtml(stop.order_id)}">
             <div class="stop-number">${stop.sequence}</div>
             <div class="stop-info">
-                <div class="stop-address">${stop.address || 'Address pending'}</div>
+                <div class="stop-address">${escapeHtml(stop.address) || 'Address pending'}</div>
                 <div class="stop-meta">
                     ${stop.quantity} cylinder${stop.quantity > 1 ? 's' : ''} · ${stop.weight_kg} kg
                     ${stop.distance_from_prev_km > 0 ? ` · ${stop.distance_from_prev_km} km away` : ''}
                 </div>
-                ${stop.notes ? `<div class="stop-notes">📝 ${stop.notes}</div>` : ''}
+                ${stop.notes ? `<div class="stop-notes">📝 ${escapeHtml(stop.notes)}</div>` : ''}
                 ${stop.status === 'pending' ? `
                 <div class="stop-actions">
                     <button class="btn btn-navigate" onclick="navigateTo(${stop.latitude}, ${stop.longitude})">
                         🧭 Navigate
                     </button>
-                    <button class="btn btn-deliver" onclick="markDelivered('${currentRoute.vehicle_id}', '${stop.order_id}')">
+                    <button class="btn btn-deliver" onclick="markDelivered('${escapeHtml(currentRoute.vehicle_id)}', '${escapeHtml(stop.order_id)}')">
                         ✅ Delivered
                     </button>
-                    <button class="btn btn-fail" onclick="markFailed('${currentRoute.vehicle_id}', '${stop.order_id}')">
+                    <button class="btn btn-fail" onclick="markFailed('${escapeHtml(currentRoute.vehicle_id)}', '${escapeHtml(stop.order_id)}')">
                         ✗
                     </button>
                 </div>

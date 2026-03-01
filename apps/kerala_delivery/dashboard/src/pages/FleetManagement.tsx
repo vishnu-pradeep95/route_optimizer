@@ -28,7 +28,6 @@ import {
   deleteVehicle,
 } from "../lib/api";
 import type { Vehicle } from "../types";
-import { STATUS_COLORS } from "../types";
 import "./FleetManagement.css";
 
 // --- Constants ---
@@ -585,14 +584,14 @@ export function FleetManagement() {
                       type="text"
                       value={editForm.registration_no}
                       onChange={handleFieldChange(setEditForm, "registration_no")}
-                      style={{ width: "130px", fontSize: "13px", padding: "3px 6px" }}
+                      className="fleet-edit-input fleet-edit-input--id"
                     />
                   </td>
                   <td>
                     <select
                       value={editForm.vehicle_type}
                       onChange={handleFieldChange(setEditForm, "vehicle_type")}
-                      style={{ fontSize: "13px", padding: "3px 6px" }}
+                      className="fleet-edit-input"
                     >
                       <option value="diesel">Diesel</option>
                       <option value="electric">Electric</option>
@@ -606,7 +605,7 @@ export function FleetManagement() {
                       max={MAX_RATED_PAYLOAD_KG}
                       value={editForm.max_weight_kg}
                       onChange={handleFieldChange(setEditForm, "max_weight_kg")}
-                      style={{ width: "80px", fontSize: "13px", padding: "3px 6px" }}
+                      className="fleet-edit-input fleet-edit-input--weight"
                     />
                   </td>
                   <td>
@@ -614,7 +613,7 @@ export function FleetManagement() {
                       type="number"
                       value={editForm.max_items}
                       onChange={handleFieldChange(setEditForm, "max_items")}
-                      style={{ width: "60px", fontSize: "13px", padding: "3px 6px" }}
+                      className="fleet-edit-input fleet-edit-input--items"
                     />
                   </td>
                   <td>
@@ -624,7 +623,7 @@ export function FleetManagement() {
                       max={MAX_SPEED_LIMIT_KMH}
                       value={editForm.speed_limit_kmh}
                       onChange={handleFieldChange(setEditForm, "speed_limit_kmh")}
-                      style={{ width: "60px", fontSize: "13px", padding: "3px 6px" }}
+                      className="fleet-edit-input fleet-edit-input--items"
                     />
                   </td>
                   <td>
@@ -633,7 +632,7 @@ export function FleetManagement() {
                       step="0.0001"
                       value={editForm.depot_latitude}
                       onChange={handleFieldChange(setEditForm, "depot_latitude")}
-                      style={{ width: "80px", fontSize: "11px", padding: "3px 6px" }}
+                      className="fleet-edit-input fleet-edit-input--coord"
                     />
                     ,{" "}
                     <input
@@ -641,17 +640,13 @@ export function FleetManagement() {
                       step="0.0001"
                       value={editForm.depot_longitude}
                       onChange={handleFieldChange(setEditForm, "depot_longitude")}
-                      style={{ width: "80px", fontSize: "11px", padding: "3px 6px" }}
+                      className="fleet-edit-input fleet-edit-input--coord"
                     />
                   </td>
                   <td>
                     <span
                       className="fleet-status-badge"
-                      style={{
-                        backgroundColor: v.is_active
-                          ? STATUS_COLORS.delivered
-                          : STATUS_COLORS.idle,
-                      }}
+                      data-status={v.is_active ? "active" : "inactive"}
                     >
                       {v.is_active ? "active" : "inactive"}
                     </span>
@@ -688,11 +683,7 @@ export function FleetManagement() {
                   <td>
                     <span
                       className="fleet-status-badge"
-                      style={{
-                        backgroundColor: v.is_active
-                          ? STATUS_COLORS.delivered
-                          : STATUS_COLORS.idle,
-                      }}
+                      data-status={v.is_active ? "active" : "inactive"}
                     >
                       {v.is_active ? "active" : "inactive"}
                     </span>

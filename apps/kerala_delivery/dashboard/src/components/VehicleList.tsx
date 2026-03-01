@@ -12,7 +12,7 @@
  */
 
 import type { RouteSummary, RouteDetail, TelemetryPing } from "../types";
-import { getVehicleColor, STATUS_COLORS } from "../types";
+import { getVehicleColor } from "../types";
 import "./VehicleList.css";
 
 interface VehicleListProps {
@@ -129,7 +129,6 @@ export function VehicleList({
                   <span
                     className="speed-alert-badge"
                     title="Speed exceeds 40 km/h urban limit"
-                    style={{ color: STATUS_COLORS.alert }}
                   >
                     ⚠ SPEED
                   </span>
