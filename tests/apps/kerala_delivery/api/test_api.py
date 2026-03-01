@@ -1058,11 +1058,12 @@ class TestAuthentication:
 
 
 class TestUploadValidation:
-    """Tests for upload file validation — extension and size checks.
+    """Tests for enhanced file upload input validation (SEC-04).
 
+    Verifies that file type, content-type, and size are validated
+    BEFORE any CSV parsing, geocoding, or optimization begins.
     SECURITY: prevents uploading executable files, scripts, or
     excessively large files that could exhaust server memory.
-    Added after Code Review #6 — Warning W1.
     """
 
     def test_rejects_unsupported_extension(self, client):
@@ -1075,12 +1076,13 @@ class TestUploadValidation:
         assert "unsupported" in resp.json()["detail"].lower()
 
     def test_rejects_exe_file(self, client):
-        """Uploading an .exe should return 400."""
+        """Uploading an .exe should return 400 listing accepted types."""
         resp = client.post(
             "/api/upload-orders",
             files={"file": ("malware.exe", b"\x00" * 100, "application/octet-stream")},
         )
         assert resp.status_code == 400
+        assert ".csv" in resp.json()["detail"]
 
     def test_rejects_filename_without_extension(self, client):
         """Upload with no file extension should return 400."""
@@ -1089,6 +1091,7 @@ class TestUploadValidation:
             files={"file": ("orders_noext", b"data", "text/csv")},
         )
         assert resp.status_code == 400
+        assert "Unsupported file type" in resp.json()["detail"]
 
     def test_rejects_oversized_file(self, client):
         """Upload exceeding MAX_UPLOAD_SIZE_BYTES should return 413.
@@ -1103,6 +1106,63 @@ class TestUploadValidation:
             )
         assert resp.status_code == 413
         assert "too large" in resp.json()["detail"].lower()
+
+    def test_upload_rejects_pdf_extension(self, client):
+        """Uploading a .pdf file returns 400 with descriptive error."""
+        resp = client.post(
+            "/api/upload-orders",
+            files={"file": ("orders.pdf", b"fake pdf data", "application/pdf")},
+        )
+        assert resp.status_code == 400
+        detail = resp.json()["detail"]
+        assert ".pdf" in detail
+        assert ".csv" in detail  # Lists accepted types
+
+    def test_upload_rejects_invalid_content_type(self, client):
+        """Uploading with non-CSV/Excel content-type returns 400."""
+        resp = client.post(
+            "/api/upload-orders",
+            files={"file": ("orders.csv", b"data", "application/pdf")},
+        )
+        assert resp.status_code == 400
+        assert "content type" in resp.json()["detail"].lower()
+
+    def test_upload_accepts_octet_stream_content_type(self, client, mock_session):
+        """application/octet-stream is accepted (browsers send this for CSV)."""
+        # This should pass validation and reach the processing stage
+        # (will fail at CSV parsing, not at validation)
+        resp = client.post(
+            "/api/upload-orders",
+            files={"file": ("orders.csv", b"order_id,address\n1,test", "application/octet-stream")},
+        )
+        # Should NOT be 400 for content-type — may be 400 for bad CSV data or 500 for
+        # missing geocoder, but NOT for validation rejection
+        assert resp.status_code != 400 or "content type" not in resp.json().get("detail", "").lower()
+
+    def test_upload_size_error_includes_actual_size(self, client):
+        """File too large error shows actual size and limit."""
+        # Patch MAX_UPLOAD_SIZE_BYTES to 100 to avoid creating large test payloads
+        with patch("apps.kerala_delivery.api.main.MAX_UPLOAD_SIZE_BYTES", 100):
+            big_content = b"x" * 200
+            resp = client.post(
+                "/api/upload-orders",
+                files={"file": ("orders.csv", big_content, "text/csv")},
+            )
+        assert resp.status_code == 413
+        detail = resp.json()["detail"]
+        assert "MB" in detail  # Shows size unit
+
+    def test_validation_before_processing(self, client):
+        """File validation happens before CSV parsing/geocoding."""
+        # A .pdf file should be rejected immediately — the CSV importer
+        # should never be called. We verify by checking the error is about
+        # file type, not about CSV parsing.
+        resp = client.post(
+            "/api/upload-orders",
+            files={"file": ("data.pdf", b"not,a,csv\n1,2,3", "application/pdf")},
+        )
+        assert resp.status_code == 400
+        assert "file type" in resp.json()["detail"].lower() or "content type" in resp.json()["detail"].lower()
 
 
 # =============================================================================
