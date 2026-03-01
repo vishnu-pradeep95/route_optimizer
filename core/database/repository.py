@@ -34,6 +34,7 @@ from core.database.models import (
     TelemetryDB,
     VehicleDB,
 )
+from core.geocoding.normalize import normalize_address
 from core.models.location import Location
 from core.models.order import Order, OrderStatus
 from core.models.route import Route, RouteAssignment, RouteStop
@@ -738,7 +739,7 @@ async def get_cached_geocode(
     Repeat customers = free geocoding from cache. Over 6 months,
     this can save 70-80% of geocoding costs.
     """
-    normalized = address_raw.strip().lower()
+    normalized = normalize_address(address_raw)
     result = await session.execute(
         select(GeocodeCacheDB)
         .where(GeocodeCacheDB.address_norm == normalized)
@@ -786,7 +787,7 @@ async def save_geocode_cache(
         source: Who provided this result ('google', 'driver_verified', 'manual').
         confidence: 0.0-1.0 confidence score.
     """
-    normalized = address_raw.strip().lower()
+    normalized = normalize_address(address_raw)
 
     # Check if already cached from this source
     result = await session.execute(
