@@ -90,8 +90,19 @@ def vroom():
 
 @pytest.fixture
 def kochi_depot():
-    """Depot location in Kochi."""
-    return config.DEPOT_LOCATION
+    """Depot location in central Kochi for integration tests.
+
+    Why not use config.DEPOT_LOCATION?
+    The production depot may be anywhere in Kerala (currently Vatakara).
+    Integration tests need a fixed Kochi depot to validate plausible
+    distances against the Kochi delivery points defined below.
+    Using a hardcoded Kochi location makes tests independent of config.
+    """
+    return Location(
+        latitude=9.9716,
+        longitude=76.2846,
+        address_text="Integration Test Depot (MG Road, Kochi)",
+    )
 
 
 @pytest.fixture

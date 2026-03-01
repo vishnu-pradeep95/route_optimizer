@@ -1898,55 +1898,55 @@ class TestGoogleMapsUrlHelpers:
     These are pure functions with no database dependency — test directly.
     """
 
-    def test_build_google_maps_url_two_stops(self):
+    def testbuild_google_maps_url_two_stops(self):
         """Two stops → origin + destination, no waypoints."""
-        from apps.kerala_delivery.api.main import _build_google_maps_url
+        from apps.kerala_delivery.api.qr_helpers import build_google_maps_url
 
         stops = [
             {"latitude": 9.97, "longitude": 76.28},
             {"latitude": 9.98, "longitude": 76.29},
         ]
-        url = _build_google_maps_url(stops)
+        url = build_google_maps_url(stops)
         assert "origin=9.97,76.28" in url
         assert "destination=9.98,76.29" in url
         assert "waypoints" not in url
         assert "travelmode=driving" in url
 
-    def test_build_google_maps_url_with_waypoints(self):
+    def testbuild_google_maps_url_with_waypoints(self):
         """Three stops → origin + 1 waypoint + destination."""
-        from apps.kerala_delivery.api.main import _build_google_maps_url
+        from apps.kerala_delivery.api.qr_helpers import build_google_maps_url
 
         stops = [
             {"latitude": 9.97, "longitude": 76.28},
             {"latitude": 9.975, "longitude": 76.285},
             {"latitude": 9.98, "longitude": 76.29},
         ]
-        url = _build_google_maps_url(stops)
+        url = build_google_maps_url(stops)
         assert "origin=9.97,76.28" in url
         assert "destination=9.98,76.29" in url
         assert "waypoints=9.975,76.285" in url
 
-    def test_build_google_maps_url_empty_stops(self):
+    def testbuild_google_maps_url_empty_stops(self):
         """Empty stop list should return empty string."""
-        from apps.kerala_delivery.api.main import _build_google_maps_url
+        from apps.kerala_delivery.api.qr_helpers import build_google_maps_url
 
-        assert _build_google_maps_url([]) == ""
+        assert build_google_maps_url([]) == ""
 
-    def test_generate_qr_svg_returns_svg(self):
+    def testgenerate_qr_svg_returns_svg(self):
         """QR SVG generator should produce valid SVG markup."""
-        from apps.kerala_delivery.api.main import _generate_qr_svg
+        from apps.kerala_delivery.api.qr_helpers import generate_qr_svg
 
-        svg = _generate_qr_svg("https://example.com")
+        svg = generate_qr_svg("https://example.com")
         assert "<svg" in svg
         assert "</svg>" in svg
         assert "<path" in svg  # SvgPathImage uses <path> elements
 
-    def test_generate_qr_base64_png(self):
+    def testgenerate_qr_base64_png(self):
         """QR PNG generator should produce a valid base64-encoded PNG."""
-        from apps.kerala_delivery.api.main import _generate_qr_base64_png
+        from apps.kerala_delivery.api.qr_helpers import generate_qr_base64_png
         import base64
 
-        png_b64 = _generate_qr_base64_png("https://example.com")
+        png_b64 = generate_qr_base64_png("https://example.com")
         # Should be valid base64
         decoded = base64.b64decode(png_b64)
         # PNG files start with the PNG magic bytes
@@ -1954,10 +1954,10 @@ class TestGoogleMapsUrlHelpers:
 
     def test_split_route_single_segment(self):
         """Route with ≤11 stops→ 1 segment."""
-        from apps.kerala_delivery.api.main import _split_route_into_segments
+        from apps.kerala_delivery.api.qr_helpers import split_route_into_segments
 
         stops = [{"latitude": 9.97 + i * 0.001, "longitude": 76.28} for i in range(8)]
-        segments = _split_route_into_segments(stops)
+        segments = split_route_into_segments(stops)
         assert len(segments) == 1
         assert segments[0]["segment"] == 1
         assert segments[0]["stop_count"] == 8
@@ -1969,10 +1969,10 @@ class TestGoogleMapsUrlHelpers:
         A route with 15 stops should split into 2 segments, with overlap
         so the driver has a continuous path.
         """
-        from apps.kerala_delivery.api.main import _split_route_into_segments
+        from apps.kerala_delivery.api.qr_helpers import split_route_into_segments
 
         stops = [{"latitude": 9.97 + i * 0.001, "longitude": 76.28} for i in range(15)]
-        segments = _split_route_into_segments(stops)
+        segments = split_route_into_segments(stops)
         assert len(segments) >= 2
         # Each segment has a QR code and URL
         for seg in segments:
@@ -1985,19 +1985,19 @@ class TestGoogleMapsUrlHelpers:
 
     def test_split_route_exactly_11(self):
         """Route with exactly 11 stops → 1 segment (fits in one URL)."""
-        from apps.kerala_delivery.api.main import _split_route_into_segments
+        from apps.kerala_delivery.api.qr_helpers import split_route_into_segments
 
         stops = [{"latitude": 9.97 + i * 0.001, "longitude": 76.28} for i in range(11)]
-        segments = _split_route_into_segments(stops)
+        segments = split_route_into_segments(stops)
         assert len(segments) == 1
         assert segments[0]["stop_count"] == 11
 
-    def test_build_google_maps_url_single_stop(self):
+    def testbuild_google_maps_url_single_stop(self):
         """Single stop → origin and destination are the same point."""
-        from apps.kerala_delivery.api.main import _build_google_maps_url
+        from apps.kerala_delivery.api.qr_helpers import build_google_maps_url
 
         stops = [{"latitude": 9.97, "longitude": 76.28}]
-        url = _build_google_maps_url(stops)
+        url = build_google_maps_url(stops)
         assert "origin=9.97,76.28" in url
         assert "destination=9.97,76.28" in url
 
