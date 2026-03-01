@@ -9,9 +9,9 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Data Integrity
 
-- [ ] **DATA-01**: User sees which orders failed geocoding, with reason per row (not silently dropped)
-- [ ] **DATA-02**: Upload response includes import summary: N succeeded, M failed, with downloadable failure report
-- [ ] **DATA-03**: Partially-geocoded batches still optimize the successful orders (not all-or-nothing)
+- [x] **DATA-01**: User sees which orders failed geocoding, with reason per row (not silently dropped)
+- [x] **DATA-02**: Upload response includes import summary: N succeeded, M failed, with downloadable failure report
+- [x] **DATA-03**: Partially-geocoded batches still optimize the successful orders (not all-or-nothing)
 - [x] **DATA-04**: Depot coordinates from config.py (Vatakara 11.52°N) flow correctly through entire pipeline — audit and fix any leaks
 - [x] **DATA-05**: CSV import validation shows row-level errors (missing fields, bad formats) before geocoding starts
 
@@ -101,9 +101,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DATA-01 | Phase 3 | Pending |
-| DATA-02 | Phase 3 | Pending |
-| DATA-03 | Phase 3 | Pending |
+| DATA-01 | Phase 3 | Complete |
+| DATA-02 | Phase 3 | Complete |
+| DATA-03 | Phase 3 | Complete |
 | DATA-04 | Phase 3 | Complete |
 | DATA-05 | Phase 3 | Complete |
 | DASH-01 | Phase 1 | Complete |

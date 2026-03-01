@@ -8,7 +8,7 @@ progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -23,18 +23,18 @@ See: .planning/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Phase: 3 of 6 (Data Integrity)
-Plan: 1 of 3 in current phase -- COMPLETE
-Status: Plan 03-01 complete, ready for 03-02
-Last activity: 2026-03-01 — Completed 03-01 (CSV row-level validation, ImportResult, depot coordinate audit)
+Plan: 2 of 3 in current phase -- COMPLETE
+Status: Plan 03-02 complete, ready for 03-03
+Last activity: 2026-03-01 — Completed 03-02 (geocoding failure collection, structured import diagnostics)
 
-Progress: [██████░░░░] 33%
+Progress: [███████░░░] 38%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
+- Total plans completed: 7
 - Average duration: 4 min
-- Total execution time: 0.43 hours
+- Total execution time: 0.50 hours
 
 **By Phase:**
 
@@ -42,10 +42,10 @@ Progress: [██████░░░░] 33%
 |-------|-------|-------|----------|
 | 01-foundation | 3 | 13 min | 4 min |
 | 02-security-hardening | 2 | 6 min | 3 min |
-| 03-data-integrity | 1 | 7 min | 7 min |
+| 03-data-integrity | 2 | 11 min | 5.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-03 (6 min), 02-01 (3 min), 02-02 (3 min), 03-01 (7 min)
+- Last 5 plans: 01-03 (6 min), 02-01 (3 min), 02-02 (3 min), 03-01 (7 min), 03-02 (4 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -81,6 +81,10 @@ Recent decisions affecting current work:
 - [03-01]: Row numbers are 1-based spreadsheet convention (pandas idx + 2)
 - [03-01]: row_numbers dict maps order_id to spreadsheet row for downstream geocoding error tracking
 - [03-01]: DataImporter protocol updated to return ImportResult (backward-compatible runtime check)
+- [03-02]: Zero-success returns structured HTTP 200 with run_id='' and failures list (not HTTPException 400)
+- [03-02]: GEOCODING_REASON_MAP translates raw Google API statuses to office-staff-friendly messages
+- [03-02]: ImportFailure.stage distinguishes validation vs geocoding failures for dashboard display
+- [03-02]: All new OptimizationSummary fields default to zero/empty for backward compatibility
 
 ### Pending Todos
 
@@ -96,5 +100,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 03-01-PLAN.md
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
