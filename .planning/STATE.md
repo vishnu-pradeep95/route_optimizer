@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-03-01T15:11:14.419Z"
+status: in-progress
+last_updated: "2026-03-01T17:34:50Z"
 progress:
-  total_phases: 1
+  total_phases: 2
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 5
+  completed_plans: 4
 ---
 
 # Project State
@@ -18,32 +18,33 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-01)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route — no silent drops, no missing stops.
-**Current focus:** Phase 1 — Foundation
+**Current focus:** Phase 2 — Security Hardening
 
 ## Current Position
 
-Phase: 1 of 6 (Foundation)
-Plan: 3 of 3 in current phase
-Status: Phase 1 complete
-Last activity: 2026-03-01 — Completed 01-03 (Tailwind PWA CLI + test coordinate migration + pytest asyncio)
+Phase: 2 of 6 (Security Hardening)
+Plan: 1 of 2 in current phase
+Status: 02-01 complete, 02-02 pending
+Last activity: 2026-03-01 — Completed 02-01 (Security headers, CORS hardening, /redoc gating)
 
-Progress: [██░░░░░░░░] 17%
+Progress: [████░░░░░░] 22%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: 4 min
-- Total execution time: 0.22 hours
+- Total execution time: 0.27 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 3 | 13 min | 4 min |
+| 02-security-hardening | 1 | 3 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3 min), 01-02 (4 min), 01-03 (6 min)
+- Last 5 plans: 01-01 (3 min), 01-02 (4 min), 01-03 (6 min), 02-01 (3 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -65,6 +66,12 @@ Recent decisions affecting current work:
 - [01-03]: Backward-compatible kochi_depot alias kept during Vatakara migration
 - [Phase 01]: oklch color format for DaisyUI theme -- perceptually uniform, future-proof, matches DaisyUI v5 convention
 - [Phase 01]: DaisyUI 'logistics' theme with default:true -- auto-applied, amber primary, stone neutral, standard status colors
+- [02-01]: SecWeb registered as outermost middleware so security headers appear on ALL responses including errors
+- [02-01]: Custom PermissionsPolicyMiddleware needed because SecWeb 1.30.x lacks Permissions-Policy support
+- [02-01]: CORS allow_headers tightened from wildcard to explicit [Content-Type, X-API-Key, Authorization]
+- [02-01]: CORS origins use environment-aware defaults: dev permits localhost:8000/3000/5173, production requires explicit whitelist
+- [02-01]: HSTS only enabled in non-development environments to prevent localhost HTTPS lock-in
+- [02-01]: CSP allows unsafe-inline styles (required for Leaflet inline map styles)
 
 ### Pending Todos
 
@@ -73,12 +80,12 @@ None yet.
 ### Blockers/Concerns
 
 - [Phase 1]: RESOLVED -- CSS variable collision risk verified clear. prefix(tw) prevents --color-* conflicts, confirmed in browser DevTools during 01-02 checkpoint.
-- [Phase 2]: CSP header must explicitly allow Leaflet tile servers (OSM) and Google Geocoding API — misconfigured CSP silently breaks map tiles.
+- [Phase 2]: RESOLVED -- CSP header configured to allow Leaflet tile servers (OSM *.tile.openstreetmap.org) and unpkg.com (Leaflet icons). Google Geocoding API uses connect-src 'self' (server-side proxy).
 - [Phase 2]: Confirm deployment topology (single vs. multi-worker uvicorn) before choosing in-memory vs. Redis backend for slowapi rate limiter.
 - [Phase 5]: Confirm offline tile pre-caching scope (~50MB for Vatakara 30km radius) is acceptable on target Android devices before committing to the approach.
 
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 01-03-PLAN.md (Phase 1 complete)
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None

@@ -35,11 +35,11 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Security
 
-- [ ] **SEC-01**: HTTP security headers via middleware — CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
-- [ ] **SEC-02**: CORS hardened — no wildcard origins, explicit whitelist from env var
-- [ ] **SEC-03**: API docs (/docs, /redoc) gated behind environment check — hidden in production
+- [x] **SEC-01**: HTTP security headers via middleware — CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
+- [x] **SEC-02**: CORS hardened — no wildcard origins, explicit whitelist from env var
+- [x] **SEC-03**: API docs (/docs, /redoc) gated behind environment check — hidden in production
 - [ ] **SEC-04**: Input validation audit — all file upload endpoints check file type, size, content
-- [ ] **SEC-05**: Replace deprecated security libraries if present (python-jose → PyJWT, passlib → pwdlib)
+- [x] **SEC-05**: Replace deprecated security libraries if present (python-jose → PyJWT, passlib → pwdlib)
 - [ ] **SEC-06**: Rate limiter state isolated in tests — no cross-test bleed
 
 ### Code Quality
@@ -118,11 +118,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PWA-02 | Phase 5 | Pending |
 | PWA-03 | Phase 5 | Pending |
 | PWA-04 | Phase 5 | Pending |
-| SEC-01 | Phase 2 | Pending |
-| SEC-02 | Phase 2 | Pending |
-| SEC-03 | Phase 2 | Pending |
+| SEC-01 | Phase 2 | Complete |
+| SEC-02 | Phase 2 | Complete |
+| SEC-03 | Phase 2 | Complete |
 | SEC-04 | Phase 2 | Pending |
-| SEC-05 | Phase 2 | Pending |
+| SEC-05 | Phase 2 | Complete |
 | SEC-06 | Phase 2 | Pending |
 | QUAL-01 | Phase 6 | Pending |
 | QUAL-02 | Phase 6 | Pending |
