@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish & Reliability
-status: roadmap_complete
-last_updated: "2026-03-01T22:00:00.000Z"
+status: executing
+last_updated: "2026-03-01T22:35:53Z"
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
 ---
 
 # Project State
@@ -18,21 +18,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-01)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Phase 4 - Geocoding Cache Normalization (ready to plan)
+**Current focus:** Phase 4 - Geocoding Cache Normalization (Plan 1 complete, Plan 2 next)
 
 ## Current Position
 
 Phase: 4 of 7 (Geocoding Cache Normalization) -- first phase of v1.1
-Plan: --
-Status: Ready to plan
-Last activity: 2026-03-01 -- Roadmap created for v1.1 milestone
+Plan: 1 of 2 complete
+Status: Executing
+Last activity: 2026-03-01 -- Plan 04-01 complete (normalize_address pure function + repository integration)
 
 Progress: [########..........] 43% (3 of 7 phases complete across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8 (v1.0)
+- Total plans completed: 9 (8 v1.0 + 1 v1.1)
 - Average duration: --
 - Total execution time: --
 
@@ -43,6 +43,7 @@ Progress: [########..........] 43% (3 of 7 phases complete across all milestones
 | 1. Foundation | 3 | -- | -- |
 | 2. Security | 2 | -- | -- |
 | 3. Data Integrity | 3 | -- | -- |
+| 4. Geocoding Cache | 1/2 | 2min | 2min |
 
 **Recent Trend:**
 - Last 5 plans: --
@@ -63,6 +64,7 @@ Carried from v1.0:
 - [Phase 01]: oklch color format for DaisyUI theme -- perceptually uniform
 - [Phase 02]: CSP allows unsafe-inline styles (required for Leaflet)
 - [Phase 03]: Zero-success returns structured HTTP 200 (not HTTPException 400)
+- [Phase 04]: normalize_address() is single source of truth -- stdlib only (unicodedata, re), strips periods/commas, preserves slashes/hyphens/parentheses
 
 ### Pending Todos
 
@@ -78,5 +80,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Roadmap created for v1.1 milestone (4 phases, 17 requirements mapped)
+Stopped at: Completed 04-01-PLAN.md (normalize_address TDD + repository integration)
 Resume file: None
