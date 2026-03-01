@@ -31,14 +31,11 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 
 ### Active
 
-- [ ] Professional UI redesign — sleek logistics dashboard aesthetic (research best themes)
+- [ ] Dashboard UI overhaul — clean, minimal, professional logistics SaaS aesthetic
+- [ ] Driver PWA refresh — outdoor readability, simplified next-stop flow, better offline
 - [ ] Geocoding cache normalization fix — inconsistent DB vs file cache causing duplicate locations
 - [ ] Duplicate location detection — flag orders resolving to same GPS coordinates
 - [ ] Geocoding cost tracking — cache hit vs API call indicator per address
-- [ ] Elegant error handling across pipeline — structured errors, retries, graceful degradation
-- [ ] Code quality cleanup — remove dead code, refactor main.py, fix driver names
-- [ ] Well-rounded unit tests — property-based, factory fixtures, external API mocks, coverage gate
-- [ ] Streamlined installation and documentation — easy setup guide, clear README
 
 ### Out of Scope
 
@@ -47,6 +44,21 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - Multi-tenant/multi-region — Vatakara-only for now
 - Payment processing — handled outside this system
 - Customer-facing tracking — drivers and office staff only
+- Elegant error handling across pipeline — deferred to future milestone
+- Code quality cleanup / refactoring — deferred to future milestone
+- Property-based unit tests / coverage gate — deferred to future milestone
+- Streamlined installation docs / README — deferred to future milestone
+
+## Current Milestone: v1.1 Polish & Reliability
+
+**Goal:** Transform the prototype-feeling UI into a professional logistics product and fix geocoding data integrity issues that confuse drivers.
+
+**Target features:**
+- Dashboard UI overhaul — clean, minimal, professional logistics SaaS aesthetic with DaisyUI
+- Driver PWA refresh — high-contrast outdoor readability, simplified next-stop flow, better offline behavior
+- Geocoding cache normalization — fix DB vs file cache inconsistency causing duplicate map locations
+- Duplicate location detection — flag orders resolving to same GPS coordinates
+- Geocoding cost tracking — cache hit vs API call indicator per address
 
 ## Context
 
@@ -54,7 +66,7 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v1.0 shipped — foundation, security, and data integrity complete. 380 tests passing. 16.6k Python LOC, 3.3k TypeScript LOC.
+- **Current state**: v1.0 shipped — foundation, security, and data integrity complete. 380 tests passing. 16.6k Python LOC, 3.3k TypeScript LOC. Starting v1.1 Polish & Reliability.
 - **Known issues**: Geocoding cache normalization inconsistency causes duplicate map locations; UI needs professional redesign
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
@@ -76,4 +88,4 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | Fix geocoding before UI overhaul | Silent order drops are data-integrity bugs; UI polish on broken data is wasted effort | — Pending |
 
 ---
-*Last updated: 2026-03-01 after v1.0 milestone*
+*Last updated: 2026-03-01 after v1.1 milestone start*
