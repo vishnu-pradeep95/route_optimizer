@@ -1784,6 +1784,10 @@ class TestRateLimiting:
         app.dependency_overrides[get_session] = override_get_session
         yield TestClient(app)
         app.dependency_overrides.clear()
+        # CRITICAL: reset all in-memory counters to prevent state leaking
+        # to subsequent test modules. Without this, another module enabling
+        # the limiter may encounter pre-existing counter state from these tests.
+        limiter.reset()
         # Disable again for other test classes
         limiter.enabled = False
 
