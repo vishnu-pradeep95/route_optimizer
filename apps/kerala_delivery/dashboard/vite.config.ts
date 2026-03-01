@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
 /**
@@ -13,7 +14,10 @@ import react from '@vitejs/plugin-react'
  * See: https://vite.dev/config/server-options.html#server-proxy
  */
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    tailwindcss(),  // Must be before react() for optimal performance
+    react(),
+  ],
   server: {
     proxy: {
       // Forward all /api/* requests to the FastAPI backend
