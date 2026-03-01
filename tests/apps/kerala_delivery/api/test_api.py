@@ -1885,3 +1885,333 @@ class TestIsCdcmsFormat:
             "12345\tAllocated-Printed\tSome Address\tval1\tval2\n"
         )
         assert _is_cdcms_format(str(cdcms_file)) is True
+
+
+# =============================================================================
+# QR Code / Google Maps Route Endpoints
+# =============================================================================
+
+
+class TestGoogleMapsUrlHelpers:
+    """Tests for the Google Maps URL builder and QR code generators.
+
+    These are pure functions with no database dependency — test directly.
+    """
+
+    def test_build_google_maps_url_two_stops(self):
+        """Two stops → origin + destination, no waypoints."""
+        from apps.kerala_delivery.api.main import _build_google_maps_url
+
+        stops = [
+            {"latitude": 9.97, "longitude": 76.28},
+            {"latitude": 9.98, "longitude": 76.29},
+        ]
+        url = _build_google_maps_url(stops)
+        assert "origin=9.97,76.28" in url
+        assert "destination=9.98,76.29" in url
+        assert "waypoints" not in url
+        assert "travelmode=driving" in url
+
+    def test_build_google_maps_url_with_waypoints(self):
+        """Three stops → origin + 1 waypoint + destination."""
+        from apps.kerala_delivery.api.main import _build_google_maps_url
+
+        stops = [
+            {"latitude": 9.97, "longitude": 76.28},
+            {"latitude": 9.975, "longitude": 76.285},
+            {"latitude": 9.98, "longitude": 76.29},
+        ]
+        url = _build_google_maps_url(stops)
+        assert "origin=9.97,76.28" in url
+        assert "destination=9.98,76.29" in url
+        assert "waypoints=9.975,76.285" in url
+
+    def test_build_google_maps_url_empty_stops(self):
+        """Empty stop list should return empty string."""
+        from apps.kerala_delivery.api.main import _build_google_maps_url
+
+        assert _build_google_maps_url([]) == ""
+
+    def test_generate_qr_svg_returns_svg(self):
+        """QR SVG generator should produce valid SVG markup."""
+        from apps.kerala_delivery.api.main import _generate_qr_svg
+
+        svg = _generate_qr_svg("https://example.com")
+        assert "<svg" in svg
+        assert "</svg>" in svg
+        assert "<path" in svg  # SvgPathImage uses <path> elements
+
+    def test_generate_qr_base64_png(self):
+        """QR PNG generator should produce a valid base64-encoded PNG."""
+        from apps.kerala_delivery.api.main import _generate_qr_base64_png
+        import base64
+
+        png_b64 = _generate_qr_base64_png("https://example.com")
+        # Should be valid base64
+        decoded = base64.b64decode(png_b64)
+        # PNG files start with the PNG magic bytes
+        assert decoded[:4] == b"\x89PNG"
+
+    def test_split_route_single_segment(self):
+        """Route with ≤11 stops→ 1 segment."""
+        from apps.kerala_delivery.api.main import _split_route_into_segments
+
+        stops = [{"latitude": 9.97 + i * 0.001, "longitude": 76.28} for i in range(8)]
+        segments = _split_route_into_segments(stops)
+        assert len(segments) == 1
+        assert segments[0]["segment"] == 1
+        assert segments[0]["stop_count"] == 8
+
+    def test_split_route_multi_segment(self):
+        """Route with >11 stops → multiple overlapping segments.
+
+        Google Maps supports max 9 waypoints (+ origin + destination = 11 stops).
+        A route with 15 stops should split into 2 segments, with overlap
+        so the driver has a continuous path.
+        """
+        from apps.kerala_delivery.api.main import _split_route_into_segments
+
+        stops = [{"latitude": 9.97 + i * 0.001, "longitude": 76.28} for i in range(15)]
+        segments = _split_route_into_segments(stops)
+        assert len(segments) >= 2
+        # Each segment has a QR code and URL
+        for seg in segments:
+            assert "qr_svg" in seg
+            assert "url" in seg
+            assert seg["stop_count"] <= 11
+        # Verify overlap: segments connect at shared boundary stops
+        # so the driver gets continuous navigation across Google Maps URLs
+        assert segments[0]["end_stop"] >= segments[1]["start_stop"]
+
+    def test_split_route_exactly_11(self):
+        """Route with exactly 11 stops → 1 segment (fits in one URL)."""
+        from apps.kerala_delivery.api.main import _split_route_into_segments
+
+        stops = [{"latitude": 9.97 + i * 0.001, "longitude": 76.28} for i in range(11)]
+        segments = _split_route_into_segments(stops)
+        assert len(segments) == 1
+        assert segments[0]["stop_count"] == 11
+
+    def test_build_google_maps_url_single_stop(self):
+        """Single stop → origin and destination are the same point."""
+        from apps.kerala_delivery.api.main import _build_google_maps_url
+
+        stops = [{"latitude": 9.97, "longitude": 76.28}]
+        url = _build_google_maps_url(stops)
+        assert "origin=9.97,76.28" in url
+        assert "destination=9.97,76.28" in url
+
+
+class TestGoogleMapsRouteEndpoint:
+    """Tests for GET /api/routes/{vehicle_id}/google-maps.
+
+    Verifies the endpoint returns Google Maps URLs and QR codes
+    for a vehicle's optimized route.
+    """
+
+    def test_google_maps_route_returns_qr(self, client, mock_run_id):
+        """Endpoint should return QR SVG and Google Maps URL."""
+        from core.database.models import OptimizationRunDB, RouteDB
+        from shapely.geometry import Point
+        from geoalchemy2.shape import from_shape
+
+        mock_run = MagicMock(spec=OptimizationRunDB)
+        mock_run.id = mock_run_id
+
+        # Build mock route with 3 stops
+        stops = []
+        for i in range(3):
+            mock_stop = MagicMock()
+            mock_stop.order = MagicMock()
+            mock_stop.order.order_id = f"ORD-{i:03d}"
+            mock_stop.location = from_shape(Point(76.28 + i * 0.01, 9.97 + i * 0.01), srid=4326)
+            mock_stop.address_display = f"Stop {i + 1}"
+            mock_stop.sequence = i + 1
+            mock_stop.distance_from_prev_km = 1.0
+            mock_stop.duration_from_prev_minutes = 3.0
+            mock_stop.weight_kg = 14.2
+            mock_stop.quantity = 1
+            mock_stop.notes = ""
+            mock_stop.status = "pending"
+            stops.append(mock_stop)
+
+        mock_route = MagicMock(spec=RouteDB)
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "VEH-01"
+        mock_route.driver_name = "Driver 1"
+        mock_route.stops = stops
+        mock_route.total_distance_km = 3.0
+        mock_route.total_duration_minutes = 9.0
+        mock_route.total_weight_kg = 42.6
+        mock_route.total_items = 3
+        mock_route.created_at = datetime.now(timezone.utc)
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=mock_run)
+            mock_repo.get_route_for_vehicle = AsyncMock(return_value=mock_route)
+            from core.database.repository import route_db_to_pydantic
+            mock_repo.route_db_to_pydantic = route_db_to_pydantic
+
+            resp = client.get("/api/routes/VEH-01/google-maps")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["vehicle_id"] == "VEH-01"
+        assert data["total_stops"] == 3
+        assert data["total_segments"] >= 1
+        # Each segment has a URL and QR SVG
+        seg = data["segments"][0]
+        assert "google.com/maps/dir" in seg["url"]
+        assert "<svg" in seg["qr_svg"]
+
+    def test_google_maps_route_404_no_routes(self, client):
+        """Should 404 when no optimization has been run."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=None)
+            resp = client.get("/api/routes/VEH-01/google-maps")
+        assert resp.status_code == 404
+
+    def test_google_maps_route_404_wrong_vehicle(self, client, mock_run_id):
+        """Should 404 for non-existent vehicle."""
+        from core.database.models import OptimizationRunDB
+
+        mock_run = MagicMock(spec=OptimizationRunDB)
+        mock_run.id = mock_run_id
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=mock_run)
+            mock_repo.get_route_for_vehicle = AsyncMock(return_value=None)
+            resp = client.get("/api/routes/VEH-99/google-maps")
+        assert resp.status_code == 404
+
+
+class TestQrSheetEndpoint:
+    """Tests for GET /api/qr-sheet — printable QR code page.
+
+    Verifies the endpoint generates a complete HTML page with
+    QR codes for all vehicles' routes.
+    """
+
+    def test_qr_sheet_returns_html(self, client, mock_run_id):
+        """Endpoint should return printable HTML with QR codes."""
+        from core.database.models import OptimizationRunDB, RouteDB
+        from shapely.geometry import Point
+        from geoalchemy2.shape import from_shape
+
+        mock_run = MagicMock(spec=OptimizationRunDB)
+        mock_run.id = mock_run_id
+        mock_run.created_at = datetime.now(timezone.utc)
+
+        # Build mock route with 2 stops
+        stops = []
+        for i in range(2):
+            mock_stop = MagicMock()
+            mock_stop.order = MagicMock()
+            mock_stop.order.order_id = f"ORD-{i:03d}"
+            mock_stop.location = from_shape(Point(76.28 + i * 0.01, 9.97 + i * 0.01), srid=4326)
+            mock_stop.address_display = f"Stop {i + 1}"
+            mock_stop.sequence = i + 1
+            mock_stop.distance_from_prev_km = 1.0
+            mock_stop.duration_from_prev_minutes = 3.0
+            mock_stop.weight_kg = 14.2
+            mock_stop.quantity = 1
+            mock_stop.notes = ""
+            mock_stop.status = "pending"
+            stops.append(mock_stop)
+
+        mock_route = MagicMock(spec=RouteDB)
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "VEH-01"
+        mock_route.driver_name = "Driver 1"
+        mock_route.stops = stops
+        mock_route.total_distance_km = 2.0
+        mock_route.total_duration_minutes = 6.0
+        mock_route.total_weight_kg = 28.4
+        mock_route.total_items = 2
+        mock_route.created_at = datetime.now(timezone.utc)
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=mock_run)
+            mock_repo.get_routes_for_run = AsyncMock(return_value=[mock_route])
+            from core.database.repository import route_db_to_pydantic
+            mock_repo.route_db_to_pydantic = route_db_to_pydantic
+
+            resp = client.get("/api/qr-sheet")
+
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
+        html = resp.text
+        # Should contain key elements
+        assert "LPG Delivery Route QR Codes" in html
+        assert "VEH-01" in html
+        assert "Driver 1" in html
+        assert "data:image/png;base64," in html  # QR code as base64 PNG
+        assert "Print QR Sheet" in html  # Print button
+        assert "Scan with phone camera" in html  # Instruction text
+        # Safety: time is shown as a range, not exact (MVD compliance)
+        assert "Est. Route Time" in html
+
+    def test_qr_sheet_404_no_routes(self, client):
+        """Should 404 when no routes have been generated."""
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=None)
+            resp = client.get("/api/qr-sheet")
+        assert resp.status_code == 404
+
+    def test_qr_sheet_escapes_html_in_vehicle_data(self, client, mock_run_id):
+        """XSS prevention: vehicle_id and driver_name are HTML-escaped.
+
+        Even though these values come from authenticated endpoints,
+        defence-in-depth requires escaping at the output layer.
+        A malicious vehicle_id like '<script>alert(1)</script>' must
+        NOT appear unescaped in the rendered HTML.
+        """
+        from core.database.models import OptimizationRunDB, RouteDB
+        from shapely.geometry import Point
+        from geoalchemy2.shape import from_shape
+
+        mock_run = MagicMock(spec=OptimizationRunDB)
+        mock_run.id = mock_run_id
+        mock_run.created_at = datetime.now(timezone.utc)
+
+        mock_stop = MagicMock()
+        mock_stop.order = MagicMock()
+        mock_stop.order.order_id = "ORD-XSS"
+        mock_stop.location = from_shape(Point(76.28, 9.97), srid=4326)
+        mock_stop.address_display = "Test Stop"
+        mock_stop.sequence = 1
+        mock_stop.distance_from_prev_km = 1.0
+        mock_stop.duration_from_prev_minutes = 3.0
+        mock_stop.weight_kg = 14.2
+        mock_stop.quantity = 1
+        mock_stop.notes = ""
+        mock_stop.status = "pending"
+
+        mock_route = MagicMock(spec=RouteDB)
+        mock_route.id = uuid.uuid4()
+        # Inject XSS payload into vehicle_id and driver_name
+        mock_route.vehicle_id = '<script>alert("xss")</script>'
+        mock_route.driver_name = '<img onerror=alert(1) src=x>'
+        mock_route.stops = [mock_stop]
+        mock_route.total_distance_km = 1.0
+        mock_route.total_duration_minutes = 3.0
+        mock_route.total_weight_kg = 14.2
+        mock_route.total_items = 1
+        mock_route.created_at = datetime.now(timezone.utc)
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=mock_run)
+            mock_repo.get_routes_for_run = AsyncMock(return_value=[mock_route])
+            from core.database.repository import route_db_to_pydantic
+            mock_repo.route_db_to_pydantic = route_db_to_pydantic
+
+            resp = client.get("/api/qr-sheet")
+
+        assert resp.status_code == 200
+        html = resp.text
+        # RAW script/img XSS payloads must NOT appear unescaped
+        assert '<script>alert' not in html
+        assert '<img onerror=' not in html
+        # Escaped versions SHOULD appear (browser renders as text, not HTML)
+        assert '&lt;script&gt;' in html
+        assert '&lt;img' in html

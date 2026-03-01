@@ -11,17 +11,23 @@ This is the main API that:
 The driver app (PWA) calls this API to get today's route.
 """
 
+import html as html_module  # For escaping user data in server-rendered HTML (XSS prevention)
 import logging
 import os
 import pathlib
 import tempfile
 import uuid
+import base64
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
+import io
+import qrcode
+import qrcode.image.svg
+
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -790,6 +796,489 @@ async def update_stop_status(
         "order_id": order_id,
         "status": body.status,
     }
+
+
+# =============================================================================
+# QR Code / Google Maps Route URLs
+# =============================================================================
+# Google Maps Directions URLs support a maximum of 9 waypoints between
+# the origin and destination (11 total stops). Routes with more stops
+# are automatically split into segments, each with its own URL and QR code.
+# See: https://developers.google.com/maps/documentation/urls/get-started
+#
+# Workflow: employee uploads CDCMS file → optimizer generates routes →
+# this endpoint generates QR codes → employee prints a sheet → drivers
+# scan QR codes with their phone camera → Google Maps opens with
+# turn-by-turn navigation.
+GOOGLE_MAPS_MAX_WAYPOINTS = 9  # origin + 9 waypoints + destination = 11 stops
+
+
+def _build_google_maps_url(stops: list[dict]) -> str:
+    """Build a Google Maps Directions URL from an ordered list of stops.
+
+    Args:
+        stops: List of dicts with 'latitude' and 'longitude' keys,
+               ordered by delivery sequence.
+
+    Returns:
+        Google Maps URL that opens navigation with all stops as waypoints.
+
+    Why Google Maps URL instead of our own map?
+    Drivers are familiar with Google Maps navigation. It handles traffic,
+    voice guidance, lane guidance, and offline maps. Building all that
+    ourselves would take months. Our value is in route OPTIMIZATION —
+    Google Maps handles NAVIGATION.
+    """
+    if not stops:
+        return ""
+
+    origin = stops[0]
+    destination = stops[-1]
+
+    url = (
+        "https://www.google.com/maps/dir/?api=1"
+        f"&origin={origin['latitude']},{origin['longitude']}"
+        f"&destination={destination['latitude']},{destination['longitude']}"
+        "&travelmode=driving"
+    )
+
+    # Add intermediate stops as waypoints (everything except first and last)
+    if len(stops) > 2:
+        waypoints = "|".join(
+            f"{s['latitude']},{s['longitude']}" for s in stops[1:-1]
+        )
+        url += f"&waypoints={waypoints}"
+
+    return url
+
+
+def _generate_qr_svg(data: str, box_size: int = 10) -> str:
+    """Generate a QR code as an SVG string.
+
+    Why SVG instead of PNG?
+    - Scales perfectly for print (no pixelation at any size)
+    - Smaller file size for embedding in HTML
+    - No need for image hosting or base64 encoding of binary data
+    - Can be styled with CSS if needed
+
+    Args:
+        data: The string to encode (typically a URL).
+        box_size: Size of each QR module in SVG units.
+
+    Returns:
+        Complete SVG markup as a string.
+    """
+    # SvgPathImage produces a single <path> element — cleaner than
+    # individual <rect> elements (SvgImage). Fewer DOM nodes = faster
+    # rendering when embedding multiple QR codes on a print sheet.
+    factory = qrcode.image.svg.SvgPathImage
+    qr = qrcode.QRCode(
+        version=None,  # Auto-detect smallest version that fits the data
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=box_size,
+        border=2,  # Minimum quiet zone for reliable scanning
+    )
+    qr.add_data(data)
+    qr.make(fit=True)
+
+    img = qr.make_image(image_factory=factory)
+    # Convert to string — SvgPathImage.to_string() returns bytes
+    return img.to_string(encoding="unicode")
+
+
+def _generate_qr_base64_png(data: str, box_size: int = 10) -> str:
+    """Generate a QR code as a base64-encoded PNG for embedding in HTML.
+
+    Used for the printable QR sheet where inline images are more reliable
+    across printers than inline SVG.
+
+    Returns:
+        Base64-encoded PNG string (without data: prefix).
+    """
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=box_size,
+        border=2,
+    )
+    qr.add_data(data)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def _split_route_into_segments(stops: list[dict]) -> list[dict]:
+    """Split a route with many stops into Google Maps-compatible segments.
+
+    Google Maps URLs support max 9 waypoints (+ origin + destination = 11 stops).
+    Routes with more than 11 stops are split into overlapping segments so the
+    driver can navigate each part sequentially.
+
+    Why overlap? The destination of segment N is the origin of segment N+1.
+    This gives the driver a continuous path — Google Maps doesn't know about
+    our other segments, so overlapping prevents a gap.
+
+    Args:
+        stops: All stops in delivery order, each with latitude/longitude.
+
+    Returns:
+        List of segment dicts, each with: start_stop, end_stop, url, qr_svg.
+    """
+    # 11 stops fit in one URL (1 origin + 9 waypoints + 1 destination)
+    max_stops_per_segment = GOOGLE_MAPS_MAX_WAYPOINTS + 2  # = 11
+
+    if len(stops) <= max_stops_per_segment:
+        url = _build_google_maps_url(stops)
+        return [{
+            "segment": 1,
+            "start_stop": 1,
+            "end_stop": len(stops),
+            "stop_count": len(stops),
+            "url": url,
+            "qr_svg": _generate_qr_svg(url),
+        }]
+
+    segments = []
+    segment_num = 1
+    i = 0
+
+    while i < len(stops):
+        segment_stops = stops[i : i + max_stops_per_segment]
+        url = _build_google_maps_url(segment_stops)
+
+        segments.append({
+            "segment": segment_num,
+            "start_stop": i + 1,
+            "end_stop": i + len(segment_stops),
+            "stop_count": len(segment_stops),
+            "url": url,
+            "qr_svg": _generate_qr_svg(url),
+        })
+
+        # Advance by (max - 1) so the last stop of this segment becomes
+        # the first stop of the next segment (overlap for continuity)
+        i += max_stops_per_segment - 1
+        segment_num += 1
+
+    return segments
+
+
+@app.get("/api/routes/{vehicle_id}/google-maps", dependencies=[Depends(verify_read_key)])
+async def get_google_maps_route(
+    vehicle_id: str,
+    session: AsyncSession = SessionDep,
+):
+    """Get Google Maps navigation URL(s) and QR code(s) for a vehicle's route.
+
+    The employee scans or prints the QR code → driver scans with phone →
+    Google Maps opens with turn-by-turn navigation for their delivery route.
+
+    If the route has > 11 stops, it's automatically split into segments
+    (Google Maps only supports 9 waypoints + origin + destination).
+
+    Returns:
+        JSON with segments, each containing a Google Maps URL and QR code SVG.
+        For routes ≤ 11 stops, there's a single segment.
+    """
+    run = await repo.get_latest_run(session)
+    if not run:
+        raise HTTPException(status_code=404, detail="No routes generated yet.")
+
+    route_db = await repo.get_route_for_vehicle(session, run.id, vehicle_id)
+    if not route_db:
+        raise HTTPException(status_code=404, detail=f"No route found for vehicle {vehicle_id}")
+
+    route = repo.route_db_to_pydantic(route_db)
+
+    # Build ordered stop list with coordinates
+    # Include depot as the first stop (origin for navigation)
+    stops = []
+    depot = config.DEPOT_LOCATION
+    stops.append({
+        "latitude": depot.latitude,
+        "longitude": depot.longitude,
+        "label": "Depot (Start)",
+    })
+    for stop in route.stops:
+        stops.append({
+            "latitude": stop.location.latitude,
+            "longitude": stop.location.longitude,
+            "label": stop.address_display or f"Stop {stop.sequence}",
+        })
+
+    segments = _split_route_into_segments(stops)
+
+    return {
+        "vehicle_id": vehicle_id,
+        "driver_name": route.driver_name,
+        "total_stops": route.stop_count,
+        "total_segments": len(segments),
+        "segments": segments,
+    }
+
+
+@app.get("/api/qr-sheet", response_class=HTMLResponse, dependencies=[Depends(verify_read_key)])
+async def get_qr_sheet(session: AsyncSession = SessionDep):
+    """Generate a printable HTML page with QR codes for ALL vehicles.
+
+    Workflow: dispatcher opens this URL in the browser → clicks Print →
+    each driver gets a QR code card they scan with their phone to open
+    their route in Google Maps for navigation.
+
+    Layout: A4-optimized, 2 cards per row, each card has:
+    - Vehicle ID and driver name
+    - Number of stops and total distance
+    - QR code(s) — one per segment if route > 11 stops
+    - Human-readable stop summary
+
+    Why a server-rendered HTML page instead of a React component?
+    The print stylesheet needs precise A4 layout control. Server-rendered
+    HTML with inline CSS is the most reliable way to ensure consistent
+    printing across browsers. No JavaScript dependency — works even if
+    the dashboard is down.
+    """
+    run = await repo.get_latest_run(session)
+    if not run:
+        raise HTTPException(status_code=404, detail="No routes generated yet. Upload orders first.")
+
+    route_dbs = await repo.get_routes_for_run(session, run.id)
+    if not route_dbs:
+        raise HTTPException(status_code=404, detail="No routes found for the latest run.")
+
+    depot = config.DEPOT_LOCATION
+
+    # Build QR data for each vehicle
+    vehicle_cards = []
+    for route_db in route_dbs:
+        route = repo.route_db_to_pydantic(route_db)
+
+        stops = [{"latitude": depot.latitude, "longitude": depot.longitude, "label": "Depot"}]
+        for stop in route.stops:
+            stops.append({
+                "latitude": stop.location.latitude,
+                "longitude": stop.location.longitude,
+                "label": stop.address_display or f"Stop {stop.sequence}",
+            })
+
+        segments = _split_route_into_segments(stops)
+
+        vehicle_cards.append({
+            "vehicle_id": route.vehicle_id,
+            "driver_name": route.driver_name,
+            "total_stops": route.stop_count,
+            "total_distance_km": round(route.total_distance_km, 1),
+            "total_duration_minutes": round(route.total_duration_minutes, 0),
+            "total_weight_kg": round(route.total_weight_kg, 1),
+            "segments": segments,
+            # Generate PNG QR codes for print (more printer-compatible than SVG)
+            "qr_pngs": [
+                _generate_qr_base64_png(seg["url"], box_size=6)
+                for seg in segments
+            ],
+        })
+
+    # Generate the printable HTML page
+    created_at = run.created_at.strftime("%d %b %Y, %I:%M %p") if run.created_at else "Unknown"
+
+    cards_html = ""
+    for card in vehicle_cards:
+        qr_images = ""
+        for i, (seg, png_b64) in enumerate(zip(card["segments"], card["qr_pngs"])):
+            segment_label = ""
+            if len(card["segments"]) > 1:
+                segment_label = f'<div class="segment-label">Part {seg["segment"]}: Stops {seg["start_stop"]}–{seg["end_stop"]}</div>'
+            qr_images += f'''
+                <div class="qr-block">
+                    {segment_label}
+                    <img src="data:image/png;base64,{png_b64}" alt="QR Code" class="qr-img" />
+                </div>
+            '''
+
+        # XSS prevention: escape all user-controllable values before
+        # inserting into HTML. Vehicle IDs and driver names come from the
+        # database — while they're created via authenticated endpoints,
+        # defence-in-depth requires escaping at the output layer.
+        esc = html_module.escape
+        
+        cards_html += f'''
+        <div class="card">
+            <div class="card-header">
+                <div class="vehicle-id">{esc(str(card["vehicle_id"]))}</div>
+                <div class="driver-name">{esc(str(card["driver_name"]))}</div>
+            </div>
+            <div class="card-stats">
+                <div class="stat">
+                    <span class="stat-value">{int(card["total_stops"])}</span>
+                    <span class="stat-label">Stops</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">{card["total_distance_km"]} km</span>
+                    <span class="stat-label">Distance</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">{int(card["total_duration_minutes"])}–{int(card["total_duration_minutes"] * 1.2)} min</span>
+                    <span class="stat-label">Est. Route Time</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">{card["total_weight_kg"]} kg</span>
+                    <span class="stat-label">Weight</span>
+                </div>
+            </div>
+            <div class="qr-container">
+                {qr_images}
+            </div>
+            <div class="scan-instruction">Scan with phone camera → Google Maps opens</div>
+        </div>
+        '''
+
+    html = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Route QR Codes — {created_at}</title>
+    <style>
+        /* Print-optimized layout for A4 paper */
+        @page {{
+            size: A4;
+            margin: 10mm;
+        }}
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            color: #1a1a1a;
+            background: #fff;
+            padding: 16px;
+        }}
+        .page-header {{
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #333;
+        }}
+        .page-header h1 {{
+            font-size: 20px;
+            font-weight: 700;
+        }}
+        .page-header .date {{
+            font-size: 13px;
+            color: #555;
+            margin-top: 4px;
+        }}
+        .cards-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }}
+        .card {{
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 12px;
+            page-break-inside: avoid;
+        }}
+        .card-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #ddd;
+        }}
+        .vehicle-id {{
+            font-size: 18px;
+            font-weight: 800;
+            font-family: 'Courier New', monospace;
+        }}
+        .driver-name {{
+            font-size: 14px;
+            color: #444;
+        }}
+        .card-stats {{
+            display: flex;
+            gap: 12px;
+            margin-bottom: 10px;
+        }}
+        .stat {{
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }}
+        .stat-value {{
+            font-size: 15px;
+            font-weight: 700;
+        }}
+        .stat-label {{
+            font-size: 10px;
+            color: #777;
+            text-transform: uppercase;
+        }}
+        .qr-container {{
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }}
+        .qr-block {{
+            text-align: center;
+        }}
+        .segment-label {{
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #333;
+        }}
+        .qr-img {{
+            width: 150px;
+            height: 150px;
+        }}
+        .scan-instruction {{
+            text-align: center;
+            font-size: 11px;
+            color: #666;
+            margin-top: 8px;
+            font-style: italic;
+        }}
+        /* Screen-only styles */
+        @media screen {{
+            body {{ max-width: 900px; margin: 0 auto; background: #f5f5f5; }}
+            .page-header {{ background: #1a1a1a; color: white; padding: 16px; border-radius: 8px; }}
+            .page-header .date {{ color: #ccc; }}
+            .print-btn {{
+                display: block;
+                margin: 0 auto 20px;
+                padding: 12px 32px;
+                font-size: 16px;
+                font-weight: 600;
+                background: #D97706;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+            }}
+            .print-btn:hover {{ background: #B45309; }}
+            .card {{ background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+        }}
+        @media print {{
+            .print-btn {{ display: none; }}
+            .no-print {{ display: none; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="page-header">
+        <h1>LPG Delivery Route QR Codes</h1>
+        <div class="date">Generated: {created_at} | {len(vehicle_cards)} vehicles | {sum(c["total_stops"] for c in vehicle_cards)} total deliveries</div>
+    </div>
+    <button class="print-btn no-print" onclick="window.print()">🖨️ Print QR Sheet</button>
+    <div class="cards-grid">
+        {cards_html}
+    </div>
+</body>
+</html>'''
+
+    return HTMLResponse(content=html)
 
 
 # =============================================================================

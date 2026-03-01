@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { UploadRoutes } from "./pages/UploadRoutes";
 import { LiveMap } from "./pages/LiveMap";
 import { RunHistory } from "./pages/RunHistory";
 import { FleetManagement } from "./pages/FleetManagement";
@@ -20,11 +21,14 @@ import "./App.css";
  * Pages available in the dashboard.
  * Using a union type instead of an enum because TypeScript's
  * erasableSyntaxOnly setting forbids const enums.
+ *
+ * "upload" is the default page — the primary daily workflow is:
+ * upload CDCMS → generate routes → print QR codes → drivers scan.
  */
-type Page = "live-map" | "run-history" | "fleet";
+type Page = "upload" | "live-map" | "run-history" | "fleet";
 
 function App() {
-  const [activePage, setActivePage] = useState<Page>("live-map");
+  const [activePage, setActivePage] = useState<Page>("upload");
   const [apiHealthy, setApiHealthy] = useState<boolean | null>(null);
 
   /**
@@ -61,6 +65,12 @@ function App() {
 
         {/* Navigation tabs */}
         <nav className="app-nav">
+          <button
+            className={`nav-tab ${activePage === "upload" ? "active" : ""}`}
+            onClick={() => setActivePage("upload")}
+          >
+            📤 Upload & Routes
+          </button>
           <button
             className={`nav-tab ${activePage === "live-map" ? "active" : ""}`}
             onClick={() => setActivePage("live-map")}
@@ -104,6 +114,7 @@ function App() {
 
       {/* Main content — switches based on active page */}
       <main className="app-main">
+        {activePage === "upload" && <UploadRoutes />}
         {activePage === "live-map" && <LiveMap />}
         {activePage === "run-history" && <RunHistory />}
         {activePage === "fleet" && <FleetManagement />}

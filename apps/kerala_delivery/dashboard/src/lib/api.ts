@@ -228,3 +228,90 @@ export async function fetchRunRoutes(runId: string): Promise<RoutesResponse> {
 export async function fetchHealth(): Promise<HealthResponse> {
   return apiFetch<HealthResponse>("/health");
 }
+
+// --- Upload / Optimize ---
+
+/**
+ * Upload a CDCMS export file and run route optimization.
+ *
+ * This is the main workflow endpoint: upload CSV/Excel → parse → geocode →
+ * optimize → persist routes. Returns a summary with run_id.
+ *
+ * Why FormData instead of JSON?
+ * File uploads require multipart/form-data encoding. The browser handles
+ * the Content-Type header (including boundary) automatically when you
+ * pass a FormData object to fetch. Never set Content-Type manually
+ * for file uploads — the browser adds the correct multipart boundary.
+ */
+export interface UploadResponse {
+  run_id: string;
+  assignment_id: string;
+  total_orders: number;
+  orders_assigned: number;
+  orders_unassigned: number;
+  vehicles_used: number;
+  optimization_time_ms: number;
+  created_at: string;
+}
+
+export async function uploadAndOptimize(file: File): Promise<UploadResponse> {
+  const url = `${BASE_URL}/api/upload-orders`;
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const headers: Record<string, string> = {};
+  const apiKey = import.meta.env.VITE_API_KEY;
+  if (apiKey) {
+    headers["X-API-Key"] = apiKey;
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(
+      `Upload failed (${response.status}): ${errorBody || response.statusText}`
+    );
+  }
+
+  return (await response.json()) as UploadResponse;
+}
+
+// --- QR Code / Google Maps URLs ---
+
+/** A segment of a route (one Google Maps URL, max 11 stops). */
+export interface RouteSegment {
+  segment: number;
+  start_stop: number;
+  end_stop: number;
+  stop_count: number;
+  url: string;
+  qr_svg: string;
+}
+
+/** Response from GET /api/routes/{vehicle_id}/google-maps */
+export interface GoogleMapsRouteResponse {
+  vehicle_id: string;
+  driver_name: string;
+  total_stops: number;
+  total_segments: number;
+  segments: RouteSegment[];
+}
+
+/** Fetch Google Maps URLs and QR codes for a vehicle's route. */
+export async function fetchGoogleMapsRoute(
+  vehicleId: string
+): Promise<GoogleMapsRouteResponse> {
+  return apiFetch<GoogleMapsRouteResponse>(
+    `/api/routes/${encodeURIComponent(vehicleId)}/google-maps`
+  );
+}
+
+/** Get the URL for the printable QR sheet (opens in new tab). */
+export function getQrSheetUrl(): string {
+  return `${BASE_URL}/api/qr-sheet`;
+}
