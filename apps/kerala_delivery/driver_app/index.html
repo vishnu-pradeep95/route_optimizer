@@ -773,7 +773,9 @@ function showRouteOnMap() {
         });
 
         const marker = L.marker(latlng, { icon }).addTo(map);
-        marker.bindPopup(`<b>Stop ${stop.sequence}</b><br>${stop.address}<br>${stop.quantity} cyl · ${stop.weight_kg} kg`);
+        // XSS defence: stop.address comes from the database (originally from CSV
+        // uploads). Must escape before passing to bindPopup(), which uses innerHTML.
+        marker.bindPopup(`<b>Stop ${stop.sequence}</b><br>${escapeHtml(stop.address)}<br>${stop.quantity} cyl · ${stop.weight_kg} kg`);
         markers.push(marker);
     });
 

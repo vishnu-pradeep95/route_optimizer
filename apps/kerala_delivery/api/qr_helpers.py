@@ -110,7 +110,7 @@ def generate_qr_base64_png(data: str, box_size: int = 10) -> str:
 
     Args:
         data: The string to encode (typically a URL).
-        box_size: Size of each QR module in SVG units.
+        box_size: Size of each QR module in pixels.
 
     Returns:
         Base64-encoded PNG string (without data: prefix).

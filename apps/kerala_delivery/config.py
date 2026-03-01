@@ -18,8 +18,8 @@ from core.models.location import Location
 # =============================================================================
 # DEPOT (GODOWN) LOCATION
 # =============================================================================
-# TODO: Replace with actual godown GPS coordinates
-# This is a placeholder near Kochi — update before first real run
+# Actual godown GPS coordinates — Vatakara, Kozhikode district
+# Sourced from Google Maps pin drop at the HPCL LPG godown
 DEPOT_LOCATION = Location(
     latitude=11.624443730714066,
     longitude=75.57964507762223,

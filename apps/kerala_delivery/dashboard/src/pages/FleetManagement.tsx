@@ -33,14 +33,14 @@ import "./FleetManagement.css";
 // --- Constants ---
 
 /**
- * Default depot coordinates: Kochi city center (Ernakulam Junction area).
+ * Default depot coordinates: Vatakara, Kozhikode district.
  *
- * Why Kochi: it's the operational hub for the Kerala LPG delivery business.
+ * Why Vatakara: it's the actual HPCL LPG godown location for this business.
  * These defaults save operators from looking up coords for the primary depot.
- * Values sourced from: https://maps.google.com → Ernakulam Junction
+ * Must stay in sync with apps/kerala_delivery/config.py DEPOT_LOCATION.
  */
-const DEFAULT_DEPOT_LAT = 9.9816;
-const DEFAULT_DEPOT_LNG = 76.2999;
+const DEFAULT_DEPOT_LAT = 11.6244;
+const DEFAULT_DEPOT_LNG = 75.5796;
 
 /**
  * Default max payload in kg for a Piaggio Ape Xtra LDX.
