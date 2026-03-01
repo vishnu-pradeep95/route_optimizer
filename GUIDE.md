@@ -555,48 +555,48 @@ quality, test coverage, and design-doc alignment.
 
 ## 12. What's Built vs. What's Planned
 
-### Current State (Phase 2 — Near-Complete)
+### Current State (Phase 3 Complete + Phase 4 In Progress)
 
 **What works right now:**
 
-- Upload a CSV of deliveries and get optimized routes back
+- Upload a CDCMS export (HPCL tab-separated) or standard CSV and get optimized routes back
+- Automatic CDCMS format detection in the upload endpoint (no separate preprocessing step)
 - Geocoding with Google Maps (results cached in PostGIS to save money)
 - PostGIS geocode cache with CachedGeocoder (decorator pattern, async Protocol)
 - Route optimization with VROOM + OSRM (68% better than manual routes!)
 - Full PostgreSQL database with PostGIS for GPS data
-- Driver PWA (mobile-friendly web app) showing routes
+- Driver PWA (mobile-friendly web app) showing routes with Google Maps navigation
+- QR code generation: printable A4 sheet with QR codes per vehicle → drivers scan with phone → Google Maps opens
+- Route splitting for routes >11 stops (Google Maps 9-waypoint limit)
+- Upload & Routes dashboard page with drag-drop upload, route cards, expandable QR codes
 - Real-time GPS telemetry tracking (drivers send position every 15s)
 - Batch telemetry endpoint (POST /api/telemetry/batch) — reduces N+1 fetch overhead
 - Fleet management API (full CRUD for vehicles)
-- API key authentication on all write endpoints (X-API-Key header)
+- API key authentication on write endpoints + sensitive reads (X-API-Key header)
 - Rate limiting on write endpoints (slowapi — prevents abuse)
-- Operations dashboard with live map, route history, and fleet management
+- Operations dashboard with upload/routes, live map, route history, and fleet management
 - Batch scripts for importing orders and geocoding addresses (import_orders.py, geocode_batch.py)
-- 211 automated tests covering all core functionality + batch scripts
+- 268 automated tests covering all core functionality + batch scripts + QR code + XSS prevention
 - Docker Compose for one-command infrastructure startup
+- Docker Compose production config with Caddy reverse proxy, health checks
 
-**What's left in Phase 2:**
+**What's actively being built (Phase 4):**
 
-- Offline-first sync for the driver app (service worker + local DB)
-- Dashboard end-to-end tests (Playwright)
-- Drag-and-drop route editing in the dashboard
+- Dashboard UI redesign (sidebar nav, design system, dark theme)
+- Hardware-bound software licensing (offline validation)
+- Easy installation (init containers, installer script)
 
-### Future Phases
+### Future Work
 
-| Phase | What It Adds | Estimated Time |
-|-------|-------------|----------------|
-| **Phase 3: Production** | Cloud deployment, monitoring (Grafana), automated daily batch, mid-shift re-optimization, proof-of-delivery (photos) | 4–6 weeks |
-| **Phase 4: Advanced** | Machine learning for better travel time predictions, dynamic re-routing when drivers are delayed, customer notifications (SMS/WhatsApp), monsoon-adjusted routing | 8–12 weeks |
-
-### Open Items (From Session Journal)
-
-These are documented unresolved items:
-- Drag-and-drop route editing in the dashboard
-- Dashboard end-to-end tests (Playwright)
-- OSRM speed profile calibration with real GPS data
-- Offline-first driver app sync
-- No real customer data yet (using 30 synthetic Kochi orders)
-- React component tests for FleetManagement (deferred to Playwright E2E)
+| Item | Priority | Notes |
+|------|----------|-------|
+| Offline-first driver PWA sync | Medium | Service worker + local DB for patchy Kerala mobile data |
+| OSRM speed profile calibration | Medium | Calibrate with real GPS data from Phase 3 routes |
+| Dashboard E2E tests | Low | Playwright — deferred until UI stabilizes |
+| Drag-and-drop route editing | Low | Manual route adjustments in dashboard |
+| ML travel-time models | Future | Learn from real delivery data |
+| Dynamic re-routing | Future | Mid-shift re-optimization when delays occur |
+| Customer notifications | Future | SMS/WhatsApp ETA updates |
 
 ---
 

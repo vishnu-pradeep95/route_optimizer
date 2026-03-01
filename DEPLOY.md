@@ -199,65 +199,47 @@ Wait about 30 seconds for everything to start.
    > Replace `YOUR_USERNAME` with your Windows username.
    > The file from CDCMS is tab-separated — that's fine, the system handles it.
 
-#### Step 3.3: Preprocess and Optimize
+#### Step 3.3: Upload and Optimize Routes
 
-**Option A: For one specific driver**
+1. Open Chrome and go to: **http://localhost:8000/dashboard/**
+2. You'll see the **Upload & Routes** page (it's the first tab)
+3. **Drag and drop** the CDCMS file onto the upload area — or click "Browse" to select it
+4. Click **Upload & Optimize**
+5. Wait for the progress bar to finish (usually 5–15 seconds)
 
-```bash
-python -c "
-from core.data_import.cdcms_preprocessor import preprocess_cdcms
-from apps.kerala_delivery.config import CDCMS_AREA_SUFFIX
+The system will automatically:
+- Detect that it's a CDCMS file (tab-separated format)
+- Clean up the messy addresses (phone numbers, abbreviations, etc.)
+- Look up GPS coordinates (cached after first use — free and instant)
+- Calculate the best route for each vehicle
+- Save everything to the database
 
-df = preprocess_cdcms(
-    'data/cdcms_export.csv',
-    filter_delivery_man='GIREESHAN ( C )',
-    area_suffix=CDCMS_AREA_SUFFIX,
-)
-df.to_csv('data/today_deliveries.csv', index=False)
-print(f'Ready: {len(df)} orders for GIREESHAN')
-"
-```
+#### Step 3.4: Print QR Codes for Drivers
 
-> Change `'GIREESHAN ( C )'` to the driver's name as it appears in CDCMS.
+After optimization completes, you'll see route cards for each vehicle. You have two options:
 
-**Option B: For all drivers at once**
+**Option A: Print All QR Codes at Once (Recommended)**
 
-```bash
-python -c "
-from core.data_import.cdcms_preprocessor import preprocess_cdcms
-from apps.kerala_delivery.config import CDCMS_AREA_SUFFIX
+1. Click the **🖨️ Print QR Sheet** button at the top of the results
+2. A new page opens with one QR card per vehicle, formatted for A4 paper
+3. Click **Print** (or Ctrl+P) → select your office printer
+4. Cut out each card and hand it to the corresponding driver
 
-df = preprocess_cdcms(
-    'data/cdcms_export.csv',
-    filter_status='Allocated-Printed',
-    area_suffix=CDCMS_AREA_SUFFIX,
-)
-df.to_csv('data/today_deliveries.csv', index=False)
-print(f'Ready: {len(df)} orders across {df[\"delivery_man\"].nunique()} drivers')
-"
-```
+**Option B: Show Individual QR Codes**
 
-#### Step 3.4: Upload and Get Routes
+1. Click **Show QR** on any vehicle's route card
+2. The QR code appears — the driver can scan it directly from the screen
+3. Driver points their phone camera at the QR code → Google Maps opens with their route
 
-```bash
-curl -X POST http://localhost:8000/api/upload-orders \
-  -H "X-API-Key: your-api-key" \
-  -F "file=@data/today_deliveries.csv"
-```
+#### Step 3.5: Drivers Use the Routes
 
-> Replace `your-api-key` with the API_KEY you set in `.env`.
+Each driver:
+1. **Scans the QR code** with their phone camera (no app needed)
+2. **Google Maps opens** with their delivery route pre-loaded
+3. **Follows the navigation** — Google Maps handles turn-by-turn directions
+4. For routes with many stops (>11), the QR sheet will show multiple QR codes per driver labeled "Part 1", "Part 2", etc. — scan them in order
 
-The system will:
-1. Read the cleaned delivery list
-2. Look up GPS coordinates for each address (cached after first use — free and instant)
-3. Calculate the best route order for each vehicle
-4. Save the results
-
-#### Step 3.5: View Routes
-
-Open Chrome and go to:
-- **Driver route list:** http://localhost:8000/driver/
-- **Operations dashboard:** Not included in this guide — ask the technical team if needed
+> **Tip:** Drivers can also open their route by going to **http://your-server:8000/driver/** on their phone browser and entering their vehicle ID.
 
 ### End of Day
 
@@ -471,31 +453,22 @@ Print this and keep it near the computer.
 ║     cd routing_opt                                           ║
 ║     sudo service docker start                                ║
 ║     docker compose up -d                                     ║
-║     source .venv/bin/activate                                ║
 ║                                                               ║
-║  3. COPY today's CDCMS export:                               ║
-║     cp /mnt/c/Users/USERNAME/Downloads/FILE.csv \            ║
-║        data/cdcms_export.csv                                 ║
+║  3. OPEN dashboard in Chrome:                                ║
+║     http://localhost:8000/dashboard/                          ║
 ║                                                               ║
-║  4. PROCESS the orders:                                      ║
-║     python -c "                                              ║
-║     from core.data_import.cdcms_preprocessor import preprocess_cdcms        ║
-║     from apps.kerala_delivery.config import CDCMS_AREA_SUFFIX║
-║     df = preprocess_cdcms('data/cdcms_export.csv',           ║
-║         filter_delivery_man='DRIVER_NAME',                   ║
-║         area_suffix=CDCMS_AREA_SUFFIX)                       ║
-║     df.to_csv('data/today.csv', index=False)                 ║
-║     print(f'{len(df)} orders ready')                         ║
-║     "                                                        ║
+║  4. UPLOAD today's CDCMS export:                             ║
+║     - Drag & drop file onto the Upload page                  ║
+║     - Click "Upload & Optimize"                              ║
+║     - Wait for routes to appear                              ║
 ║                                                               ║
-║  5. UPLOAD for optimization:                                 ║
-║     curl -X POST http://localhost:8000/api/upload-orders \   ║
-║       -H 'X-API-Key: YOUR_KEY' \                            ║
-║       -F 'file=@data/today.csv'                              ║
+║  5. PRINT QR codes:                                          ║
+║     - Click "Print QR Sheet"                                 ║
+║     - Print → cut → hand to drivers                          ║
 ║                                                               ║
-║  6. VIEW routes: http://localhost:8000/driver/                ║
+║  6. DRIVERS scan QR → Google Maps → deliver                  ║
 ║                                                               ║
-║  END OF DAY: docker compose down                             ║
+║  END OF DAY: docker compose down (optional)                  ║
 ║                                                               ║
 ╚═══════════════════════════════════════════════════════════════╝
 ```

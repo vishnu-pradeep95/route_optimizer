@@ -99,11 +99,11 @@ routing_opt/
 │       ├── api/main.py            ← FastAPI backend (upload, optimize, serve)
 │       ├── driver_app/            ← PWA (index.html, sw.js, manifest.json)
 │       └── dashboard/             ← Ops dashboard (React + Vite + MapLibre GL JS)
-│           ├── src/pages/         ← LiveMap, RunHistory, FleetManagement
+│           ├── src/pages/         ← UploadRoutes, LiveMap, RunHistory, FleetManagement
 │           ├── src/components/    ← RouteMap, VehicleList, StatsBar
 │           └── src/lib/api.ts     ← Typed fetch client for all API endpoints
 │
-├── tests/                         ← Mirrors source structure (253 tests)
+├── tests/                         ← Mirrors source structure (268 tests)
 │   ├── conftest.py                ← Shared fixtures (Kerala coordinates)
 │   ├── core/                      ← Unit tests for all core modules
 │   │   ├── database/              ← 35 DB tests (models, repository, connection)
@@ -164,6 +164,8 @@ Base URL: `http://localhost:8000`
 | `POST` | `/api/upload-orders` | Upload CSV → geocode → optimize → persist → return assignment |
 | `GET` | `/api/routes` | List all routes (summary per vehicle) |
 | `GET` | `/api/routes/{vehicle_id}` | Full route detail for a specific driver |
+| `GET` | `/api/routes/{vehicle_id}/google-maps` | Google Maps URL(s) + QR code SVG(s) for a vehicle's route |
+| `GET` | `/api/qr-sheet` | Printable A4 HTML page with QR codes for ALL vehicles |
 | `POST` | `/api/routes/{vehicle_id}/stops/{order_id}/status` | Update delivery status (`delivered` / `failed` / `pending`) |
 | `GET` | `/api/runs` | List recent optimization runs (newest first) |
 | `GET` | `/api/runs/{run_id}/routes` | All routes for a specific optimization run |
@@ -183,8 +185,9 @@ Base URL: `http://localhost:8000`
 The primary input is the **HPCL CDCMS export** — a tab-separated file with 19 columns exported from the Cylinder Delivery & Customer Management System.
 
 > **Authentication:** Write endpoints (`POST`, `PUT`, `DELETE`) require an API key
-> in the `X-API-Key` header. Set `ROUTEOPT_API_KEY` in `.env`. Read endpoints (`GET`)
-> are open for driver app access without auth overhead.
+> in the `X-API-Key` header. Set `API_KEY` in `.env`. Sensitive read endpoints
+> (telemetry, vehicles, QR sheet, Google Maps routes) also require the key.
+> Non-sensitive reads (`/api/routes`, `/health`) are open for driver app access.
 
 See [data/sample_cdcms_export.csv](data/sample_cdcms_export.csv) for a CDCMS format sample, or [data/sample_orders.csv](data/sample_orders.csv) for a generic CSV example.
 
@@ -267,7 +270,7 @@ All business-specific values live in [`apps/kerala_delivery/config.py`](apps/ker
 
 | Parameter | Value | Source |
 |-----------|-------|--------|
-| Depot location | 9.9716°N, 76.2846°E (Kochi) — **placeholder** | Update to actual Vatakara godown coords before production |
+| Depot location | 11.624°N, 75.579°E (Vatakara, Kozhikode) | Actual LPG godown location |
 | Vehicles | 13 × Piaggio Ape Xtra LDX | Fleet data |
 | Max payload | 446 kg (90% of 496 kg rated) | Safety margin |
 | Max cylinders/load | 30 domestic | Cargo bed volume |
@@ -307,7 +310,8 @@ These are enforced by the system and cannot be bypassed:
 | **Geocoding** | Google Maps API (PostGIS cache + CachedGeocoder) | Address → GPS coordinates |
 | **Driver app** | PWA (HTML/JS/Service Worker) | Mobile-friendly, offline-capable |
 | **Migrations** | Alembic (async) | Database schema versioning (3 migrations applied) |
-| **Ops Dashboard** | React 19 + Vite 7 + MapLibre GL JS 5 | Live vehicle tracking, route visualization, run history, fleet management |
+| **Ops Dashboard** | React 19 + Vite 7 + MapLibre GL JS 5 | Upload & routes, live tracking, route visualization, run history, fleet management |
+| **QR Codes** | qrcode 8.2 + Pillow 12.1.1 | Google Maps navigation URLs encoded as scannable QR codes |
 | **Infrastructure** | Docker Compose | Single-command deployment |
 
 ---
@@ -319,7 +323,7 @@ source .venv/bin/activate
 pytest tests/ -v
 ```
 
-**253 tests** covering:
+**268 tests** covering:
 - Core models (location, order, vehicle, route validation)
 - OSRM adapter (travel time, distance matrix, safety multiplier)
 - VROOM adapter (route optimization, priority, unassigned handling)
@@ -328,7 +332,7 @@ pytest tests/ -v
 - CSV importer (standard/custom columns, coordinate passthrough, error recovery)
 - CDCMS preprocessor (33 tests: TSV reading, address cleaning, filtering, abbreviation handling)
 - Database layer (35 tests: ORM models, repository CRUD, connection lifecycle, telemetry)
-- API endpoints (health, routes, status updates, upload pipeline, optimization runs, telemetry, fleet CRUD, rate limiting)
+- API endpoints (health, routes, status updates, upload pipeline, optimization runs, telemetry, fleet CRUD, rate limiting, QR codes, XSS prevention)
 - Batch scripts (import_orders.py, geocode_batch.py — parsing, geocoding, dry-run, stats)
 - Integration (end-to-end CSV → geocode → optimize → persist pipeline)
 
@@ -387,8 +391,11 @@ Copy `.env.example` → `.env` and configure:
 | **0: Baseline** | ✅ Complete | Core modules, data models, tests, API, driver PWA, Docker setup |
 | **1: Single-Vehicle** | ✅ Complete | Real OSRM Kerala data, speed profiles, 68% route improvement validated |
 | **2: Multi-Vehicle + DB** | ✅ Complete | PostgreSQL + PostGIS, time windows, GPS telemetry, optimization history, fleet management, API auth, batch scripts |
-| **3: Production** | ✅ Complete | Docker Compose prod config, CDCMS preprocessor, read-scoped auth, 253 tests. *Note: monitoring, re-optimization, and proof-of-delivery from the design doc's original Phase 3 scope moved to Phase 4.* |
-| **4: Advanced** | Planned | ML travel-time models, dynamic re-routing, notifications, monitoring (Grafana), mid-shift re-optimization, proof-of-delivery |
+| **3: Production** | ✅ Complete | Docker Compose prod config, CDCMS preprocessor, read-scoped auth, 268 tests. *Note: monitoring, re-optimization, and proof-of-delivery from the design doc's original Phase 3 scope moved to Phase 4.* |
+| **4A: QR Codes** | ✅ Complete | Google Maps QR codes, printable QR sheet, Upload & Routes dashboard page, route splitting for >11 stops |
+| **4B: UI Redesign** | 🔄 In Progress | Dashboard sidebar nav, design system, driver PWA overhaul |
+| **4C: Licensing** | 🔄 In Progress | Hardware-bound license key, offline validation |
+| **4D: Easy Install** | 🔄 In Progress | Init containers, installer script, simplified deployment |
 
 ---
 

@@ -346,6 +346,16 @@ alembic history            # Shows all migrations
 
 If importing from HPCL's CDCMS system:
 
+### Option A: Dashboard (recommended)
+
+1. Open `http://localhost:8000/dashboard/` in Chrome
+2. Go to the **Upload Routes** page
+3. Drag & drop the CDCMS CSV file (auto-detected format)
+4. Click **Upload & Optimize** — routes appear on the map
+5. Click **Print QR Sheet** — print and hand QR codes to drivers
+
+### Option B: CLI / API
+
 ```bash
 # 1. Preprocess the CDCMS export (filter by driver, clean addresses)
 python -c "
