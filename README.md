@@ -88,22 +88,26 @@ routing_opt/
 │   │   ├── connection.py          ← Async engine, session factory (asyncpg)
 │   │   ├── models.py              ← SQLAlchemy ORM models (orders, routes, telemetry)
 │   │   └── repository.py          ← Data access layer (async CRUD operations)
-│   └── data_import/               ← Data ingestion
-│       ├── interfaces.py          ← DataImporter protocol
-│       ├── csv_importer.py        ← Generic CSV/Excel import
-│       └── cdcms_preprocessor.py  ← HPCL CDCMS export converter
+│   ├── data_import/               ← Data ingestion
+│   │   ├── interfaces.py          ← DataImporter protocol
+│   │   ├── csv_importer.py        ← Generic CSV/Excel import
+│   │   └── cdcms_preprocessor.py  ← HPCL CDCMS export converter
+│   └── licensing/                 ← Software licensing
+│       └── license_manager.py     ← Hardware-bound license key validation
 │
 ├── apps/
 │   └── kerala_delivery/           ← FIRST APP: Kerala LPG business logic
 │       ├── config.py              ← All Kerala-specific constants
-│       ├── api/main.py            ← FastAPI backend (upload, optimize, serve)
+│       ├── api/
+│       │   ├── main.py            ← FastAPI backend (upload, optimize, serve)
+│       │   └── qr_helpers.py      ← QR code generation + Google Maps URL builder
 │       ├── driver_app/            ← PWA (index.html, sw.js, manifest.json)
 │       └── dashboard/             ← Ops dashboard (React + Vite + MapLibre GL JS)
 │           ├── src/pages/         ← UploadRoutes, LiveMap, RunHistory, FleetManagement
 │           ├── src/components/    ← RouteMap, VehicleList, StatsBar
 │           └── src/lib/api.ts     ← Typed fetch client for all API endpoints
 │
-├── tests/                         ← Mirrors source structure (268 tests)
+├── tests/                         ← Mirrors source structure (351 tests)
 │   ├── conftest.py                ← Shared fixtures (Kerala coordinates)
 │   ├── core/                      ← Unit tests for all core modules
 │   │   ├── database/              ← 35 DB tests (models, repository, connection)
@@ -323,17 +327,21 @@ source .venv/bin/activate
 pytest tests/ -v
 ```
 
-**268 tests** covering:
-- Core models (location, order, vehicle, route validation)
-- OSRM adapter (travel time, distance matrix, safety multiplier)
-- VROOM adapter (route optimization, priority, unassigned handling)
-- Google geocoder (API calls, caching, geocode cache hits)
-- PostGIS geocode cache (CachedGeocoder — cache-first strategy, hit/miss, confidence)
-- CSV importer (standard/custom columns, coordinate passthrough, error recovery)
+**351 tests** covering:
+- Core models (16 tests: location, order, vehicle, route validation)
+- OSRM adapter (8 tests: travel time, distance matrix, safety multiplier)
+- VROOM adapter (15 tests: route optimization, priority, unassigned handling)
+- Google geocoder (11 tests: API calls, caching, geocode cache hits)
+- PostGIS geocode cache (16 tests: CachedGeocoder — cache-first strategy, hit/miss, confidence)
+- CSV importer (10 tests: standard/custom columns, coordinate passthrough, error recovery)
 - CDCMS preprocessor (33 tests: TSV reading, address cleaning, filtering, abbreviation handling)
 - Database layer (35 tests: ORM models, repository CRUD, connection lifecycle, telemetry)
-- API endpoints (health, routes, status updates, upload pipeline, optimization runs, telemetry, fleet CRUD, rate limiting, QR codes, XSS prevention)
-- Batch scripts (import_orders.py, geocode_batch.py — parsing, geocoding, dry-run, stats)
+- Licensing (25 tests: hardware-bound license keys, offline validation, expiry, tampering)
+- API endpoints (93 tests: health, routes, status updates, upload pipeline, optimization runs, telemetry, fleet CRUD, rate limiting, QR codes, XSS prevention)
+- QR helpers (24 tests: Google Maps URL building, QR SVG/PNG generation, route splitting)
+- Kerala config (23 tests: vehicle specs, safety constraints, routing config, depot location)
+- Batch scripts (31 tests: import_orders.py, geocode_batch.py — parsing, geocoding, dry-run, stats)
+- E2E pipelines (11 tests: CSV→Order, Order→VROOM, Route→QR, full upload→optimize, QR sheet)
 - Integration (end-to-end CSV → geocode → optimize → persist pipeline)
 
 All external services (OSRM, VROOM, Google Maps, PostgreSQL) are mocked in tests — no Docker required to run the test suite.
@@ -391,11 +399,11 @@ Copy `.env.example` → `.env` and configure:
 | **0: Baseline** | ✅ Complete | Core modules, data models, tests, API, driver PWA, Docker setup |
 | **1: Single-Vehicle** | ✅ Complete | Real OSRM Kerala data, speed profiles, 68% route improvement validated |
 | **2: Multi-Vehicle + DB** | ✅ Complete | PostgreSQL + PostGIS, time windows, GPS telemetry, optimization history, fleet management, API auth, batch scripts |
-| **3: Production** | ✅ Complete | Docker Compose prod config, CDCMS preprocessor, read-scoped auth, 268 tests. *Note: monitoring, re-optimization, and proof-of-delivery from the design doc's original Phase 3 scope moved to Phase 4.* |
+| **3: Production** | ✅ Complete | Docker Compose prod config, CDCMS preprocessor, read-scoped auth. *Note: monitoring, re-optimization, and proof-of-delivery from the design doc's original Phase 3 scope moved to Phase 4.* |
 | **4A: QR Codes** | ✅ Complete | Google Maps QR codes, printable QR sheet, Upload & Routes dashboard page, route splitting for >11 stops |
-| **4B: UI Redesign** | 🔄 In Progress | Dashboard sidebar nav, design system, driver PWA overhaul |
-| **4C: Licensing** | 🔄 In Progress | Hardware-bound license key, offline validation |
-| **4D: Easy Install** | 🔄 In Progress | Init containers, installer script, simplified deployment |
+| **4B: UI Redesign** | ✅ Complete | Dashboard sidebar nav, stone/amber design system, driver PWA overhaul, responsive layout |
+| **4C: Licensing** | ✅ Complete | Hardware-bound license key generation, offline validation, expiry checks |
+| **4D: Easy Install** | ✅ Complete | Init containers, installer script, Caddy reverse proxy, simplified deployment |
 
 ---
 

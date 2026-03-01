@@ -576,15 +576,15 @@ quality, test coverage, and design-doc alignment.
 - Rate limiting on write endpoints (slowapi — prevents abuse)
 - Operations dashboard with upload/routes, live map, route history, and fleet management
 - Batch scripts for importing orders and geocoding addresses (import_orders.py, geocode_batch.py)
-- 268 automated tests covering all core functionality + batch scripts + QR code + XSS prevention
+- 351 automated tests covering all core functionality + batch scripts + QR code + licensing + config + E2E pipelines + XSS prevention
 - Docker Compose for one-command infrastructure startup
 - Docker Compose production config with Caddy reverse proxy, health checks
 
-**What's actively being built (Phase 4):**
+**What shipped in Phase 4:**
 
-- Dashboard UI redesign (sidebar nav, design system, dark theme)
-- Hardware-bound software licensing (offline validation)
-- Easy installation (init containers, installer script)
+- Dashboard UI redesign (sidebar nav, stone/amber design system, responsive layout)
+- Hardware-bound software licensing (offline validation, expiry checks)
+- Easy installation (init containers, installer script, Caddy reverse proxy)
 
 ### Future Work
 
