@@ -18,7 +18,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### UI/UX — Dashboard
 
 - [x] **DASH-01**: Install Tailwind 4 + DaisyUI 5 with collision-safe prefix (`tw`) in Vite pipeline
-- [ ] **DASH-02**: Define logistics SaaS theme (clean colors, professional typography, consistent spacing)
+- [x] **DASH-02**: Define logistics SaaS theme (clean colors, professional typography, consistent spacing)
 - [ ] **DASH-03**: Migrate Upload/Routes page to Tailwind/DaisyUI — file upload, progress, results table
 - [ ] **DASH-04**: Migrate Live Map page — clean map container, vehicle sidebar, status indicators
 - [ ] **DASH-05**: Migrate Fleet Management page — vehicle cards/table, driver info, capacity indicators
@@ -107,7 +107,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DATA-04 | Phase 3 | Pending |
 | DATA-05 | Phase 3 | Pending |
 | DASH-01 | Phase 1 | Complete |
-| DASH-02 | Phase 1 | Pending |
+| DASH-02 | Phase 1 | Complete |
 | DASH-03 | Phase 4 | Pending |
 | DASH-04 | Phase 4 | Pending |
 | DASH-05 | Phase 4 | Pending |
