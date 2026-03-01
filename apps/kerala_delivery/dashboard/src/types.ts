@@ -112,6 +112,16 @@ export interface VehiclesResponse {
   vehicles: Vehicle[];
 }
 
+// --- Import failure types ---
+
+/** A single import failure from CSV validation or geocoding. */
+export interface ImportFailure {
+  row_number: number;
+  address_snippet: string;
+  reason: string;
+  stage: "validation" | "geocoding";
+}
+
 // --- Optimization run types ---
 
 /** A single optimization run record. */

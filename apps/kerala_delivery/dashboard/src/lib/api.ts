@@ -22,6 +22,7 @@ import type {
   HealthResponse,
   Vehicle,
   VehiclesResponse,
+  ImportFailure,
 } from "../types";
 
 /**
@@ -244,6 +245,7 @@ export async function fetchHealth(): Promise<HealthResponse> {
  * for file uploads — the browser adds the correct multipart boundary.
  */
 export interface UploadResponse {
+  // Existing fields
   run_id: string;
   assignment_id: string;
   total_orders: number;
@@ -252,6 +254,14 @@ export interface UploadResponse {
   vehicles_used: number;
   optimization_time_ms: number;
   created_at: string;
+
+  // Import diagnostics (added in Phase 3)
+  total_rows: number;
+  geocoded: number;
+  failed_geocoding: number;
+  failed_validation: number;
+  failures: ImportFailure[];
+  warnings: ImportFailure[];
 }
 
 export async function uploadAndOptimize(file: File): Promise<UploadResponse> {
