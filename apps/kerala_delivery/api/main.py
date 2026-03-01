@@ -46,7 +46,7 @@ from apps.kerala_delivery.api.qr_helpers import (
     split_route_into_segments,
     GOOGLE_MAPS_MAX_WAYPOINTS,
 )
-from core.data_import.csv_importer import CsvImporter, ColumnMapping
+from core.data_import.csv_importer import CsvImporter, ColumnMapping, ImportResult, RowError
 from core.data_import.cdcms_preprocessor import preprocess_cdcms, get_cdcms_column_mapping, CDCMS_COL_ORDER_NO, CDCMS_COL_ADDRESS
 from core.database.connection import engine, get_session
 from core.database import repository as repo
@@ -60,6 +60,19 @@ from core.optimizer.vroom_adapter import VroomAdapter
 from geoalchemy2.shape import to_shape
 
 logger = logging.getLogger(__name__)
+
+
+# Google Geocoding API status codes → user-friendly failure reasons.
+# Office staff see these messages, so they must be actionable and jargon-free.
+# The raw status is still logged server-side for debugging.
+GEOCODING_REASON_MAP: dict[str, str] = {
+    "ZERO_RESULTS": "Address not recognized by Google Maps",
+    "REQUEST_DENIED": "Geocoding service error (contact admin)",
+    "OVER_QUERY_LIMIT": "Geocoding quota exceeded (try again later)",
+    "OVER_DAILY_LIMIT": "Geocoding quota exceeded (try again later)",
+    "INVALID_REQUEST": "Address could not be processed",
+    "UNKNOWN_ERROR": "Geocoding service temporarily unavailable",
+}
 
 
 # =============================================================================
@@ -559,8 +572,31 @@ SessionDep = Depends(get_session)
 # =============================================================================
 # Request/Response models
 # =============================================================================
+class ImportFailure(BaseModel):
+    """A single import failure (validation or geocoding stage).
+
+    Surfaced to office staff so they can fix CSV issues. Row numbers
+    match the original spreadsheet (1-based, header = row 1). Address
+    snippets help identify which order failed without exposing full
+    customer data.
+    """
+
+    row_number: int = Field(..., description="1-based row in original CSV")
+    address_snippet: str = Field(default="", description="First 80 chars of address")
+    reason: str = Field(..., description="Human-readable failure reason for office staff")
+    stage: Literal["validation", "geocoding"] = Field(..., description="When the failure occurred")
+
+
 class OptimizationSummary(BaseModel):
-    """Summary of the latest optimization run."""
+    """Summary of the latest optimization run.
+
+    Includes import diagnostics (failures, warnings, summary counts) so the
+    dashboard can display per-row feedback without a separate API call.
+    All new fields have defaults for backward compatibility — existing clients
+    that don't read the new fields continue to work unchanged.
+    """
+
+    # Existing fields (unchanged)
     run_id: str = Field(..., description="UUID of this optimization run (use for subsequent queries)")
     assignment_id: str
     total_orders: int
@@ -569,6 +605,14 @@ class OptimizationSummary(BaseModel):
     vehicles_used: int
     optimization_time_ms: float
     created_at: datetime
+
+    # Import diagnostics (all default to zero/empty for backward compatibility)
+    total_rows: int = Field(default=0, description="Total rows in uploaded CSV")
+    geocoded: int = Field(default=0, description="Orders successfully geocoded")
+    failed_geocoding: int = Field(default=0, description="Orders that failed geocoding")
+    failed_validation: int = Field(default=0, description="Rows rejected during pre-validation")
+    failures: list[ImportFailure] = Field(default_factory=list, description="Per-row failure details")
+    warnings: list[ImportFailure] = Field(default_factory=list, description="Per-row warnings (defaults applied)")
 
 
 # =============================================================================
@@ -715,7 +759,52 @@ async def upload_and_optimize(
             import_result = importer.import_orders(tmp_path)
             orders = import_result.orders
 
+        # Step 1a: Convert ImportResult errors/warnings to ImportFailure lists.
+        # These track validation-stage failures (bad CSV data caught before geocoding).
+        # Geocoding failures are collected separately in step 2 below.
+        validation_failures: list[ImportFailure] = [
+            ImportFailure(
+                row_number=err.row_number,
+                address_snippet="",  # Address may be empty/missing for validation errors
+                reason=err.message,
+                stage="validation",
+            )
+            for err in import_result.errors
+        ]
+        validation_warnings: list[ImportFailure] = [
+            ImportFailure(
+                row_number=w.row_number,
+                address_snippet="",
+                reason=w.message,
+                stage="validation",
+            )
+            for w in import_result.warnings
+        ]
+        # Map order_id → spreadsheet row number for geocoding error tracking.
+        # When geocoding fails, we use this to report the original CSV row.
+        order_row_map = import_result.row_numbers
+
         if not orders:
+            if import_result.errors:
+                # All rows failed validation — return structured response with failures
+                # instead of a generic 400 error. Staff can see exactly which rows to fix.
+                return OptimizationSummary(
+                    run_id="",
+                    assignment_id="",
+                    total_orders=0,
+                    orders_assigned=0,
+                    orders_unassigned=0,
+                    vehicles_used=0,
+                    optimization_time_ms=0,
+                    created_at=datetime.now(timezone.utc),
+                    total_rows=len(import_result.errors),
+                    geocoded=0,
+                    failed_geocoding=0,
+                    failed_validation=len(import_result.errors),
+                    failures=validation_failures,
+                    warnings=validation_warnings,
+                )
+            # Genuinely empty file (no rows at all, no errors) — this is a user error
             raise HTTPException(status_code=400, detail="No valid orders found in file")
 
         # Step 1b: Enforce minimum delivery window (Kerala MVD compliance)
@@ -758,6 +847,7 @@ async def upload_and_optimize(
         # First check the database geocode cache (free!), then fall back to Google API.
         # Uses module-level singleton to avoid re-reading cache file per request.
         geocoder = _get_geocoder()
+        geocoding_failures: list[ImportFailure] = []
 
         for order in orders:
             if not order.is_geocoded:
@@ -795,34 +885,55 @@ async def upload_and_optimize(
                             status,
                             f" — {error_msg}" if error_msg else "",
                         )
+                        # Collect structured failure for the response.
+                        # Staff sees a human-friendly reason, not raw API codes.
+                        reason = GEOCODING_REASON_MAP.get(
+                            status, f"Geocoding failed ({status})"
+                        )
+                        geocoding_failures.append(ImportFailure(
+                            row_number=order_row_map.get(order.order_id, 0),
+                            address_snippet=order.address_raw[:80],
+                            reason=reason,
+                            stage="geocoding",
+                        ))
 
-        # Check how many orders are geocoded
-        geocoded = [o for o in orders if o.is_geocoded]
-        if not geocoded:
-            # Try to surface the actual reason from the last geocoding attempt.
-            # The most common cause is the Geocoding API not being enabled in
-            # Google Cloud Console — the error message from Google tells the
-            # user exactly what to fix.
-            api_hint = ""
+        # Combine all failures and determine how many orders geocoded successfully
+        all_failures = validation_failures + geocoding_failures
+        all_warnings = validation_warnings
+        geocoded_orders = [o for o in orders if o.is_geocoded]
+
+        if not geocoded_orders:
+            # Zero-success case: return structured 200 with all failure details
+            # instead of HTTPException(400). Staff sees per-row reasons and can
+            # fix addresses in the next upload.
+            #
+            # Diagnostic: test with a known-good address to surface API config issues.
+            # This log message helps admins debug API key / billing problems.
             if geocoder:
-                # Test with a known-good address to get the API error
                 test_result = geocoder.geocode("Kerala, India")
                 raw = getattr(test_result, "raw_response", {})
                 api_status = raw.get("status", "")
                 api_error = raw.get("error_message", "")
                 if api_status == "REQUEST_DENIED" and api_error:
-                    api_hint = f" Google API error: {api_error}"
+                    logger.error("Google Geocoding API error: %s", api_error)
                 elif api_status == "OVER_QUERY_LIMIT":
-                    api_hint = " Google API quota exceeded. Check billing."
+                    logger.error("Google Geocoding API quota exceeded. Check billing.")
 
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "No orders could be geocoded. Ensure addresses are valid "
-                    "or provide latitude/longitude columns in the CSV. "
-                    "Set GOOGLE_MAPS_API_KEY env variable for geocoding."
-                    f"{api_hint}"
-                ),
+            return OptimizationSummary(
+                run_id="",
+                assignment_id="",
+                total_orders=len(orders),
+                orders_assigned=0,
+                orders_unassigned=0,
+                vehicles_used=0,
+                optimization_time_ms=0,
+                created_at=datetime.now(timezone.utc),
+                total_rows=len(orders) + len(import_result.errors),
+                geocoded=0,
+                failed_geocoding=len(geocoding_failures),
+                failed_validation=len(import_result.errors),
+                failures=all_failures,
+                warnings=all_warnings,
             )
 
         # Step 3: Build fleet and optimize
@@ -848,7 +959,7 @@ async def upload_and_optimize(
             vroom_url=config.VROOM_URL,
             safety_multiplier=effective_multiplier,
         )
-        assignment = optimizer.optimize(geocoded, fleet)
+        assignment = optimizer.optimize(geocoded_orders, fleet)
 
         # Step 4: Persist to database
         run_id = await repo.save_optimization_run(
@@ -869,6 +980,13 @@ async def upload_and_optimize(
             vehicles_used=assignment.vehicles_used,
             optimization_time_ms=assignment.optimization_time_ms,
             created_at=assignment.created_at,
+            # Import diagnostics: total_rows is all CSV data rows (valid + rejected)
+            total_rows=len(orders) + len(import_result.errors),
+            geocoded=len(geocoded_orders),
+            failed_geocoding=len(geocoding_failures),
+            failed_validation=len(import_result.errors),
+            failures=all_failures,
+            warnings=all_warnings,
         )
 
     finally:

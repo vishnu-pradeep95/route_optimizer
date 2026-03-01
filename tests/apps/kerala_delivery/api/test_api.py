@@ -439,12 +439,13 @@ class TestUploadAndOptimize:
         )
         assert resp.status_code == 400
 
-    def test_upload_all_geocoding_failures_returns_400(self, client):
-        """CSV where no orders can be geocoded should return 400.
+    def test_upload_all_geocoding_failures_returns_structured_200(self, client):
+        """CSV where no orders can be geocoded returns structured 200 with failures.
 
         When the CSV has no lat/lon columns and the geocoder can't resolve
-        any addresses, the system should return a clear error message
-        instead of silently producing empty routes.
+        any addresses, the system returns a structured response with per-row
+        failure details instead of an opaque 400 error. This lets office staff
+        see exactly which addresses to fix.
         """
         csv_no_coords = (
             "order_id,address,customer_id,weight_kg\n"
@@ -460,8 +461,16 @@ class TestUploadAndOptimize:
                 files={"file": ("orders.csv", csv_no_coords.encode(), "text/csv")},
             )
 
-        assert resp.status_code == 400
-        assert "geocoded" in resp.json()["detail"].lower()
+        assert resp.status_code == 200
+        data = resp.json()
+        # Zero-success structured response
+        assert data["run_id"] == ""
+        assert data["orders_assigned"] == 0
+        assert data["total_rows"] == 2
+        assert data["geocoded"] == 0
+        # No geocoder configured, so orders remain ungeocoded (no geocoding_failures
+        # collected because geocoder is None), but total_orders reflects valid orders
+        assert data["total_orders"] == 2
 
 
 class TestMonsoonMultiplier:
