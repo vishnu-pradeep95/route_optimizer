@@ -402,6 +402,24 @@ _api_key_scheme = APIKeyHeader(name="X-API-Key", auto_error=False)
 # large uploads from consuming server memory.
 MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 
+# Allowed file extensions for upload. Matches the two formats the importer
+# supports: CsvImporter for .csv and openpyxl for .xlsx/.xls.
+ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
+
+# Content-types that correspond to CSV and Excel files.
+# application/octet-stream is included because some browsers send it for .csv.
+ALLOWED_CONTENT_TYPES = {
+    "text/csv",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+    "application/octet-stream",
+}
+
+# Maximum number of order rows in a single upload.
+# Fleet is 13 vehicles with typical batches of 50-100 orders.
+# 1000 is generous — prevents processing absurdly large batches.
+MAX_ROW_COUNT = 1000
+
 
 def _check_api_key(api_key: str | None) -> None:
     """Shared API key verification logic.
@@ -610,19 +628,28 @@ async def upload_and_optimize(
     GET /api/routes/{vehicle_id} to get their specific route.
     Requires X-API-Key header when API_KEY env var is set.
     """
-    # Save uploaded file to temp location
-    # SECURITY: file.filename can be None if the client omits the name header.
-    # Always guard against None before calling string methods.
+    # --- File validation (BEFORE any processing) ---
+    # SECURITY: validate file extension, content-type, and size before
+    # any CSV parsing, geocoding, or optimization begins.
     filename = file.filename or ""
-    # SECURITY: validate file extension before processing.
-    # Prevents uploading executables, scripts, or other dangerous file types.
-    if not filename.lower().endswith((".csv", ".xlsx", ".xls")):
+    ext = pathlib.Path(filename).suffix.lower()
+
+    # Extension check with descriptive error
+    if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail="Unsupported file format. Use .csv, .xlsx, or .xls",
+            detail=f"Unsupported file type ({ext or 'none'}). Accepted: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
         )
 
-    suffix = ".csv" if filename.lower().endswith(".csv") else ".xlsx"
+    # Content-type check (some browsers send odd types, so be lenient but block obvious mismatches)
+    content_type = file.content_type or ""
+    if content_type and content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unexpected content type ({content_type}). Upload a CSV or Excel file.",
+        )
+
+    suffix = ".csv" if ext == ".csv" else ".xlsx"
     tmp_path: str | None = None
     preprocessed_path: str | None = None
     try:
@@ -631,9 +658,11 @@ async def upload_and_optimize(
             # SECURITY: enforce max upload size to prevent memory exhaustion.
             # 10 MB is generous for CSV/Excel with 40-50 orders per day.
             if len(content) > MAX_UPLOAD_SIZE_BYTES:
+                size_mb = len(content) / (1024 * 1024)
+                max_mb = MAX_UPLOAD_SIZE_BYTES / (1024 * 1024)
                 raise HTTPException(
                     status_code=413,
-                    detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)} MB.",
+                    detail=f"File too large ({size_mb:.1f} MB). Maximum: {max_mb:.0f} MB.",
                 )
             tmp.write(content)
             tmp_path = tmp.name

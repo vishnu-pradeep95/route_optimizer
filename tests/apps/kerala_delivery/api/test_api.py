@@ -1128,15 +1128,19 @@ class TestUploadValidation:
         assert "content type" in resp.json()["detail"].lower()
 
     def test_upload_accepts_octet_stream_content_type(self, client, mock_session):
-        """application/octet-stream is accepted (browsers send this for CSV)."""
-        # This should pass validation and reach the processing stage
-        # (will fail at CSV parsing, not at validation)
-        resp = client.post(
-            "/api/upload-orders",
-            files={"file": ("orders.csv", b"order_id,address\n1,test", "application/octet-stream")},
-        )
-        # Should NOT be 400 for content-type — may be 400 for bad CSV data or 500 for
-        # missing geocoder, but NOT for validation rejection
+        """application/octet-stream is accepted (browsers send this for CSV).
+
+        Mocks _is_cdcms_format to return False and CsvImporter to avoid
+        hitting the processing pipeline. We only care that validation passes.
+        """
+        with patch("apps.kerala_delivery.api.main._is_cdcms_format", return_value=False), \
+             patch("apps.kerala_delivery.api.main.CsvImporter") as mock_importer:
+            mock_importer.return_value.import_orders.return_value = []
+            resp = client.post(
+                "/api/upload-orders",
+                files={"file": ("orders.csv", b"order_id,address\n1,test", "application/octet-stream")},
+            )
+        # Should NOT be 400 for content-type — validation passed
         assert resp.status_code != 400 or "content type" not in resp.json().get("detail", "").lower()
 
     def test_upload_size_error_includes_actual_size(self, client):
