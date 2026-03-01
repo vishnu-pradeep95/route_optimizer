@@ -197,9 +197,8 @@
 /* ── Main content ─────────────────────────────────────────────── */
 
 .app-main {
-  /* Offset by collapsed sidebar width since sidebar is fixed */
-  margin-left: var(--sidebar-collapsed);
-  flex: 1;
+  /* Place in column 2 (sidebar is position:fixed, out of grid flow) */
+  grid-column: 2;
   overflow: hidden;
   height: 100vh;
 }
