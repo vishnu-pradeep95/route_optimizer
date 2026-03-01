@@ -1,7 +1,7 @@
 # Requirements: Kerala LPG Delivery Route Optimizer
 
 **Defined:** 2026-03-01
-**Core Value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route — no silent drops, no missing stops.
+**Core Value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
 
 ## v1.1 Requirements
 
@@ -31,7 +31,7 @@ Requirements for v1.1 Polish & Reliability milestone. Each maps to roadmap phase
 - [ ] **PWA-03**: Driver can tap a visible Refresh button to reload route data, with "Last updated" timestamp shown
 - [ ] **PWA-04**: All primary action buttons (Delivered, Failed, Navigate, Call Office) are 60px+ touch targets
 - [ ] **PWA-05**: All text/background color combinations meet WCAG AAA contrast ratio (7:1 body, 4.5:1 large text)
-- [ ] **PWA-06**: Route data persists offline — loading, viewing stops, and marking deliveries work without network
+- [ ] **PWA-06**: Route data persists offline -- loading, viewing stops, and marking deliveries work without network
 
 ## Future Requirements
 
@@ -51,7 +51,7 @@ Deferred to future milestone. Tracked but not in current roadmap.
 
 ### Driver PWA Enhancements
 
-- **PWA-07**: Focus mode — full-screen next-stop-only view with swipe to peek next
+- **PWA-07**: Focus mode -- full-screen next-stop-only view with swipe to peek next
 - **PWA-08**: Auto-advance to next undelivered stop after marking delivery
 - **PWA-09**: Haptic feedback (vibration) on delivery confirmation
 - **PWA-10**: Offline sync queue indicator showing pending updates count
@@ -82,29 +82,29 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GEO-01 | — | Pending |
-| GEO-02 | — | Pending |
-| GEO-03 | — | Pending |
-| GEO-04 | — | Pending |
-| DASH-01 | — | Pending |
-| DASH-02 | — | Pending |
-| DASH-03 | — | Pending |
-| DASH-04 | — | Pending |
-| DASH-05 | — | Pending |
-| DASH-06 | — | Pending |
-| DASH-07 | — | Pending |
-| PWA-01 | — | Pending |
-| PWA-02 | — | Pending |
-| PWA-03 | — | Pending |
-| PWA-04 | — | Pending |
-| PWA-05 | — | Pending |
-| PWA-06 | — | Pending |
+| GEO-01 | Phase 4 | Pending |
+| GEO-02 | Phase 4 | Pending |
+| GEO-03 | Phase 5 | Pending |
+| GEO-04 | Phase 5 | Pending |
+| DASH-01 | Phase 6 | Pending |
+| DASH-02 | Phase 6 | Pending |
+| DASH-03 | Phase 6 | Pending |
+| DASH-04 | Phase 6 | Pending |
+| DASH-05 | Phase 6 | Pending |
+| DASH-06 | Phase 6 | Pending |
+| DASH-07 | Phase 6 | Pending |
+| PWA-01 | Phase 7 | Pending |
+| PWA-02 | Phase 7 | Pending |
+| PWA-03 | Phase 7 | Pending |
+| PWA-04 | Phase 7 | Pending |
+| PWA-05 | Phase 7 | Pending |
+| PWA-06 | Phase 7 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 17 total
-- Mapped to phases: 0
-- Unmapped: 17 ⚠️
+- Mapped to phases: 17
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-01*
-*Last updated: 2026-03-01 after initial definition*
+*Last updated: 2026-03-01 after roadmap creation*
