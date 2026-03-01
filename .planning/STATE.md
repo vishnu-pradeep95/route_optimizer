@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-03-01T17:46:23.842Z"
+status: in-progress
+last_updated: "2026-03-01T18:43:00Z"
 progress:
-  total_phases: 2
+  total_phases: 3
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 8
+  completed_plans: 6
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-01)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route — no silent drops, no missing stops.
-**Current focus:** Phase 2 — Security Hardening
+**Current focus:** Phase 3 — Data Integrity
 
 ## Current Position
 
-Phase: 2 of 6 (Security Hardening) -- COMPLETE
-Plan: 2 of 2 in current phase
-Status: Phase 2 complete, ready for Phase 3
-Last activity: 2026-03-01 — Completed 02-02 (Upload validation, MIME-type check, rate limiter isolation)
+Phase: 3 of 6 (Data Integrity)
+Plan: 1 of 3 in current phase -- COMPLETE
+Status: Plan 03-01 complete, ready for 03-02
+Last activity: 2026-03-01 — Completed 03-01 (CSV row-level validation, ImportResult, depot coordinate audit)
 
-Progress: [█████░░░░░] 28%
+Progress: [██████░░░░] 33%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
+- Total plans completed: 6
 - Average duration: 4 min
-- Total execution time: 0.32 hours
+- Total execution time: 0.43 hours
 
 **By Phase:**
 
@@ -42,9 +42,10 @@ Progress: [█████░░░░░] 28%
 |-------|-------|-------|----------|
 | 01-foundation | 3 | 13 min | 4 min |
 | 02-security-hardening | 2 | 6 min | 3 min |
+| 03-data-integrity | 1 | 7 min | 7 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (4 min), 01-03 (6 min), 02-01 (3 min), 02-02 (3 min)
+- Last 5 plans: 01-03 (6 min), 02-01 (3 min), 02-02 (3 min), 03-01 (7 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -75,6 +76,11 @@ Recent decisions affecting current work:
 - [02-02]: pathlib.Path(filename).suffix.lower() for extension extraction -- more robust than str.endswith()
 - [02-02]: application/octet-stream accepted as valid content-type -- browsers commonly send this for CSV
 - [02-02]: limiter.reset() in fixture teardown prevents cross-test 429 counter leakage
+- [03-01]: Separate warnings (lenient defaults) from errors (row rejected) in ImportResult
+- [03-01]: RowError uses original CSV column names from ColumnMapping for staff-friendly messages
+- [03-01]: Row numbers are 1-based spreadsheet convention (pandas idx + 2)
+- [03-01]: row_numbers dict maps order_id to spreadsheet row for downstream geocoding error tracking
+- [03-01]: DataImporter protocol updated to return ImportResult (backward-compatible runtime check)
 
 ### Pending Todos
 
@@ -90,5 +96,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 02-02-PLAN.md (Phase 2 complete)
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None
