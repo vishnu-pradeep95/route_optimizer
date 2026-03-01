@@ -46,11 +46,11 @@ Plans:
   3. Visiting `/docs` or `/redoc` in an environment with `ENV=production` returns 404 — in development it still works
   4. Uploading a file with wrong MIME type or size over the limit is rejected with a clear error message before any processing occurs
   5. The full 351-test suite passes with no 429 cross-test bleed after rate limiter state is isolated between tests
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: Add Secweb security headers middleware; harden CORS to env-var whitelist; gate API docs
-- [ ] 02-02: Audit file upload input validation; replace python-jose with PyJWT and passlib with pwdlib; isolate rate limiter in tests
+- [ ] 02-01-PLAN.md — Add Secweb security headers middleware, Permissions-Policy custom middleware, harden CORS to env-var whitelist, fix /redoc gating, verify deprecated libraries absent
+- [ ] 02-02-PLAN.md — Enhance file upload validation (MIME-type, descriptive errors, row count limit), isolate rate limiter state in tests, update .env.example
 
 ### Phase 3: Data Integrity
 **Goal**: Every geocoding failure is visible to the office user with a per-row reason — no order silently disappears from the map
