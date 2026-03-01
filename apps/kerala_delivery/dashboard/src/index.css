@@ -1,3 +1,9 @@
+/* Tailwind with prefix to prevent CSS variable collision with existing --color-* tokens */
+@import "tailwindcss" prefix(tw);
+
+/* DaisyUI component library (classes also use tw: prefix) */
+@plugin "daisyui";
+
 /*
  * Global styles for the Kerala LPG Delivery Ops Dashboard.
  *
