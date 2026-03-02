@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Phase: 6 of 7 (Dashboard UI Overhaul)
-Plan: 7 of 9 complete
+Plan: 8 of 9 complete
 Status: In Progress
-Last activity: 2026-03-02 -- Plan 06-07 complete (Visual polish: compact success indicator + detail table harmonization)
+Last activity: 2026-03-02 -- Plan 06-08 complete (FleetManagement edit row & icon polish)
 
-Progress: [################..] 78% (7 of 9 plans complete in phase 6, 2 remaining)
+Progress: [#################.] 89% (8 of 9 plans complete in phase 6, 1 remaining)
 
 ## Performance Metrics
 
@@ -45,7 +45,7 @@ Progress: [################..] 78% (7 of 9 plans complete in phase 6, 2 remainin
 | 3. Data Integrity | 3 | -- | -- |
 | 4. Geocoding Cache | 2/2 | 7min | 3.5min |
 | 5. Geocoding Enhancements | 2/2 | 9min | 4.5min |
-| 6. Dashboard UI Overhaul | 7/9 | 12min | 1.7min |
+| 6. Dashboard UI Overhaul | 8/9 | 14min | 1.8min |
 
 **Recent Trend:**
 - Last 5 plans: --
@@ -92,6 +92,10 @@ Carried from v1.0:
 - [Phase 06]: CheckCircle from lucide-react (18px) replaces inline SVG checkmark for consistent icon system
 - [Phase 06]: tw-bg-success/10 subtle tint replaces tw-alert for routine success states (less visually dominant)
 - [Phase 06]: DaisyUI tw-table-sm for detail routes table ensures identical padding/font to main table
+- [Phase 06]: tw-input-xs for edit row inputs in tw-table-sm -- fits row height without dimension mismatch
+- [Phase 06]: 16px lucide-react icons (up from 14px) -- clearly visible as icons in tw-btn-xs buttons
+- [Phase 06]: tw-btn-square on icon-only Pencil button -- equal width/height for proper icon sizing
+- [Phase 06]: 100% width edit inputs with min-width -- responsive to column instead of fixed pixel overflow
 
 ### Pending Todos
 
@@ -107,5 +111,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 06-07-PLAN.md (Visual polish: compact success indicator in UploadRoutes, harmonized detail table in RunHistory)
+Stopped at: Completed 06-08-PLAN.md (FleetManagement edit row dimension fix and 16px lucide-react icons)
 Resume file: None
