@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish & Reliability
-status: unknown
-last_updated: "2026-03-01T22:50:00.361Z"
+status: in-progress
+last_updated: "2026-03-02T01:13:00Z"
 progress:
-  total_phases: 4
+  total_phases: 7
   completed_phases: 4
-  total_plans: 10
-  completed_plans: 10
+  total_plans: 12
+  completed_plans: 11
 ---
 
 # Project State
@@ -18,21 +18,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-01)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Phase 4 - Geocoding Cache Normalization (COMPLETE)
+**Current focus:** Phase 5 - Geocoding Enhancements (IN PROGRESS)
 
 ## Current Position
 
-Phase: 4 of 7 (Geocoding Cache Normalization) -- first phase of v1.1
-Plan: 2 of 2 complete
-Status: Phase Complete
-Last activity: 2026-03-01 -- Plan 04-02 complete (file cache removal, Alembic migration, CachedGeocoder integration)
+Phase: 5 of 7 (Geocoding Enhancements)
+Plan: 1 of 2 complete
+Status: In Progress
+Last activity: 2026-03-02 -- Plan 05-01 complete (duplicate detector + cost transparency backend)
 
-Progress: [##########........] 57% (4 of 7 phases complete across all milestones)
+Progress: [###########.......] 64% (4 phases + 1/2 plans in phase 5)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10 (8 v1.0 + 2 v1.1)
+- Total plans completed: 11 (8 v1.0 + 3 v1.1)
 - Average duration: --
 - Total execution time: --
 
@@ -44,6 +44,7 @@ Progress: [##########........] 57% (4 of 7 phases complete across all milestones
 | 2. Security | 2 | -- | -- |
 | 3. Data Integrity | 3 | -- | -- |
 | 4. Geocoding Cache | 2/2 | 7min | 3.5min |
+| 5. Geocoding Enhancements | 1/2 | 4min | 4min |
 
 **Recent Trend:**
 - Last 5 plans: --
@@ -67,6 +68,9 @@ Carried from v1.0:
 - [Phase 04]: normalize_address() is single source of truth -- stdlib only (unicodedata, re), strips periods/commas, preserves slashes/hyphens/parentheses
 - [Phase 04]: GoogleGeocoder stripped to pure API caller -- all caching delegated to CachedGeocoder decorator
 - [Phase 04]: Upload endpoint uses CachedGeocoder for unified cache-then-API flow with cache-only fallback when no API key
+- [Phase 05]: Default confidence 0.4 (approximate tier) when geocode_confidence is None -- conservative for GPS-provided coordinates
+- [Phase 05]: Mixed-confidence duplicate detection pairs use max(threshold_a, threshold_b) -- wider threshold dominates uncertainty
+- [Phase 05]: Per-order geocode source tracked via CachedGeocoder.stats snapshot before/after each geocode call
 
 ### Pending Todos
 
@@ -81,6 +85,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-01
-Stopped at: Completed 04-02-PLAN.md (file cache removal, Alembic migration, CachedGeocoder integration)
+Last session: 2026-03-02
+Stopped at: Completed 05-01-PLAN.md (duplicate detector + cost transparency backend)
 Resume file: None

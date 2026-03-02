@@ -11,8 +11,8 @@ Requirements for v1.1 Polish & Reliability milestone. Each maps to roadmap phase
 
 - [x] **GEO-01**: Geocoding uses a single normalized address key across all cache layers (no duplicate locations from normalization mismatch)
 - [x] **GEO-02**: All geocoding cache reads/writes go through DB only (file-based JSON cache deprecated)
-- [ ] **GEO-03**: User sees a warning when two or more orders in an upload resolve to GPS coordinates within 15m of each other
-- [ ] **GEO-04**: Upload results show how many addresses were cache hits (free) vs Google API calls, with estimated cost
+- [x] **GEO-03**: User sees a warning when two or more orders in an upload resolve to GPS coordinates within 15m of each other
+- [x] **GEO-04**: Upload results show how many addresses were cache hits (free) vs Google API calls, with estimated cost
 
 ### Dashboard UI
 
@@ -84,8 +84,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | GEO-01 | Phase 4 | Complete |
 | GEO-02 | Phase 4 | Complete |
-| GEO-03 | Phase 5 | Pending |
-| GEO-04 | Phase 5 | Pending |
+| GEO-03 | Phase 5 | Complete |
+| GEO-04 | Phase 5 | Complete |
 | DASH-01 | Phase 6 | Pending |
 | DASH-02 | Phase 6 | Pending |
 | DASH-03 | Phase 6 | Pending |
