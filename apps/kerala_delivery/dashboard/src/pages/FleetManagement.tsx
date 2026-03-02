@@ -448,10 +448,10 @@ export function FleetManagement() {
               if (!showAddForm) setAddForm(emptyForm());
             }}
           >
-            {showAddForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> Add Vehicle</>}
+            {showAddForm ? <><X size={16} /> Cancel</> : <><Plus size={16} /> Add Vehicle</>}
           </button>
           <button className="tw-btn tw-btn-sm tw-btn-ghost" onClick={loadVehicles}>
-            <RotateCw size={14} /> Refresh
+            <RotateCw size={16} /> Refresh
           </button>
         </div>
       </div>
@@ -701,10 +701,10 @@ export function FleetManagement() {
                           onClick={handleUpdate}
                           disabled={saving}
                         >
-                          <Check size={14} /> {saving ? "Saving..." : "Save"}
+                          <Check size={16} /> {saving ? "Saving..." : "Save"}
                         </button>
                         <button className="tw-btn tw-btn-xs tw-btn-ghost" onClick={cancelEdit}>
-                          <X size={14} /> Cancel
+                          <X size={16} /> Cancel
                         </button>
                       </div>
                     </td>
@@ -731,12 +731,12 @@ export function FleetManagement() {
                     <td>
                       <div className="fleet-actions">
                         <button
-                          className="tw-btn tw-btn-xs tw-btn-ghost"
+                          className="tw-btn tw-btn-xs tw-btn-square tw-btn-ghost"
                           onClick={() => startEdit(v)}
                           disabled={saving}
                           title="Edit vehicle details"
                         >
-                          <Pencil size={14} />
+                          <Pencil size={16} />
                         </button>
                         {v.is_active ? (
                           <button
