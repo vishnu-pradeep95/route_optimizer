@@ -23,6 +23,8 @@ import {
   type GoogleMapsRouteResponse,
 } from "../lib/api";
 import type { RouteSummary, RouteDetail, ImportFailure, DuplicateLocationWarning } from "../types";
+import { StatusBadge, deriveRouteStatus } from "../components/StatusBadge";
+import { FileText, AlertTriangle, Printer } from "lucide-react";
 import "./UploadRoutes.css";
 
 // --- Import Summary Component ---
@@ -503,7 +505,7 @@ export function UploadRoutes() {
               </div>
             ) : selectedFile ? (
               <div className="file-selected">
-                <div className="file-icon">📄</div>
+                <div className="file-icon"><FileText size={24} /></div>
                 <div className="file-info">
                   <span className="file-name">{selectedFile.name}</span>
                   <span className="file-size">
@@ -547,7 +549,7 @@ export function UploadRoutes() {
           {/* Error Display */}
           {workflowState === "error" && (
             <div className="error-banner">
-              <span className="error-icon">⚠️</span>
+              <span className="error-icon"><AlertTriangle size={18} /></span>
               <span className="error-text">{errorMessage}</span>
               <button className="error-retry" onClick={handleReset}>
                 Try Again
@@ -576,29 +578,27 @@ export function UploadRoutes() {
             <>
               {/* Summary Bar */}
               <div className="results-header">
-                <div className="results-summary">
-                  <h2>Routes Generated</h2>
+                <div>
+                  <h2 className="tw-text-xl tw-font-bold tw-text-base-content tw-mb-3">Routes Generated</h2>
                   {uploadResult && (
-                    <div className="summary-stats">
-                      <div className="summary-stat">
-                        <span className="stat-val">{uploadResult.orders_assigned}</span>
-                        <span className="stat-lbl">Orders Assigned</span>
+                    <div className="tw-stats tw-stats-horizontal tw-shadow tw-bg-base-100">
+                      <div className="tw-stat tw-py-2 tw-px-4">
+                        <div className="tw-stat-title tw-text-xs">Orders</div>
+                        <div className="tw-stat-value tw-text-lg numeric">{uploadResult.orders_assigned}</div>
                       </div>
-                      <div className="summary-stat">
-                        <span className="stat-val">{uploadResult.vehicles_used}</span>
-                        <span className="stat-lbl">Vehicles</span>
+                      <div className="tw-stat tw-py-2 tw-px-4">
+                        <div className="tw-stat-title tw-text-xs">Vehicles</div>
+                        <div className="tw-stat-value tw-text-lg numeric">{uploadResult.vehicles_used}</div>
                       </div>
                       {uploadResult.orders_unassigned > 0 && (
-                        <div className="summary-stat warning">
-                          <span className="stat-val">{uploadResult.orders_unassigned}</span>
-                          <span className="stat-lbl">Unassigned</span>
+                        <div className="tw-stat tw-py-2 tw-px-4">
+                          <div className="tw-stat-title tw-text-xs">Unassigned</div>
+                          <div className="tw-stat-value tw-text-lg tw-text-error numeric">{uploadResult.orders_unassigned}</div>
                         </div>
                       )}
-                      <div className="summary-stat">
-                        <span className="stat-val">
-                          {uploadResult.optimization_time_ms.toFixed(0)} ms
-                        </span>
-                        <span className="stat-lbl">Solve Time</span>
+                      <div className="tw-stat tw-py-2 tw-px-4">
+                        <div className="tw-stat-title tw-text-xs">Solve Time</div>
+                        <div className="tw-stat-value tw-text-lg numeric">{uploadResult.optimization_time_ms.toFixed(0)} ms</div>
                       </div>
                     </div>
                   )}
@@ -611,7 +611,7 @@ export function UploadRoutes() {
                     rel="noopener noreferrer"
                     className="print-sheet-btn"
                   >
-                    🖨️ Print QR Sheet
+                    <Printer size={16} /> Print QR Sheet
                   </a>
                   <button className="new-upload-btn" onClick={handleReset}>
                     Upload New File
@@ -629,102 +629,98 @@ export function UploadRoutes() {
               return (
                 <div
                   key={route.vehicle_id}
-                  className={`route-card ${isExpanded ? "expanded" : ""}`}
+                  className="tw-card tw-bg-base-100 tw-shadow-sm tw-border tw-border-base-300"
                 >
-                  <div
-                    className="route-card-header"
-                    onClick={() => toggleVehicle(route.vehicle_id)}
-                  >
-                    <div className="route-card-title">
-                      <span className="vehicle-badge">{route.vehicle_id}</span>
-                      <span className="driver-label">{route.driver_name}</span>
+                  <div className="tw-card-body tw-p-4">
+                    <div
+                      className="tw-flex tw-items-center tw-justify-between tw-cursor-pointer"
+                      onClick={() => toggleVehicle(route.vehicle_id)}
+                    >
+                      <h2 className="tw-card-title tw-text-sm tw-gap-2">
+                        <span className="tw-badge tw-badge-neutral tw-font-mono">{route.vehicle_id}</span>
+                        <span className="tw-text-base-content/60">{route.driver_name}</span>
+                      </h2>
+                      <div className="tw-flex tw-items-center tw-gap-2">
+                        {detail && <StatusBadge status={deriveRouteStatus(detail.stops)} />}
+                        <span className={`expand-arrow ${isExpanded ? "open" : ""}`}>▼</span>
+                      </div>
                     </div>
-                    <div className="route-card-meta">
-                      <span className="meta-item">
-                        <strong>{route.total_stops}</strong> stops
-                      </span>
-                      <span className="meta-item">
-                        <strong>{route.total_distance_km}</strong> km
-                      </span>
-                      <span className="meta-item">
-                        <strong>{Math.round(route.total_duration_minutes)}</strong> min
-                      </span>
-                      <span className="meta-item">
-                        <strong>{route.total_weight_kg}</strong> kg
-                      </span>
+                    <div className="tw-flex tw-gap-4 tw-mt-2">
+                      <span className="numeric"><strong>{route.total_stops}</strong> stops</span>
+                      <span className="numeric"><strong>{route.total_distance_km}</strong> km</span>
+                      <span className="numeric"><strong>{Math.round(route.total_duration_minutes)}</strong> min</span>
+                      <span className="numeric"><strong>{route.total_weight_kg}</strong> kg</span>
                     </div>
-                    <span className={`expand-arrow ${isExpanded ? "open" : ""}`}>
-                      ▼
-                    </span>
-                  </div>
 
-                  {/* Expanded: QR codes + stop list */}
-                  {isExpanded && (
-                    <div className="route-card-body">
-                      {/* QR Codes */}
-                      {vehicleQr && (
-                        <div className="qr-section">
-                          <h4 className="qr-heading">
-                            Google Maps QR Code{vehicleQr.total_segments > 1 ? "s" : ""}
-                          </h4>
-                          {vehicleQr.total_segments > 1 && (
-                            <p className="qr-note">
-                              Route split into {vehicleQr.total_segments} parts
-                              (Google Maps supports max 11 stops per URL)
-                            </p>
-                          )}
-                          <div className="qr-grid">
-                            {vehicleQr.segments.map((seg) => (
-                              <div key={seg.segment} className="qr-card">
-                                {vehicleQr.total_segments > 1 && (
-                                  <div className="qr-segment-label">
-                                    Part {seg.segment}: Stops {seg.start_stop}–{seg.end_stop}
-                                  </div>
-                                )}
-                                {/* Safe to use dangerouslySetInnerHTML here because qr_svg is
-                                    generated server-side by the qrcode library from coordinate
-                                    data — never from user-supplied text. The SVG contains only
-                                    <path> elements for QR modules. */}
-                                <div
-                                  className="qr-image"
-                                  dangerouslySetInnerHTML={{ __html: seg.qr_svg }}
-                                />
-                                <a
-                                  href={seg.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="maps-link"
-                                >
-                                  Open in Google Maps
-                                </a>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Stop List */}
-                      {detail && (
-                        <div className="stops-section">
-                          <h4 className="stops-heading">Delivery Stops</h4>
-                          <div className="stops-list">
-                            {detail.stops.map((stop) => (
-                              <div key={stop.order_id} className="stop-row">
-                                <span className="stop-seq">{stop.sequence}</span>
-                                <div className="stop-info">
-                                  <span className="stop-address">{stop.address}</span>
-                                  <span className="stop-meta">
-                                    {stop.weight_kg} kg · {stop.quantity} cyl ·{" "}
-                                    {stop.distance_from_prev_km} km from prev
-                                  </span>
+                    {/* Expanded: QR codes + stop list */}
+                    {isExpanded && (
+                      <div className="tw-mt-4 tw-border-t tw-border-base-300 tw-pt-4">
+                        {/* QR Codes */}
+                        {vehicleQr && (
+                          <div className="qr-section">
+                            <h4 className="qr-heading">
+                              Google Maps QR Code{vehicleQr.total_segments > 1 ? "s" : ""}
+                            </h4>
+                            {vehicleQr.total_segments > 1 && (
+                              <p className="qr-note">
+                                Route split into {vehicleQr.total_segments} parts
+                                (Google Maps supports max 11 stops per URL)
+                              </p>
+                            )}
+                            <div className="qr-grid">
+                              {vehicleQr.segments.map((seg) => (
+                                <div key={seg.segment} className="qr-card">
+                                  {vehicleQr.total_segments > 1 && (
+                                    <div className="qr-segment-label">
+                                      Part {seg.segment}: Stops {seg.start_stop}–{seg.end_stop}
+                                    </div>
+                                  )}
+                                  {/* Safe to use dangerouslySetInnerHTML here because qr_svg is
+                                      generated server-side by the qrcode library from coordinate
+                                      data — never from user-supplied text. The SVG contains only
+                                      <path> elements for QR modules. */}
+                                  <div
+                                    className="qr-image"
+                                    dangerouslySetInnerHTML={{ __html: seg.qr_svg }}
+                                  />
+                                  <a
+                                    href={seg.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="maps-link"
+                                  >
+                                    Open in Google Maps
+                                  </a>
                                 </div>
-                              </div>
-                            ))}
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                        )}
+
+                        {/* Stop List */}
+                        {detail && (
+                          <div className="stops-section">
+                            <h4 className="stops-heading">Delivery Stops</h4>
+                            <div className="stops-list">
+                              {detail.stops.map((stop) => (
+                                <div key={stop.order_id} className="stop-row">
+                                  <span className="stop-seq">{stop.sequence}</span>
+                                  <div className="stop-info">
+                                    <span className="stop-address">{stop.address}</span>
+                                    <span className="stop-meta">
+                                      <span className="numeric">{stop.weight_kg} kg</span> ·{" "}
+                                      <span className="numeric">{stop.quantity} cyl</span> ·{" "}
+                                      <span className="numeric">{stop.distance_from_prev_km} km</span> from prev
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}

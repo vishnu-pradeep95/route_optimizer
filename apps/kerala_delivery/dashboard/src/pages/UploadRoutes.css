@@ -297,43 +297,7 @@
   gap: 16px;
 }
 
-.results-summary h2 {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  margin-bottom: 10px;
-}
-
-.summary-stats {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
-.summary-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 60px;
-}
-
-.summary-stat.warning .stat-val {
-  color: #DC2626;
-}
-
-.stat-val {
-  font-size: 22px;
-  font-weight: 800;
-  color: var(--color-text-primary);
-  font-family: var(--font-mono);
-}
-
-.stat-lbl {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
+/* Summary stats now use DaisyUI tw-stats component */
 
 .results-actions {
   display: flex;
@@ -386,77 +350,7 @@
   gap: 8px;
 }
 
-.route-card {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-card);
-  overflow: hidden;
-  transition: box-shadow 0.15s;
-}
-
-.route-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.route-card.expanded {
-  border-color: var(--color-accent);
-  box-shadow: 0 2px 12px rgba(217, 119, 6, 0.1);
-}
-
-.route-card-header {
-  display: flex;
-  align-items: center;
-  padding: 14px 18px;
-  cursor: pointer;
-  gap: 16px;
-  user-select: none;
-}
-
-.route-card-header:hover {
-  background: var(--color-surface);
-}
-
-.route-card-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 200px;
-}
-
-.vehicle-badge {
-  display: inline-block;
-  padding: 3px 10px;
-  font-size: 13px;
-  font-weight: 800;
-  font-family: var(--font-mono);
-  color: #92400E;
-  background: #FEF3C7;
-  border-radius: var(--radius-sm);
-}
-
-.driver-label {
-  font-size: 14px;
-  color: var(--color-text-secondary);
-  font-weight: 500;
-}
-
-.route-card-meta {
-  display: flex;
-  gap: 16px;
-  flex: 1;
-  flex-wrap: wrap;
-}
-
-.meta-item {
-  font-size: 13px;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-}
-
-.meta-item strong {
-  color: var(--color-text-primary);
-  font-weight: 700;
-}
+/* Route cards now use DaisyUI tw-card components */
 
 .expand-arrow {
   font-size: 12px;
@@ -469,17 +363,7 @@
   transform: rotate(180deg);
 }
 
-/* ---- Route Card Body (expanded) ---- */
-
-.route-card-body {
-  padding: 0 18px 18px;
-  animation: slideDown 0.2s ease;
-}
-
-@keyframes slideDown {
-  from { opacity: 0; max-height: 0; }
-  to { opacity: 1; max-height: 2000px; }
-}
+/* ---- Route Card Expanded Content ---- */
 
 /* QR Section */
 .qr-section {
@@ -633,15 +517,5 @@
     justify-content: center;
   }
 
-  .route-card-header {
-    flex-wrap: wrap;
-  }
-
-  .route-card-title {
-    min-width: unset;
-  }
-
-  .summary-stats {
-    gap: 12px;
-  }
+  /* Route cards and stats now use DaisyUI responsive classes */
 }
