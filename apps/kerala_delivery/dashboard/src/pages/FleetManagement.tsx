@@ -21,12 +21,14 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { Pencil, Truck } from "lucide-react";
 import {
   fetchVehicles,
   createVehicle,
   updateVehicle,
   deleteVehicle,
 } from "../lib/api";
+import { EmptyState } from "../components/EmptyState";
 import type { Vehicle } from "../types";
 import "./FleetManagement.css";
 
@@ -396,9 +398,30 @@ export function FleetManagement() {
 
   if (loading && vehicles.length === 0) {
     return (
-      <div className="fleet-loading">
-        <div className="loading-spinner" />
-        <p>Loading fleet data...</p>
+      <div className="fleet-page">
+        <div className="fleet-header">
+          <div className="tw-skeleton tw-h-8 tw-w-48" />
+        </div>
+        <div className="tw-overflow-x-auto tw-p-4">
+          <table className="tw-table">
+            <thead>
+              <tr>
+                {['Vehicle ID', 'Reg. No', 'Type', 'Max Weight', 'Max Items', 'Speed Limit', 'Depot', 'Status', 'Actions'].map((h) => (
+                  <th key={h}><div className="tw-skeleton tw-h-4 tw-w-20" /></th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: 5 }).map((_, r) => (
+                <tr key={r}>
+                  {Array.from({ length: 9 }).map((_, c) => (
+                    <td key={c}><div className="tw-skeleton tw-h-4 tw-w-full" /></td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
@@ -418,34 +441,34 @@ export function FleetManagement() {
             Active only
           </label>
           <button
-            className="fleet-btn fleet-btn-primary"
+            className="tw-btn tw-btn-sm tw-btn-primary"
             onClick={() => {
               setShowAddForm(!showAddForm);
               setEditingId(null); // Close any edit when toggling add form
               if (!showAddForm) setAddForm(emptyForm());
             }}
           >
-            {showAddForm ? "✕ Cancel" : "+ Add Vehicle"}
+            {showAddForm ? "Cancel" : "+ Add Vehicle"}
           </button>
-          <button className="fleet-btn" onClick={loadVehicles}>
-            ↻ Refresh
+          <button className="tw-btn tw-btn-sm tw-btn-ghost" onClick={loadVehicles}>
+            Refresh
           </button>
         </div>
       </div>
 
       {/* Error banner */}
       {error && (
-        <div className="fleet-error">
-          <span>⚠ {error}</span>
-          <button onClick={() => setError(null)}>Dismiss</button>
+        <div className="tw-alert tw-alert-error tw-mb-0 tw-rounded-none">
+          <span>{error}</span>
+          <button className="tw-btn tw-btn-xs tw-btn-ghost" onClick={() => setError(null)}>Dismiss</button>
         </div>
       )}
 
       {/* Success banner — auto-dismisses after 4s (see useEffect above) */}
       {successMsg && (
-        <div className="fleet-success">
-          <span>✓ {successMsg}</span>
-          <button onClick={() => setSuccessMsg(null)}>✕</button>
+        <div className="tw-alert tw-alert-success tw-mb-0 tw-rounded-none">
+          <span>{successMsg}</span>
+          <button className="tw-btn tw-btn-xs tw-btn-ghost" onClick={() => setSuccessMsg(null)}>Dismiss</button>
         </div>
       )}
 
@@ -459,6 +482,7 @@ export function FleetManagement() {
               <input
                 id="add-vehicle-id"
                 type="text"
+                className="tw-input tw-input-sm tw-input-bordered"
                 placeholder="e.g. VEH-14"
                 value={addForm.vehicle_id}
                 onChange={handleFieldChange(setAddForm, "vehicle_id")}
@@ -469,6 +493,7 @@ export function FleetManagement() {
               <input
                 id="add-reg-no"
                 type="text"
+                className="tw-input tw-input-sm tw-input-bordered"
                 placeholder="e.g. KL-07-AX-1234"
                 value={addForm.registration_no}
                 onChange={handleFieldChange(setAddForm, "registration_no")}
@@ -478,6 +503,7 @@ export function FleetManagement() {
               <label htmlFor="add-type">Vehicle Type</label>
               <select
                 id="add-type"
+                className="tw-select tw-select-sm tw-select-bordered"
                 value={addForm.vehicle_type}
                 onChange={handleFieldChange(setAddForm, "vehicle_type")}
               >
@@ -491,6 +517,7 @@ export function FleetManagement() {
               <input
                 id="add-weight"
                 type="number"
+                className="tw-input tw-input-sm tw-input-bordered"
                 min={1}
                 max={MAX_RATED_PAYLOAD_KG}
                 value={addForm.max_weight_kg}
@@ -502,6 +529,7 @@ export function FleetManagement() {
               <input
                 id="add-items"
                 type="number"
+                className="tw-input tw-input-sm tw-input-bordered"
                 value={addForm.max_items}
                 onChange={handleFieldChange(setAddForm, "max_items")}
               />
@@ -511,6 +539,7 @@ export function FleetManagement() {
               <input
                 id="add-speed"
                 type="number"
+                className="tw-input tw-input-sm tw-input-bordered"
                 min={1}
                 max={MAX_SPEED_LIMIT_KMH}
                 value={addForm.speed_limit_kmh}
@@ -522,6 +551,7 @@ export function FleetManagement() {
               <input
                 id="add-lat"
                 type="number"
+                className="tw-input tw-input-sm tw-input-bordered"
                 step="0.0001"
                 value={addForm.depot_latitude}
                 onChange={handleFieldChange(setAddForm, "depot_latitude")}
@@ -532,6 +562,7 @@ export function FleetManagement() {
               <input
                 id="add-lng"
                 type="number"
+                className="tw-input tw-input-sm tw-input-bordered"
                 step="0.0001"
                 value={addForm.depot_longitude}
                 onChange={handleFieldChange(setAddForm, "depot_longitude")}
@@ -539,14 +570,14 @@ export function FleetManagement() {
             </div>
             <div className="fleet-form-actions">
               <button
-                className="fleet-btn fleet-btn-primary"
+                className="tw-btn tw-btn-sm tw-btn-primary"
                 onClick={handleCreate}
                 disabled={saving}
               >
                 {saving ? "Saving..." : "Create Vehicle"}
               </button>
               <button
-                className="fleet-btn"
+                className="tw-btn tw-btn-sm tw-btn-ghost"
                 onClick={() => setShowAddForm(false)}
               >
                 Cancel
@@ -556,183 +587,182 @@ export function FleetManagement() {
         </div>
       )}
 
-      {/* --- Vehicle Table --- */}
-      <div className="fleet-table-wrapper">
-        <table className="fleet-table">
-          <thead>
-            <tr>
-              <th>Vehicle ID</th>
-              <th>Registration</th>
-              <th>Type</th>
-              <th>Capacity (kg)</th>
-              <th>Max Items</th>
-              <th>Speed Limit</th>
-              <th>Depot</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {vehicles.map((v) =>
-              editingId === v.vehicle_id ? (
-                /* --- Inline edit row --- */
-                <tr key={v.vehicle_id}>
-                  {/* Vehicle ID is immutable — show as plain text */}
-                  <td>{v.vehicle_id}</td>
-                  <td>
-                    <input
-                      type="text"
-                      value={editForm.registration_no}
-                      onChange={handleFieldChange(setEditForm, "registration_no")}
-                      className="fleet-edit-input fleet-edit-input--id"
-                    />
-                  </td>
-                  <td>
-                    <select
-                      value={editForm.vehicle_type}
-                      onChange={handleFieldChange(setEditForm, "vehicle_type")}
-                      className="fleet-edit-input"
-                    >
-                      <option value="diesel">Diesel</option>
-                      <option value="electric">Electric</option>
-                      <option value="cng">CNG</option>
-                    </select>
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      min={1}
-                      max={MAX_RATED_PAYLOAD_KG}
-                      value={editForm.max_weight_kg}
-                      onChange={handleFieldChange(setEditForm, "max_weight_kg")}
-                      className="fleet-edit-input fleet-edit-input--weight"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={editForm.max_items}
-                      onChange={handleFieldChange(setEditForm, "max_items")}
-                      className="fleet-edit-input fleet-edit-input--items"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      min={1}
-                      max={MAX_SPEED_LIMIT_KMH}
-                      value={editForm.speed_limit_kmh}
-                      onChange={handleFieldChange(setEditForm, "speed_limit_kmh")}
-                      className="fleet-edit-input fleet-edit-input--items"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      step="0.0001"
-                      value={editForm.depot_latitude}
-                      onChange={handleFieldChange(setEditForm, "depot_latitude")}
-                      className="fleet-edit-input fleet-edit-input--coord"
-                    />
-                    ,{" "}
-                    <input
-                      type="number"
-                      step="0.0001"
-                      value={editForm.depot_longitude}
-                      onChange={handleFieldChange(setEditForm, "depot_longitude")}
-                      className="fleet-edit-input fleet-edit-input--coord"
-                    />
-                  </td>
-                  <td>
-                    <span
-                      className="fleet-status-badge"
-                      data-status={v.is_active ? "active" : "inactive"}
-                    >
-                      {v.is_active ? "active" : "inactive"}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="fleet-actions">
-                      <button
-                        className="fleet-btn fleet-btn-primary"
-                        onClick={handleUpdate}
-                        disabled={saving}
-                      >
-                        {saving ? "..." : "Save"}
-                      </button>
-                      <button className="fleet-btn" onClick={cancelEdit}>
-                        Cancel
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                /* --- Normal display row --- */
-                <tr key={v.vehicle_id}>
-                  <td>{v.vehicle_id}</td>
-                  <td>{v.registration_no ?? "—"}</td>
-                  <td>
-                    <span className="fleet-type-badge" data-type={v.vehicle_type}>{v.vehicle_type}</span>
-                  </td>
-                  <td className="numeric">{v.max_weight_kg}</td>
-                  <td className="numeric">{v.max_items}</td>
-                  <td className="numeric">{v.speed_limit_kmh} km/h</td>
-                  <td className="depot-coords">
-                    {formatCoord(v.depot_latitude)}, {formatCoord(v.depot_longitude)}
-                  </td>
-                  <td>
-                    <span
-                      className="fleet-status-badge"
-                      data-status={v.is_active ? "active" : "inactive"}
-                    >
-                      {v.is_active ? "active" : "inactive"}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="fleet-actions">
-                      <button
-                        className="fleet-btn"
-                        onClick={() => startEdit(v)}
-                        disabled={saving}
-                        title="Edit vehicle details"
-                      >
-                        ✏️ Edit
-                      </button>
-                      {v.is_active ? (
-                        <button
-                          className="fleet-btn fleet-btn-danger"
-                          onClick={() => handleDeactivate(v.vehicle_id)}
-                          disabled={saving}
-                          title="Deactivate vehicle (soft delete — preserves route history)"
-                        >
-                          Deactivate
-                        </button>
-                      ) : (
-                        <button
-                          className="fleet-btn fleet-btn-success"
-                          onClick={() => handleReactivate(v.vehicle_id)}
-                          disabled={saving}
-                          title="Reactivate vehicle for future route assignments"
-                        >
-                          Reactivate
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )
-            )}
+      {/* --- Empty state --- */}
+      {!loading && vehicles.length === 0 && !error && (
+        <EmptyState
+          icon={Truck}
+          title="No vehicles yet"
+          description="Add a vehicle to start assigning delivery routes."
+          actionLabel="Add Vehicle"
+          onAction={() => setShowAddForm(true)}
+        />
+      )}
 
-            {vehicles.length === 0 && !error && (
+      {/* --- Vehicle Table --- */}
+      {vehicles.length > 0 && (
+        <div className="tw-overflow-x-auto fleet-table-wrapper">
+          <table className="tw-table tw-table-sm">
+            <thead>
               <tr>
-                <td colSpan={9} className="fleet-empty">
-                  No vehicles found. Add a vehicle to get started.
-                </td>
+                <th>Vehicle ID</th>
+                <th>Reg. No</th>
+                <th>Type</th>
+                <th className="numeric">Max Weight (kg)</th>
+                <th className="numeric">Max Items</th>
+                <th className="numeric">Speed Limit</th>
+                <th>Depot</th>
+                <th>Status</th>
+                <th>Actions</th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {vehicles.map((v) =>
+                editingId === v.vehicle_id ? (
+                  /* --- Inline edit row --- */
+                  <tr key={v.vehicle_id}>
+                    {/* Vehicle ID is immutable — show as plain text */}
+                    <td>{v.vehicle_id}</td>
+                    <td>
+                      <input
+                        type="text"
+                        value={editForm.registration_no}
+                        onChange={handleFieldChange(setEditForm, "registration_no")}
+                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--id"
+                      />
+                    </td>
+                    <td>
+                      <select
+                        value={editForm.vehicle_type}
+                        onChange={handleFieldChange(setEditForm, "vehicle_type")}
+                        className="tw-select tw-select-xs tw-select-bordered"
+                      >
+                        <option value="diesel">Diesel</option>
+                        <option value="electric">Electric</option>
+                        <option value="cng">CNG</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        min={1}
+                        max={MAX_RATED_PAYLOAD_KG}
+                        value={editForm.max_weight_kg}
+                        onChange={handleFieldChange(setEditForm, "max_weight_kg")}
+                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--weight"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        value={editForm.max_items}
+                        onChange={handleFieldChange(setEditForm, "max_items")}
+                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--items"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        min={1}
+                        max={MAX_SPEED_LIMIT_KMH}
+                        value={editForm.speed_limit_kmh}
+                        onChange={handleFieldChange(setEditForm, "speed_limit_kmh")}
+                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--items"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={editForm.depot_latitude}
+                        onChange={handleFieldChange(setEditForm, "depot_latitude")}
+                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--coord"
+                      />
+                      ,{" "}
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={editForm.depot_longitude}
+                        onChange={handleFieldChange(setEditForm, "depot_longitude")}
+                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--coord"
+                      />
+                    </td>
+                    <td>
+                      <span className={`tw-badge tw-badge-sm ${v.is_active ? 'tw-badge-success' : 'tw-badge-ghost'}`}>
+                        {v.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="fleet-actions">
+                        <button
+                          className="tw-btn tw-btn-xs tw-btn-primary"
+                          onClick={handleUpdate}
+                          disabled={saving}
+                        >
+                          {saving ? "..." : "Save"}
+                        </button>
+                        <button className="tw-btn tw-btn-xs tw-btn-ghost" onClick={cancelEdit}>
+                          Cancel
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  /* --- Normal display row --- */
+                  <tr key={v.vehicle_id}>
+                    <td>{v.vehicle_id}</td>
+                    <td>{v.registration_no ?? "—"}</td>
+                    <td>
+                      <span className="fleet-type-badge" data-type={v.vehicle_type}>{v.vehicle_type}</span>
+                    </td>
+                    <td className="numeric">{v.max_weight_kg}</td>
+                    <td className="numeric">{v.max_items}</td>
+                    <td className="numeric">{v.speed_limit_kmh} km/h</td>
+                    <td className="numeric depot-coords">
+                      {formatCoord(v.depot_latitude)}, {formatCoord(v.depot_longitude)}
+                    </td>
+                    <td>
+                      <span className={`tw-badge tw-badge-sm ${v.is_active ? 'tw-badge-success' : 'tw-badge-ghost'}`}>
+                        {v.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="fleet-actions">
+                        <button
+                          className="tw-btn tw-btn-xs tw-btn-ghost"
+                          onClick={() => startEdit(v)}
+                          disabled={saving}
+                          title="Edit vehicle details"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        {v.is_active ? (
+                          <button
+                            className="tw-btn tw-btn-xs tw-btn-error tw-btn-outline"
+                            onClick={() => handleDeactivate(v.vehicle_id)}
+                            disabled={saving}
+                            title="Deactivate vehicle (soft delete — preserves route history)"
+                          >
+                            Deactivate
+                          </button>
+                        ) : (
+                          <button
+                            className="tw-btn tw-btn-xs tw-btn-success tw-btn-outline"
+                            onClick={() => handleReactivate(v.vehicle_id)}
+                            disabled={saving}
+                            title="Reactivate vehicle for future route assignments"
+                          >
+                            Reactivate
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

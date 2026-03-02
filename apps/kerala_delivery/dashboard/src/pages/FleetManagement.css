@@ -1,13 +1,13 @@
 /* FleetManagement — Vehicle fleet table and inline forms.
  *
- * Design: Alternating row shading (Stone 100/50), amber focus rings on edit
- * fields, vehicle type badges as colored chips (diesel=slate, CNG=teal,
- * electric=sky), and design-token-driven styling throughout.
+ * Design: DaisyUI tw-table for data display, tw-badge for status,
+ * tw-btn for actions, tw-input/tw-select for form fields.
+ * Vehicle type badges as colored chips (diesel=slate, CNG=teal,
+ * electric=sky) via data attributes.
  *
- * Why not a shared CSS module for both tables?
- * Each page has slightly different column widths and interactive elements.
- * Keeping styles separate avoids fragile selector coupling.
- * If a third table page is added, extract shared table primitives then.
+ * Table and button styles now come from DaisyUI (tw- prefix).
+ * This file retains layout containers, form grid, type badges,
+ * and inline edit input sizing.
  */
 
 .fleet-page {
@@ -61,157 +61,11 @@
   cursor: pointer;
 }
 
-/* Button styles — design system tokens */
-.fleet-btn {
-  background: var(--color-surface-card);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  padding: 6px 14px;
-  font-family: var(--font-body);
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.fleet-btn:hover {
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-}
-
-.fleet-btn-primary {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #ffffff;
-}
-
-.fleet-btn-primary:hover {
-  background: var(--color-accent-hover);
-}
-
-.fleet-btn-danger {
-  color: var(--color-danger);
-  border-color: rgba(220, 38, 38, 0.3);
-}
-
-.fleet-btn-danger:hover {
-  background: var(--color-danger-bg);
-  color: #991b1b;
-}
-
-.fleet-btn-success {
-  color: var(--color-success);
-  border-color: rgba(22, 163, 74, 0.3);
-}
-
-.fleet-btn-success:hover {
-  background: var(--color-success-bg);
-  color: #15803d;
-}
-
-/* Error banner */
-.fleet-error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-2) var(--space-6);
-  background: var(--color-danger-bg);
-  border-bottom: 1px solid rgba(220, 38, 38, 0.2);
-  color: #991b1b;
-  font-size: 13px;
-}
-
-.fleet-error button {
-  background: #991b1b;
-  color: #ffffff;
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: var(--space-1) var(--space-3);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-/* Success banner for write operations */
-.fleet-success {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-2) var(--space-6);
-  background: var(--color-success-bg);
-  border-bottom: 1px solid rgba(22, 163, 74, 0.2);
-  color: #166534;
-  font-size: 13px;
-}
-
-.fleet-success button {
-  background: none;
-  border: none;
-  color: #166534;
-  cursor: pointer;
-  font-size: 15px;
-  padding: 0 var(--space-1);
-}
-
-/* Table wrapper — scrollable body with sticky header */
+/* Table wrapper — scrollable body */
 .fleet-table-wrapper {
   flex: 1;
   overflow-y: auto;
   padding: var(--space-4) var(--space-6);
-}
-
-.fleet-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.fleet-table thead th {
-  position: sticky;
-  top: 0;
-  background: var(--color-surface);
-  padding: 10px 12px;
-  text-align: left;
-  font-family: var(--font-mono);
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 2px solid var(--color-border);
-  white-space: nowrap;
-}
-
-.fleet-table tbody td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--color-surface-alt);
-  color: var(--color-text-primary);
-}
-
-/* Alternating row shading — Stone 100 / transparent */
-.fleet-table tbody tr:nth-child(even) {
-  background: var(--color-surface-alt);
-}
-
-.fleet-table tbody tr:hover {
-  background: var(--color-accent-bg);
-}
-
-/* Numeric alignment and monospaced numbers */
-.fleet-table .numeric {
-  text-align: right;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.fleet-status-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--radius-lg);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  color: #ffffff;
-  text-transform: uppercase;
 }
 
 /* Vehicle type badges as colored chips */
@@ -249,11 +103,6 @@
   display: flex;
   gap: 6px;
   white-space: nowrap;
-}
-
-.fleet-actions button {
-  padding: 3px 10px;
-  font-size: 12px;
 }
 
 /* Depot coordinates — monospaced for alignment */
@@ -301,25 +150,6 @@
   letter-spacing: 0.05em;
 }
 
-.fleet-form-field input,
-.fleet-form-field select {
-  padding: 6px 10px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-body);
-  font-size: 13px;
-  color: var(--color-text-primary);
-  background: var(--color-surface-card);
-}
-
-/* Amber focus ring — matches design system accent */
-.fleet-form-field input:focus,
-.fleet-form-field select:focus {
-  outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-bg);
-}
-
 .fleet-form-actions {
   display: flex;
   gap: var(--space-2);
@@ -327,53 +157,12 @@
   padding-top: var(--space-1);
 }
 
-/* Empty state */
-.fleet-empty {
-  text-align: center;
-  padding: 40px var(--space-6);
-  color: var(--color-text-muted);
-}
-
-/* Loading state */
-.fleet-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: var(--space-4);
-  color: var(--color-text-muted);
-}
-
-/* Inline edit inputs — replaces inline style={{ width, fontSize, padding }} */
-.fleet-edit-input {
-  font-size: 13px;
-  padding: 3px 6px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-body);
-  color: var(--color-text-primary);
-  background: var(--color-surface-card);
-}
-
-.fleet-edit-input:focus {
-  outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-bg);
-}
-
+/* Inline edit input sizing constraints */
 .fleet-edit-input--id { width: 130px; }
 .fleet-edit-input--weight,
 .fleet-edit-input--speed { width: 80px; }
 .fleet-edit-input--items { width: 60px; }
 .fleet-edit-input--coord { width: 80px; font-size: 11px; }
 
-/* Status badge — active/inactive coloring via data attribute.
- * Replaces inline style={{ backgroundColor: STATUS_COLORS.x }}
- * so colors come from CSS, not JS. */
-.fleet-status-badge[data-status="active"] {
-  background-color: #16A34A;
-}
-.fleet-status-badge[data-status="inactive"] {
-  background-color: #78716C;
-}
+/* Skeleton loading handled by DaisyUI tw-skeleton classes in FleetManagement.tsx */
+/* Empty state handled by EmptyState component */
