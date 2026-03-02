@@ -24,7 +24,7 @@ import {
 } from "../lib/api";
 import type { RouteSummary, RouteDetail, ImportFailure, DuplicateLocationWarning } from "../types";
 import { StatusBadge, deriveRouteStatus } from "../components/StatusBadge";
-import { FileText, AlertTriangle, Printer } from "lucide-react";
+import { FileText, AlertTriangle, Printer, CheckCircle } from "lucide-react";
 import "./UploadRoutes.css";
 
 // --- Import Summary Component ---
@@ -57,15 +57,13 @@ function ImportSummary({ uploadResult }: { uploadResult: UploadResponse }) {
     return null;
   }
 
-  // --- All-success state: green confirmation bar ---
+  // --- All-success state: compact inline indicator ---
   if (failures.length === 0) {
     return (
       <div className="import-summary">
-        <div className="tw-alert tw-alert-success">
-          <svg xmlns="http://www.w3.org/2000/svg" className="tw-h-5 tw-w-5 tw-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>All {totalRows} orders geocoded successfully</span>
+        <div className="tw-flex tw-items-center tw-gap-2 tw-py-2 tw-px-3 tw-rounded-lg tw-bg-success/10 tw-text-success">
+          <CheckCircle size={18} className="tw-shrink-0" />
+          <span className="tw-text-sm tw-font-medium">All {totalRows} orders geocoded successfully</span>
         </div>
       </div>
     );
