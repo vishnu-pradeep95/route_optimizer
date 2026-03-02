@@ -1,56 +1,129 @@
-/* App — Root layout with collapsible left sidebar.
+/* App -- Root layout with responsive 3-tier sidebar.
  *
- * Overall structure:
+ * Breakpoints (mobile-first):
+ *   Base (< 768px):  No sidebar, DaisyUI drawer, hamburger button
+ *   Tablet (>= 768px): 64px icon-only sidebar strip
+ *   Desktop (>= 1280px): Full 220px sidebar with icons + labels
+ *
  * ┌──────┬──────────────────────────────────┐
- * │      │                                  │
- * │  S   │         Main Content             │
- * │  i   │         (flex, fill)             │
- * │  d   │                                  │
- * │  e   │                                  │
- * │  b   │                                  │
- * │  a   │                                  │
- * │  r   │                                  │
- * │      │                                  │
+ * |      |                                  |
+ * |  S   |         Main Content             |
+ * |  i   |         (flex, fill)             |
+ * |  d   |                                  |
+ * |  e   |                                  |
+ * |  b   |                                  |
+ * |  a   |                                  |
+ * |  r   |                                  |
+ * |      |                                  |
  * └──────┴──────────────────────────────────┘
  *
- * Why CSS Grid with fixed sidebar + flexible main:
- * Grid gives us explicit column sizing. The sidebar expands by changing
- * its own width (64px → 220px) and overlays the main area via z-index.
- * The grid column stays at 64px — expanding doesn't push main content.
+ * Why CSS Grid with in-flow sidebar (not position: fixed):
+ * Grid gives us explicit column sizing. The sidebar participates
+ * in grid flow so it doesn't require a grid-column hack on main.
+ * Responsive breakpoints change the grid-template-columns value.
  */
 
-.app {
-  display: grid;
-  grid-template-columns: var(--sidebar-collapsed) 1fr;
-  height: 100vh;
-  overflow: hidden;
-}
-
-/* ── Sidebar ──────────────────────────────────────────────────── */
+/* ── Base: Mobile (< 768px) ─────────────────────────────────────
+ * No sidebar column. DaisyUI drawer handles navigation.
+ * Hamburger button fixed in top-left corner.
+ */
 
 .app-sidebar {
+  display: none;
+}
+
+.app-main {
+  overflow-x: hidden;
+  overflow-y: auto;
+  height: 100vh;
+}
+
+.mobile-menu-btn {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 50;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
   background: var(--color-surface-dark);
   color: var(--color-text-inverse);
-  width: var(--sidebar-collapsed);
-  overflow: hidden;
-  transition: width var(--transition-smooth);
-  z-index: 100;
-
-  /* Fixed position so it overlays content when expanded,
-     rather than pushing the main content over */
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
+  border: none;
+  cursor: pointer;
 }
 
-.app-sidebar.expanded {
-  width: var(--sidebar-expanded);
-  /* Add subtle shadow when expanded to separate from content */
-  box-shadow: 4px 0 24px rgba(28, 25, 23, 0.2);
+/* ── Tablet (>= 768px) ──────────────────────────────────────────
+ * 64px icon-only sidebar strip. Labels hidden.
+ * Sidebar is in grid flow (not position: fixed).
+ */
+
+@media (min-width: 768px) {
+  /* The tw-drawer-content holds both sidebar and main.
+   * Apply grid here so sidebar + main are in a 2-column grid. */
+  .tw-drawer-content {
+    display: grid;
+    grid-template-columns: var(--sidebar-collapsed) 1fr;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .app-sidebar {
+    display: flex;
+    flex-direction: column;
+    background: var(--color-surface-dark);
+    color: var(--color-text-inverse);
+    width: var(--sidebar-collapsed);
+    overflow: hidden;
+    z-index: 100;
+    height: 100vh;
+  }
+
+  .mobile-menu-btn {
+    display: none;
+  }
+
+  /* Hide labels and text at tablet -- icon-only */
+  .sidebar-nav-label,
+  .sidebar-brand-text,
+  .sidebar-health-label {
+    display: none;
+  }
+
+  .app-main {
+    overflow-x: hidden;
+    overflow-y: auto;
+    height: 100vh;
+  }
 }
+
+/* ── Desktop (>= 1280px) ────────────────────────────────────────
+ * Full 220px sidebar with icons + labels visible.
+ */
+
+@media (min-width: 1280px) {
+  .tw-drawer-content {
+    grid-template-columns: var(--sidebar-expanded) 1fr;
+  }
+
+  .app-sidebar {
+    width: var(--sidebar-expanded);
+  }
+
+  .sidebar-nav-label,
+  .sidebar-brand-text,
+  .sidebar-health-label {
+    display: inline;
+    opacity: 1;
+  }
+}
+
+/* ── Sidebar Visual Styles ──────────────────────────────────────
+ * These apply at all breakpoints where the sidebar is visible
+ * (>= 768px). Kept outside media queries for clarity.
+ */
 
 /* Brand area at top of sidebar */
 .sidebar-brand {
@@ -66,10 +139,11 @@
 }
 
 .sidebar-brand-icon {
-  font-size: 22px;
   flex-shrink: 0;
   width: 32px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sidebar-brand-text {
@@ -77,12 +151,6 @@
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  opacity: 0;
-  transition: opacity var(--transition-normal);
-}
-
-.app-sidebar.expanded .sidebar-brand-text {
-  opacity: 1;
 }
 
 /* Navigation items in the sidebar */
@@ -124,23 +192,19 @@
 }
 
 .sidebar-nav-icon {
-  font-size: 18px;
   flex-shrink: 0;
   width: 32px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
 }
 
 .sidebar-nav-label {
-  opacity: 0;
-  transition: opacity var(--transition-normal);
+  /* Visibility controlled by media queries above */
 }
 
-.app-sidebar.expanded .sidebar-nav-label {
-  opacity: 1;
-}
-
-/* Footer area — health indicator pinned to bottom */
+/* Footer area -- health indicator pinned to bottom */
 .sidebar-footer {
   padding: var(--space-3) var(--space-3);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -186,21 +250,5 @@
 .sidebar-health-label {
   font-size: 11px;
   color: rgba(250, 250, 249, 0.5);
-  opacity: 0;
-  transition: opacity var(--transition-normal);
+  /* Visibility controlled by media queries above */
 }
-
-.app-sidebar.expanded .sidebar-health-label {
-  opacity: 1;
-}
-
-/* ── Main content ─────────────────────────────────────────────── */
-
-.app-main {
-  /* Place in column 2 (sidebar is position:fixed, out of grid flow) */
-  grid-column: 2;
-  overflow-x: hidden;
-  overflow-y: auto;
-  height: 100vh;
-}
-
