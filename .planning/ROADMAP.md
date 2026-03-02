@@ -23,7 +23,7 @@
 ### v1.1 Polish & Reliability
 
 - [x] **Phase 4: Geocoding Cache Normalization** - Unify address normalization across all cache layers; deprecate file-based cache (completed 2026-03-01)
-- [ ] **Phase 5: Geocoding Enhancements** - Duplicate location detection and cost tracking in the optimization pipeline
+- [x] **Phase 5: Geocoding Enhancements** - Duplicate location detection and cost tracking in the optimization pipeline (completed 2026-03-02)
 - [ ] **Phase 6: Dashboard UI Overhaul** - Migrate all 4 dashboard pages to consistent DaisyUI component vocabulary with professional logistics SaaS aesthetic
 - [ ] **Phase 7: Driver PWA Refresh** - Next-stop hero card, delivery progress, outdoor readability, and offline reliability
 
@@ -105,8 +105,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Backend: duplicate detector module, config thresholds, cost stats + duplicate wiring into upload endpoint
-- [ ] 05-02-PLAN.md — Frontend: TypeScript types, CostSummary stats display, DuplicateWarnings UI components
+- [x] 05-01-PLAN.md — Backend: duplicate detector module, config thresholds, cost stats + duplicate wiring into upload endpoint
+- [x] 05-02-PLAN.md — Frontend: TypeScript types, CostSummary stats display, DuplicateWarnings UI components
 
 ### Phase 6: Dashboard UI Overhaul
 **Goal**: Every dashboard page looks and behaves like a professional logistics SaaS product -- consistent component vocabulary, proper loading states, and responsive layout
@@ -144,6 +144,6 @@ Phases execute in numeric order: 4 -> 5 -> 6 -> 7
 | 2. Security Hardening | v1.0 | 2/2 | Complete | 2026-03-01 |
 | 3. Data Integrity | v1.0 | 3/3 | Complete | 2026-03-01 |
 | 4. Geocoding Cache Normalization | v1.1 | Complete    | 2026-03-01 | - |
-| 5. Geocoding Enhancements | v1.1 | 0/? | Not started | - |
+| 5. Geocoding Enhancements | v1.1 | 2/2 | Complete | 2026-03-02 |
 | 6. Dashboard UI Overhaul | v1.1 | 0/? | Not started | - |
 | 7. Driver PWA Refresh | v1.1 | 0/? | Not started | - |

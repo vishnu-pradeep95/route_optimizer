@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish & Reliability
 status: in-progress
-last_updated: "2026-03-02T01:13:00Z"
+last_updated: "2026-03-02T01:52:37Z"
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 12
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 # Project State
@@ -18,21 +18,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-01)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Phase 5 - Geocoding Enhancements (IN PROGRESS)
+**Current focus:** Phase 5 - Geocoding Enhancements (COMPLETE)
 
 ## Current Position
 
-Phase: 5 of 7 (Geocoding Enhancements)
-Plan: 1 of 2 complete
-Status: In Progress
-Last activity: 2026-03-02 -- Plan 05-01 complete (duplicate detector + cost transparency backend)
+Phase: 5 of 7 (Geocoding Enhancements) -- COMPLETE
+Plan: 2 of 2 complete
+Status: Phase Complete
+Last activity: 2026-03-02 -- Plan 05-02 complete (cost transparency + duplicate warnings frontend)
 
-Progress: [###########.......] 64% (4 phases + 1/2 plans in phase 5)
+Progress: [#############.....] 71% (5 phases complete, phases 6-7 remaining)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11 (8 v1.0 + 3 v1.1)
+- Total plans completed: 12 (8 v1.0 + 4 v1.1)
 - Average duration: --
 - Total execution time: --
 
@@ -44,7 +44,7 @@ Progress: [###########.......] 64% (4 phases + 1/2 plans in phase 5)
 | 2. Security | 2 | -- | -- |
 | 3. Data Integrity | 3 | -- | -- |
 | 4. Geocoding Cache | 2/2 | 7min | 3.5min |
-| 5. Geocoding Enhancements | 1/2 | 4min | 4min |
+| 5. Geocoding Enhancements | 2/2 | 9min | 4.5min |
 
 **Recent Trend:**
 - Last 5 plans: --
@@ -71,6 +71,9 @@ Carried from v1.0:
 - [Phase 05]: Default confidence 0.4 (approximate tier) when geocode_confidence is None -- conservative for GPS-provided coordinates
 - [Phase 05]: Mixed-confidence duplicate detection pairs use max(threshold_a, threshold_b) -- wider threshold dominates uncertainty
 - [Phase 05]: Per-order geocode source tracked via CachedGeocoder.stats snapshot before/after each geocode call
+- [Phase 05]: All new UploadResponse fields optional (?) for backward compatibility with pre-Phase-5 backends
+- [Phase 05]: CostSummary hides entirely when cache_hits and api_calls are both 0 (no geocoding happened)
+- [Phase 05]: DuplicateWarnings clusters default to expanded (defaultChecked) for immediate visibility
 
 ### Pending Todos
 
@@ -86,5 +89,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 05-01-PLAN.md (duplicate detector + cost transparency backend)
+Stopped at: Completed 05-02-PLAN.md (cost transparency + duplicate warnings frontend) -- Phase 5 complete
 Resume file: None
