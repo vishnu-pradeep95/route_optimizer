@@ -21,7 +21,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { Pencil, Truck } from "lucide-react";
+import { Pencil, Truck, Plus, RotateCw, X, Check } from "lucide-react";
 import {
   fetchVehicles,
   createVehicle,
@@ -448,10 +448,10 @@ export function FleetManagement() {
               if (!showAddForm) setAddForm(emptyForm());
             }}
           >
-            {showAddForm ? "Cancel" : "+ Add Vehicle"}
+            {showAddForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> Add Vehicle</>}
           </button>
           <button className="tw-btn tw-btn-sm tw-btn-ghost" onClick={loadVehicles}>
-            Refresh
+            <RotateCw size={14} /> Refresh
           </button>
         </div>
       </div>
@@ -619,22 +619,22 @@ export function FleetManagement() {
               {vehicles.map((v) =>
                 editingId === v.vehicle_id ? (
                   /* --- Inline edit row --- */
-                  <tr key={v.vehicle_id}>
+                  <tr key={v.vehicle_id} className="fleet-edit-row">
                     {/* Vehicle ID is immutable — show as plain text */}
-                    <td>{v.vehicle_id}</td>
+                    <td className="tw-font-semibold">{v.vehicle_id}</td>
                     <td>
                       <input
                         type="text"
                         value={editForm.registration_no}
                         onChange={handleFieldChange(setEditForm, "registration_no")}
-                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--id"
+                        className="tw-input tw-input-sm tw-input-bordered fleet-edit-input--id"
                       />
                     </td>
                     <td>
                       <select
                         value={editForm.vehicle_type}
                         onChange={handleFieldChange(setEditForm, "vehicle_type")}
-                        className="tw-select tw-select-xs tw-select-bordered"
+                        className="tw-select tw-select-sm tw-select-bordered"
                       >
                         <option value="diesel">Diesel</option>
                         <option value="electric">Electric</option>
@@ -648,7 +648,7 @@ export function FleetManagement() {
                         max={MAX_RATED_PAYLOAD_KG}
                         value={editForm.max_weight_kg}
                         onChange={handleFieldChange(setEditForm, "max_weight_kg")}
-                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--weight"
+                        className="tw-input tw-input-sm tw-input-bordered fleet-edit-input--weight"
                       />
                     </td>
                     <td>
@@ -656,7 +656,7 @@ export function FleetManagement() {
                         type="number"
                         value={editForm.max_items}
                         onChange={handleFieldChange(setEditForm, "max_items")}
-                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--items"
+                        className="tw-input tw-input-sm tw-input-bordered fleet-edit-input--items"
                       />
                     </td>
                     <td>
@@ -666,25 +666,28 @@ export function FleetManagement() {
                         max={MAX_SPEED_LIMIT_KMH}
                         value={editForm.speed_limit_kmh}
                         onChange={handleFieldChange(setEditForm, "speed_limit_kmh")}
-                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--items"
+                        className="tw-input tw-input-sm tw-input-bordered fleet-edit-input--speed"
                       />
                     </td>
                     <td>
-                      <input
-                        type="number"
-                        step="0.0001"
-                        value={editForm.depot_latitude}
-                        onChange={handleFieldChange(setEditForm, "depot_latitude")}
-                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--coord"
-                      />
-                      ,{" "}
-                      <input
-                        type="number"
-                        step="0.0001"
-                        value={editForm.depot_longitude}
-                        onChange={handleFieldChange(setEditForm, "depot_longitude")}
-                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--coord"
-                      />
+                      <div className="fleet-coord-group">
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={editForm.depot_latitude}
+                          onChange={handleFieldChange(setEditForm, "depot_latitude")}
+                          className="tw-input tw-input-sm tw-input-bordered fleet-edit-input--coord"
+                          placeholder="Lat"
+                        />
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={editForm.depot_longitude}
+                          onChange={handleFieldChange(setEditForm, "depot_longitude")}
+                          className="tw-input tw-input-sm tw-input-bordered fleet-edit-input--coord"
+                          placeholder="Lng"
+                        />
+                      </div>
                     </td>
                     <td>
                       <span className={`tw-badge tw-badge-sm ${v.is_active ? 'tw-badge-success' : 'tw-badge-ghost'}`}>
@@ -694,14 +697,14 @@ export function FleetManagement() {
                     <td>
                       <div className="fleet-actions">
                         <button
-                          className="tw-btn tw-btn-xs tw-btn-primary"
+                          className="tw-btn tw-btn-sm tw-btn-primary"
                           onClick={handleUpdate}
                           disabled={saving}
                         >
-                          {saving ? "..." : "Save"}
+                          <Check size={14} /> {saving ? "Saving..." : "Save"}
                         </button>
-                        <button className="tw-btn tw-btn-xs tw-btn-ghost" onClick={cancelEdit}>
-                          Cancel
+                        <button className="tw-btn tw-btn-sm tw-btn-ghost" onClick={cancelEdit}>
+                          <X size={14} /> Cancel
                         </button>
                       </div>
                     </td>

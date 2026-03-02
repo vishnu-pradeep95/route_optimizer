@@ -580,7 +580,7 @@ export function UploadRoutes() {
               <div className="results-header">
                 <div>
                   <h2 className="tw-text-xl tw-font-bold tw-text-base-content tw-mb-3">Routes Generated</h2>
-                  {uploadResult && (
+                  {uploadResult ? (
                     <div className="tw-stats tw-stats-horizontal tw-shadow tw-bg-base-100">
                       <div className="tw-stat tw-py-2 tw-px-4">
                         <div className="tw-stat-title tw-text-xs">Orders</div>
@@ -599,6 +599,25 @@ export function UploadRoutes() {
                       <div className="tw-stat tw-py-2 tw-px-4">
                         <div className="tw-stat-title tw-text-xs">Solve Time</div>
                         <div className="tw-stat-value tw-text-lg numeric">{uploadResult.optimization_time_ms.toFixed(0)} ms</div>
+                      </div>
+                    </div>
+                  ) : routes.length > 0 && (
+                    <div className="tw-stats tw-stats-horizontal tw-shadow tw-bg-base-100">
+                      <div className="tw-stat tw-py-2 tw-px-4">
+                        <div className="tw-stat-title tw-text-xs">Stops</div>
+                        <div className="tw-stat-value tw-text-lg numeric">{routes.reduce((s, r) => s + r.total_stops, 0)}</div>
+                      </div>
+                      <div className="tw-stat tw-py-2 tw-px-4">
+                        <div className="tw-stat-title tw-text-xs">Vehicles</div>
+                        <div className="tw-stat-value tw-text-lg numeric">{routes.length}</div>
+                      </div>
+                      <div className="tw-stat tw-py-2 tw-px-4">
+                        <div className="tw-stat-title tw-text-xs">Distance</div>
+                        <div className="tw-stat-value tw-text-lg numeric">{routes.reduce((s, r) => s + r.total_distance_km, 0).toFixed(1)} km</div>
+                      </div>
+                      <div className="tw-stat tw-py-2 tw-px-4">
+                        <div className="tw-stat-title tw-text-xs">Weight</div>
+                        <div className="tw-stat-value tw-text-lg numeric">{routes.reduce((s, r) => s + r.total_weight_kg, 0).toFixed(1)} kg</div>
                       </div>
                     </div>
                   )}

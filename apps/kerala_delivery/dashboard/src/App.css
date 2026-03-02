@@ -28,6 +28,16 @@
  * Hamburger button fixed in top-left corner.
  */
 
+/* Hide DaisyUI drawer toggle checkbox (visible when tw-drawer-toggle fails to apply) */
+#mobile-drawer[type="checkbox"] {
+  display: none !important;
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .app-sidebar {
   display: none;
 }
