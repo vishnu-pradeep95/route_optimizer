@@ -195,9 +195,23 @@ function CostSummary({ uploadResult }: { uploadResult: UploadResponse }) {
   const calls = uploadResult.api_calls ?? 0;
   const cost = uploadResult.estimated_cost_usd ?? 0;
   const note = uploadResult.free_tier_note ?? "";
+  const geocoded = uploadResult.geocoded ?? uploadResult.orders_assigned ?? 0;
 
-  // Don't render if no geocoding happened (pre-Phase-5 server or all-validation-failure)
-  if (hits === 0 && calls === 0) return null;
+  // Don't render if zero orders were processed
+  if (geocoded === 0 && hits === 0 && calls === 0) return null;
+
+  // All orders had pre-existing coordinates (no geocoding needed)
+  if (hits === 0 && calls === 0 && geocoded > 0) {
+    return (
+      <div className="tw-stats tw-stats-horizontal tw-shadow tw-w-full tw-mt-4">
+        <div className="tw-stat">
+          <div className="tw-stat-title">Geocoding</div>
+          <div className="tw-stat-value tw-text-lg tw-text-success">All cached</div>
+          <div className="tw-stat-desc">{geocoded} addresses resolved from cache (no API cost)</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="tw-stats tw-stats-vertical lg:tw-stats-horizontal tw-shadow tw-w-full tw-mt-4">
