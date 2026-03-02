@@ -1,12 +1,12 @@
-/* RunHistory — Optimization run history table styles.
+/* RunHistory -- Optimization run history table styles.
  *
- * Design: Alternating row shading, expandable rows with smooth transitions,
- * mini assignment bars (assigned/total), status pills with colored backgrounds,
+ * Design: DaisyUI tw-table for main table, expandable rows with framer-motion,
+ * mini assignment bars (assigned/total), StatusBadge component for status display,
  * and design-token-driven styling throughout.
  *
- * Why a traditional HTML table instead of a grid/card layout:
- * Tabular data with many comparable columns is best displayed in a table.
- * Ops users are familiar with spreadsheet-like layouts for reviewing records.
+ * Table now uses DaisyUI tw-table classes. Skeleton loading replaces spinner.
+ * EmptyState component replaces inline "no runs" message.
+ * .numeric class is defined globally in index.css.
  */
 
 .run-history-page {
@@ -50,6 +50,11 @@
   color: var(--color-text-primary);
 }
 
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .run-history-error {
   display: flex;
   align-items: center;
@@ -77,35 +82,10 @@
   padding: var(--space-4) var(--space-6);
 }
 
-.run-history-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.run-history-table thead th {
-  position: sticky;
-  top: 0;
-  background: var(--color-surface);
-  padding: 10px 12px;
-  text-align: left;
-  font-family: var(--font-mono);
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 2px solid var(--color-border);
-}
-
+/* Run row interaction styles (DaisyUI tw-table handles base styling) */
 .run-row {
   cursor: pointer;
   transition: background var(--transition-fast);
-}
-
-/* Alternating row shading */
-.run-row:nth-child(even) {
-  background: var(--color-surface-alt);
 }
 
 .run-row:hover {
@@ -116,38 +96,13 @@
   background: var(--color-accent-bg);
 }
 
-.run-row td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--color-surface-alt);
-  color: var(--color-text-primary);
-}
-
-.numeric {
-  text-align: right;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
 .source-file {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--color-text-muted);
 }
 
-/* Status pills — colored background instead of just text */
-.status-badge {
-  display: inline-block;
-  padding: 3px 10px;
-  border-radius: var(--radius-lg);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  color: #ffffff;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-
-/* Mini assignment bar — visual ratio of assigned vs total orders */
+/* Mini assignment bar -- visual ratio of assigned vs total orders */
 .assignment-bar {
   display: flex;
   align-items: center;
@@ -220,21 +175,4 @@
   padding: 6px 10px;
   border-bottom: 1px solid var(--color-surface-alt);
   color: var(--color-text-primary);
-}
-
-.no-runs {
-  text-align: center;
-  padding: 40px var(--space-6) !important;
-  color: var(--color-text-muted);
-}
-
-/* Loading state */
-.run-history-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: var(--space-4);
-  color: var(--color-text-muted);
 }
