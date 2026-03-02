@@ -22,7 +22,7 @@ import {
   type UploadResponse,
   type GoogleMapsRouteResponse,
 } from "../lib/api";
-import type { RouteSummary, RouteDetail, ImportFailure } from "../types";
+import type { RouteSummary, RouteDetail, ImportFailure, DuplicateLocationWarning } from "../types";
 import "./UploadRoutes.css";
 
 // --- Import Summary Component ---
@@ -177,6 +177,90 @@ function ImportSummary({ uploadResult }: { uploadResult: UploadResponse }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * CostSummary — geocoding cost transparency display.
+ *
+ * Shows cache hits (free) vs API calls with estimated cost.
+ * Uses DaisyUI 5 `stat` component with tw- prefix.
+ * Only renders when at least one address was geocoded.
+ */
+function CostSummary({ uploadResult }: { uploadResult: UploadResponse }) {
+  const hits = uploadResult.cache_hits ?? 0;
+  const calls = uploadResult.api_calls ?? 0;
+  const cost = uploadResult.estimated_cost_usd ?? 0;
+  const note = uploadResult.free_tier_note ?? "";
+
+  // Don't render if no geocoding happened (pre-Phase-5 server or all-validation-failure)
+  if (hits === 0 && calls === 0) return null;
+
+  return (
+    <div className="tw-stats tw-stats-vertical lg:tw-stats-horizontal tw-shadow tw-w-full tw-mt-4">
+      <div className="tw-stat">
+        <div className="tw-stat-title">Cache Hits</div>
+        <div className="tw-stat-value tw-text-success">{hits}</div>
+        <div className="tw-stat-desc">Free (from database)</div>
+      </div>
+      <div className="tw-stat">
+        <div className="tw-stat-title">API Calls</div>
+        <div className="tw-stat-value">{calls}</div>
+        <div className="tw-stat-desc">~${cost.toFixed(2)} estimated</div>
+      </div>
+      {note && (
+        <div className="tw-stat">
+          <div className="tw-stat-title">Cost Note</div>
+          <div className="tw-stat-desc tw-text-sm">{note}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * DuplicateWarnings — alerts for orders with suspiciously close GPS coordinates.
+ *
+ * Non-blocking: shown alongside results, does not prevent route display.
+ * Uses DaisyUI 5 `alert` + `collapse` components with tw- prefix.
+ * Each cluster is expandable showing order IDs, addresses, and distance.
+ */
+function DuplicateWarnings({ warnings }: { warnings: DuplicateLocationWarning[] }) {
+  if (!warnings || warnings.length === 0) return null;
+
+  return (
+    <div className="tw-mt-4">
+      <div role="alert" className="tw-alert tw-alert-warning">
+        <svg xmlns="http://www.w3.org/2000/svg" className="tw-h-5 tw-w-5 tw-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <span>
+          <strong>Duplicate Location Warning:</strong>{" "}
+          {warnings.length} group{warnings.length !== 1 ? "s" : ""} of orders resolve to very similar GPS coordinates
+        </span>
+      </div>
+      {warnings.map((cluster, idx) => (
+        <div key={idx} className="tw-collapse tw-collapse-arrow tw-bg-base-200 tw-mt-2">
+          <input type="checkbox" defaultChecked />
+          <div className="tw-collapse-title tw-font-semibold">
+            Orders {cluster.order_ids.join(", ")} — within {cluster.max_distance_m.toFixed(0)}m of each other
+          </div>
+          <div className="tw-collapse-content">
+            <ul className="tw-list-disc tw-pl-4 tw-space-y-1">
+              {cluster.order_ids.map((id, i) => (
+                <li key={id}>
+                  <strong>{id}</strong>: {cluster.addresses[i]}
+                </li>
+              ))}
+            </ul>
+            <p className="tw-text-xs tw-text-base-content/60 tw-mt-2">
+              Different addresses resolving to nearby coordinates may indicate a data entry error.
+              If these are intentional (e.g., neighboring buildings), no action is needed.
+            </p>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -478,6 +562,14 @@ export function UploadRoutes() {
         <div className="results-section">
           {/* Import Summary — only shown after a fresh upload with diagnostics */}
           {uploadResult && <ImportSummary uploadResult={uploadResult} />}
+
+          {/* Geocoding cost summary — shows cache hits vs API calls (GEO-04) */}
+          {uploadResult && <CostSummary uploadResult={uploadResult} />}
+
+          {/* Duplicate location warnings — non-blocking alerts for suspicious clusters (GEO-03) */}
+          {uploadResult && (
+            <DuplicateWarnings warnings={uploadResult.duplicate_warnings ?? []} />
+          )}
 
           {/* Route cards — shown when routes exist (fresh upload or loaded from API) */}
           {routes.length > 0 && (
