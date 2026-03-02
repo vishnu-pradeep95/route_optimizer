@@ -102,7 +102,11 @@ Plans:
   1. After uploading a CSV, the response shows how many addresses were cache hits (free) versus Google API calls, with an estimated cost figure
   2. When two or more orders in an upload resolve to GPS coordinates within 15m of each other, a visible warning identifies the affected orders
   3. Duplicate location warnings use confidence-weighted thresholds (tighter for ROOFTOP results, wider for GEOMETRIC_CENTER) to minimize false positives in dense Vatakara streets
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Backend: duplicate detector module, config thresholds, cost stats + duplicate wiring into upload endpoint
+- [ ] 05-02-PLAN.md — Frontend: TypeScript types, CostSummary stats display, DuplicateWarnings UI components
 
 ### Phase 6: Dashboard UI Overhaul
 **Goal**: Every dashboard page looks and behaves like a professional logistics SaaS product -- consistent component vocabulary, proper loading states, and responsive layout
