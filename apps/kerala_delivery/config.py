@@ -147,3 +147,23 @@ INDIA_COORDINATE_BOUNDS = (6.0, 37.0, 68.0, 97.5)
 # CDCMS addresses rarely mention city/state — geocoders need this context.
 # Change this when deploying for a different distributor's delivery zone.
 CDCMS_AREA_SUFFIX = ", Vatakara, Kozhikode, Kerala"
+
+# =============================================================================
+# GEOCODING COST & DUPLICATE DETECTION
+# =============================================================================
+# Confidence-weighted distance thresholds for duplicate location detection (meters).
+# Tighter for high-accuracy geocodes, wider for low-accuracy.
+# Tunable after real-world testing with actual Vatakara addresses.
+DUPLICATE_THRESHOLDS: dict[str, float] = {
+    "rooftop": 10.0,          # ROOFTOP: building-level, very tight
+    "interpolated": 20.0,     # RANGE_INTERPOLATED: street-level
+    "geometric_center": 50.0, # GEOMETRIC_CENTER: area center, wide
+    "approximate": 100.0,     # APPROXIMATE: very rough, widest
+}
+
+# Google Maps Geocoding API cost per request.
+# $5 per 1000 requests = $0.005 each.
+GEOCODING_COST_PER_REQUEST: float = 0.005
+
+# Monthly free tier credit from Google Maps Platform.
+GEOCODING_FREE_TIER_USD: float = 200.0
