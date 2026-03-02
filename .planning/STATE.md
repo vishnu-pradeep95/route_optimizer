@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish & Reliability
-status: in-progress
-last_updated: "2026-03-02T02:46:15Z"
+status: unknown
+last_updated: "2026-03-02T02:48:14.185Z"
 progress:
-  total_phases: 7
+  total_phases: 6
   completed_phases: 5
   total_plans: 18
-  completed_plans: 13
+  completed_plans: 14
 ---
 
 # Project State
@@ -32,7 +32,7 @@ Progress: [################..] 83% (17 plans complete, 1 remaining in phase 6 + 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13 (8 v1.0 + 5 v1.1)
+- Total plans completed: 17 (8 v1.0 + 9 v1.1)
 - Average duration: --
 - Total execution time: --
 
@@ -45,7 +45,7 @@ Progress: [################..] 83% (17 plans complete, 1 remaining in phase 6 + 
 | 3. Data Integrity | 3 | -- | -- |
 | 4. Geocoding Cache | 2/2 | 7min | 3.5min |
 | 5. Geocoding Enhancements | 2/2 | 9min | 4.5min |
-| 6. Dashboard UI Overhaul | 1/6 | 1min | 1min |
+| 6. Dashboard UI Overhaul | 5/6 | -- | -- |
 
 **Recent Trend:**
 - Last 5 plans: --
@@ -78,6 +78,9 @@ Carried from v1.0:
 - [Phase 06]: EmptyState icon prop typed as React.ComponentType<{size?, className?}> -- compatible with all lucide-react icons
 - [Phase 06]: StatusBadge delivered label is "Complete" (not "Delivered") for user-friendly route context
 - [Phase 06]: deriveRouteStatus prioritizes failed > all-delivered > pending -- issues surface first
+- [Phase 06]: 210px QR size chosen as midpoint of 200-220px range for arm-length scanning in three-wheeler cabs
+- [Phase 06]: Print CSS uses both break-inside: avoid (modern) and page-break-inside: avoid (legacy) for cross-browser support
+- [Phase 06]: Darker text colors for print contrast (#777->#555, #666->#444) -- thermal printers lose lighter grays
 
 ### Pending Todos
 
@@ -93,5 +96,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 06-02-PLAN.md (shared UI utilities + reusable components)
+Stopped at: Completed 06-05-PLAN.md (QR print sheet enhancement)
 Resume file: None
