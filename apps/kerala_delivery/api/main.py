@@ -51,6 +51,7 @@ from core.data_import.cdcms_preprocessor import preprocess_cdcms, get_cdcms_colu
 from core.database.connection import engine, get_session
 from core.database import repository as repo
 from core.geocoding.cache import CachedGeocoder
+from core.geocoding.duplicate_detector import detect_duplicate_locations
 from core.geocoding.google_adapter import GoogleGeocoder
 from core.licensing.license_manager import validate_license, LicenseStatus, LicenseInfo, GRACE_PERIOD_DAYS
 from core.models.location import Location
@@ -584,6 +585,18 @@ class ImportFailure(BaseModel):
     stage: Literal["validation", "geocoding"] = Field(..., description="When the failure occurred")
 
 
+class DuplicateLocationWarning(BaseModel):
+    """A cluster of orders with suspiciously close GPS coordinates.
+
+    Non-blocking: optimization proceeds normally, these warnings are shown
+    alongside results so office staff can investigate data entry errors.
+    """
+
+    order_ids: list[str] = Field(..., description="Order IDs in this cluster")
+    addresses: list[str] = Field(..., description="Address text for each order")
+    max_distance_m: float = Field(..., description="Largest distance between orders in cluster (meters)")
+
+
 class OptimizationSummary(BaseModel):
     """Summary of the latest optimization run.
 
@@ -610,6 +623,22 @@ class OptimizationSummary(BaseModel):
     failed_validation: int = Field(default=0, description="Rows rejected during pre-validation")
     failures: list[ImportFailure] = Field(default_factory=list, description="Per-row failure details")
     warnings: list[ImportFailure] = Field(default_factory=list, description="Per-row warnings (defaults applied)")
+
+    # GEO-04: Cost transparency
+    cache_hits: int = Field(default=0, description="Addresses resolved from cache (free)")
+    api_calls: int = Field(default=0, description="Addresses that required Google API call")
+    estimated_cost_usd: float = Field(default=0.0, description="Estimated API cost at $0.005/request")
+    free_tier_note: str = Field(default="", description="Human-readable free tier context")
+    per_order_geocode_source: dict[str, str] = Field(
+        default_factory=dict,
+        description="Mapping of order_id to 'cached' or 'api_call'",
+    )
+
+    # GEO-03: Duplicate location warnings
+    duplicate_warnings: list[DuplicateLocationWarning] = Field(
+        default_factory=list,
+        description="Groups of orders with suspiciously close GPS coordinates",
+    )
 
 
 # =============================================================================
@@ -800,6 +829,12 @@ async def upload_and_optimize(
                     failed_validation=len(import_result.errors),
                     failures=validation_failures,
                     warnings=validation_warnings,
+                    cache_hits=0,
+                    api_calls=0,
+                    estimated_cost_usd=0.0,
+                    free_tier_note="",
+                    per_order_geocode_source={},
+                    duplicate_warnings=[],
                 )
             # Genuinely empty file (no rows at all, no errors) — this is a user error
             raise HTTPException(status_code=400, detail="No valid orders found in file")
@@ -845,15 +880,30 @@ async def upload_and_optimize(
         geocoder = _get_geocoder()
         geocoding_failures: list[ImportFailure] = []
 
+        # GEO-04: Initialize cost tracking variables (available in all return paths)
+        per_order_source: dict[str, str] = {}
+        geo_cache_hits = 0
+        geo_api_calls = 0
+        estimated_cost = 0.0
+        free_tier_note = ""
+        duplicate_warnings_list: list[DuplicateLocationWarning] = []
+
         # Use CachedGeocoder for unified cache-then-API flow
         cached_geocoder = CachedGeocoder(upstream=geocoder, session=session) if geocoder else None
 
         for order in orders:
             if not order.is_geocoded:
                 if cached_geocoder:
+                    # GEO-04: Snapshot stats before geocoding to detect cache hit vs API call
+                    hits_before = cached_geocoder.stats["hits"]
                     result = await cached_geocoder.geocode(order.address_raw)
                     if result.success and result.location:
                         order.location = result.location
+                        # Track per-order geocode source
+                        if cached_geocoder.stats["hits"] > hits_before:
+                            per_order_source[order.order_id] = "cached"
+                        else:
+                            per_order_source[order.order_id] = "api_call"
                     else:
                         # Log the raw Google API response for debugging.
                         # Common causes: API key not enabled, billing not set up,
@@ -885,6 +935,7 @@ async def upload_and_optimize(
                     cached = await repo.get_cached_geocode(session, order.address_raw)
                     if cached:
                         order.location = cached
+                        per_order_source[order.order_id] = "cached"
                     else:
                         geocoding_failures.append(ImportFailure(
                             row_number=order_row_map.get(order.order_id, 0),
@@ -897,6 +948,40 @@ async def upload_and_optimize(
         all_failures = validation_failures + geocoding_failures
         all_warnings = validation_warnings
         geocoded_orders = [o for o in orders if o.is_geocoded]
+
+        # --- GEO-04: Collect geocoding cost stats ---
+        if cached_geocoder:
+            geo_cache_hits = cached_geocoder.stats["hits"]
+            geo_api_calls = cached_geocoder.stats["misses"]
+        else:
+            # Cache-only mode (no API key): all results are cache hits
+            geo_cache_hits = len(geocoded_orders)
+            geo_api_calls = 0
+
+        estimated_cost = geo_api_calls * config.GEOCODING_COST_PER_REQUEST
+        if geo_api_calls > 0:
+            free_tier_note = (
+                f"{geo_api_calls} API call{'s' if geo_api_calls != 1 else ''} "
+                f"(~${estimated_cost:.2f}) — within ${config.GEOCODING_FREE_TIER_USD:.0f}/month free tier"
+            )
+        elif geo_cache_hits > 0:
+            free_tier_note = "All addresses resolved from cache (no API cost)"
+        else:
+            free_tier_note = ""
+
+        # --- GEO-03: Duplicate location detection ---
+        duplicate_clusters = detect_duplicate_locations(
+            geocoded_orders,
+            thresholds=config.DUPLICATE_THRESHOLDS,
+        )
+        duplicate_warnings_list = [
+            DuplicateLocationWarning(
+                order_ids=c.order_ids,
+                addresses=c.addresses,
+                max_distance_m=c.max_distance_m,
+            )
+            for c in duplicate_clusters
+        ]
 
         if not geocoded_orders:
             # Zero-success case: return structured 200 with all failure details
@@ -930,6 +1015,12 @@ async def upload_and_optimize(
                 failed_validation=len(import_result.errors),
                 failures=all_failures,
                 warnings=all_warnings,
+                cache_hits=geo_cache_hits,
+                api_calls=geo_api_calls,
+                estimated_cost_usd=estimated_cost,
+                free_tier_note=free_tier_note,
+                per_order_geocode_source=per_order_source,
+                duplicate_warnings=[],  # No geocoded orders, so no duplicates
             )
 
         # Step 3: Build fleet and optimize
@@ -983,6 +1074,14 @@ async def upload_and_optimize(
             failed_validation=len(import_result.errors),
             failures=all_failures,
             warnings=all_warnings,
+            # GEO-04: Cost transparency
+            cache_hits=geo_cache_hits,
+            api_calls=geo_api_calls,
+            estimated_cost_usd=estimated_cost,
+            free_tier_note=free_tier_note,
+            per_order_geocode_source=per_order_source,
+            # GEO-03: Duplicate location warnings
+            duplicate_warnings=duplicate_warnings_list,
         )
 
     finally:
