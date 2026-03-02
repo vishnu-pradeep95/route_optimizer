@@ -100,6 +100,9 @@
 
 /* Speed alert badge — pulses amber/red for urgency */
 .speed-alert-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
@@ -137,7 +140,9 @@
 }
 
 .stat-icon {
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 /* Route efficiency indicator — km per delivery */

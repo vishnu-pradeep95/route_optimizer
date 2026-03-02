@@ -20,9 +20,11 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { MapRef } from "react-map-gl/maplibre";
+import { MapPin, AlertTriangle } from "lucide-react";
 import { StatsBar } from "../components/StatsBar";
 import { VehicleList } from "../components/VehicleList";
 import { RouteMap } from "../components/RouteMap";
+import { EmptyState } from "../components/EmptyState";
 import { fetchRoutes, fetchRouteDetail, fetchFleetTelemetry } from "../lib/api";
 import type {
   RouteSummary,
@@ -178,11 +180,59 @@ export function LiveMap() {
 
   // --- Render ---
 
+  // Skeleton loading state matching the 3-panel layout
   if (loading) {
     return (
-      <div className="live-map-loading">
-        <div className="loading-spinner" />
-        <p>Loading route data...</p>
+      <div className="live-map-page">
+        {/* Stats bar skeleton */}
+        <div className="stats-bar">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="stat-card" style={{ borderLeftColor: 'var(--color-border)' }}>
+              <div className="tw-skeleton tw-h-8 tw-w-12 tw-mb-1" />
+              <div className="tw-skeleton tw-h-3 tw-w-20" />
+            </div>
+          ))}
+        </div>
+        {/* Content area skeleton */}
+        <div className="live-map-content">
+          <div className="live-map-sidebar">
+            <div className="vehicle-list">
+              <div className="vehicle-list-header">
+                <div className="tw-skeleton tw-h-5 tw-w-20" />
+              </div>
+              <div className="vehicle-list-items">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="tw-p-3 tw-border-b tw-border-base-300">
+                    <div className="tw-skeleton tw-h-4 tw-w-24 tw-mb-2" />
+                    <div className="tw-skeleton tw-h-3 tw-w-32 tw-mb-2" />
+                    <div className="tw-flex tw-gap-2">
+                      <div className="tw-skeleton tw-h-3 tw-w-16" />
+                      <div className="tw-skeleton tw-h-3 tw-w-16" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="live-map-canvas">
+            <div className="tw-flex tw-items-center tw-justify-center tw-h-full tw-bg-base-200">
+              <div className="tw-text-base-content/30">Loading map...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Empty state when no active routes exist
+  if (routes.length === 0) {
+    return (
+      <div className="live-map-page tw-flex tw-items-center tw-justify-center">
+        <EmptyState
+          icon={MapPin}
+          title="No active routes"
+          description="Upload orders and run optimization to see routes on the map."
+        />
       </div>
     );
   }
@@ -192,7 +242,8 @@ export function LiveMap() {
       {/* Error banner — non-blocking, shown above content */}
       {error && (
         <div className="live-map-error">
-          <span>⚠ {error}</span>
+          <AlertTriangle size={16} className="tw-inline tw-mr-1" />
+          <span>{error}</span>
           <button onClick={loadRouteData}>Retry</button>
         </div>
       )}

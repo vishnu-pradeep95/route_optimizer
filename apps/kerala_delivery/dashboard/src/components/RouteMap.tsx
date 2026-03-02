@@ -26,6 +26,7 @@ import Map, {
 } from "react-map-gl/maplibre";
 import type { MapRef } from "react-map-gl/maplibre";
 import type { LayerSpecification } from "maplibre-gl";
+import { Moon, Sun } from "lucide-react";
 import type { RouteDetail, TelemetryPing } from "../types";
 import { getVehicleColor, STATUS_COLORS } from "../types";
 import "./RouteMap.css";
@@ -161,7 +162,7 @@ export function RouteMap({
         onClick={() => setMapTheme(mapTheme === "light" ? "dark" : "light")}
         title={`Switch to ${mapTheme === "light" ? "dark" : "light"} basemap`}
       >
-        {mapTheme === "light" ? "🌙" : "☀️"}
+        {mapTheme === "light" ? <Moon size={16} /> : <Sun size={16} />}
       </button>
 
       <Map

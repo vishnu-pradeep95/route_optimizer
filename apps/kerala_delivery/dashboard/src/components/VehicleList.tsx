@@ -11,6 +11,7 @@
  * that accounts for the 1.3× safety multiplier on travel times.
  */
 
+import { Package, Ruler, Scale, AlertTriangle } from "lucide-react";
 import type { RouteSummary, RouteDetail, TelemetryPing } from "../types";
 import { getVehicleColor } from "../types";
 import "./VehicleList.css";
@@ -130,7 +131,7 @@ export function VehicleList({
                     className="speed-alert-badge"
                     title="Speed exceeds 40 km/h urban limit"
                   >
-                    ⚠ SPEED
+                    <AlertTriangle size={12} /> SPEED
                   </span>
                 )}
               </div>
@@ -139,24 +140,24 @@ export function VehicleList({
 
               <div className="vehicle-stats">
                 <div className="vehicle-stat">
-                  <span className="stat-icon">📦</span>
-                  <span>
+                  <span className="stat-icon"><Package size={14} /></span>
+                  <span className="numeric">
                     {stopsCompleted}/{route.total_stops} stops
                   </span>
                 </div>
                 <div className="vehicle-stat">
-                  <span className="stat-icon">📏</span>
-                  <span>{route.total_distance_km.toFixed(1)} km</span>
+                  <span className="stat-icon"><Ruler size={14} /></span>
+                  <span className="numeric">{route.total_distance_km.toFixed(1)} km</span>
                 </div>
                 <div className="vehicle-stat">
-                  <span className="stat-icon">⚖️</span>
-                  <span>{route.total_weight_kg.toFixed(0)} kg</span>
+                  <span className="stat-icon"><Scale size={14} /></span>
+                  <span className="numeric">{route.total_weight_kg.toFixed(0)} kg</span>
                 </div>
               </div>
 
               {/* Efficiency indicator — km per delivery helps ops spot outliers */}
               {route.total_stops > 0 && (
-                <div className="vehicle-efficiency">
+                <div className="vehicle-efficiency numeric">
                   {(route.total_distance_km / route.total_stops).toFixed(1)} km/delivery
                 </div>
               )}

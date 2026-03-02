@@ -125,7 +125,7 @@ function StatCard({
 }) {
   return (
     <div className="stat-card" style={{ borderLeftColor: accent }}>
-      <div className="stat-value">{value}</div>
+      <div className="stat-value numeric">{value}</div>
       <div className="stat-label">
         {showPulse && value > 0 && <span className="stat-pulse" />}
         {label}
