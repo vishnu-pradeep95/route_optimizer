@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish & Reliability
 status: unknown
-last_updated: "2026-03-02T03:42:26.050Z"
+last_updated: "2026-03-02T03:57:44Z"
 progress:
   total_phases: 6
   completed_phases: 6
-  total_plans: 18
-  completed_plans: 18
+  total_plans: 19
+  completed_plans: 19
 ---
 
 # Project State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Phase: 6 of 7 (Dashboard UI Overhaul)
-Plan: 4 of 6 complete
+Plan: 7 of 9 complete
 Status: In Progress
-Last activity: 2026-03-02 -- Plan 06-04 complete (LiveMap & FleetManagement DaisyUI migration)
+Last activity: 2026-03-02 -- Plan 06-07 complete (Visual polish: compact success indicator + detail table harmonization)
 
-Progress: [################..] 89% (16 plans complete, 2 remaining in phase 6)
+Progress: [################..] 78% (7 of 9 plans complete in phase 6, 2 remaining)
 
 ## Performance Metrics
 
@@ -45,7 +45,7 @@ Progress: [################..] 89% (16 plans complete, 2 remaining in phase 6)
 | 3. Data Integrity | 3 | -- | -- |
 | 4. Geocoding Cache | 2/2 | 7min | 3.5min |
 | 5. Geocoding Enhancements | 2/2 | 9min | 4.5min |
-| 6. Dashboard UI Overhaul | 4/6 | 11min | 2.8min |
+| 6. Dashboard UI Overhaul | 7/9 | 12min | 1.7min |
 
 **Recent Trend:**
 - Last 5 plans: --
@@ -89,6 +89,9 @@ Carried from v1.0:
 - [Phase 06]: StatsBar keeps accent-border card design (not migrated to tw-stat) -- visual consistency with industrial aesthetic
 - [Phase 06]: FleetManagement uses tw-table-sm for compact row density -- ops need many vehicles visible at once
 - [Phase 06]: FleetManagement empty state uses EmptyState component with Add Vehicle CTA for zero-data onboarding
+- [Phase 06]: CheckCircle from lucide-react (18px) replaces inline SVG checkmark for consistent icon system
+- [Phase 06]: tw-bg-success/10 subtle tint replaces tw-alert for routine success states (less visually dominant)
+- [Phase 06]: DaisyUI tw-table-sm for detail routes table ensures identical padding/font to main table
 
 ### Pending Todos
 
@@ -104,5 +107,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 06-04-PLAN.md (LiveMap & FleetManagement DaisyUI migration with skeleton/empty states, lucide icons)
+Stopped at: Completed 06-07-PLAN.md (Visual polish: compact success indicator in UploadRoutes, harmonized detail table in RunHistory)
 Resume file: None
