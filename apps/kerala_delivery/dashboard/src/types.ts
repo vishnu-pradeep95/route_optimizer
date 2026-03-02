@@ -122,6 +122,13 @@ export interface ImportFailure {
   stage: "validation" | "geocoding";
 }
 
+/** A cluster of orders with suspiciously close GPS coordinates. */
+export interface DuplicateLocationWarning {
+  order_ids: string[];
+  addresses: string[];
+  max_distance_m: number;
+}
+
 // --- Optimization run types ---
 
 /** A single optimization run record. */

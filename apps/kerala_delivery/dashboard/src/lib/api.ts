@@ -23,6 +23,7 @@ import type {
   Vehicle,
   VehiclesResponse,
   ImportFailure,
+  DuplicateLocationWarning,
 } from "../types";
 
 /**
@@ -262,6 +263,16 @@ export interface UploadResponse {
   failed_validation: number;
   failures: ImportFailure[];
   warnings: ImportFailure[];
+
+  // GEO-04: Cost transparency (Phase 5)
+  cache_hits?: number;
+  api_calls?: number;
+  estimated_cost_usd?: number;
+  free_tier_note?: string;
+  per_order_geocode_source?: Record<string, string>;
+
+  // GEO-03: Duplicate location warnings (Phase 5)
+  duplicate_warnings?: DuplicateLocationWarning[];
 }
 
 export async function uploadAndOptimize(file: File): Promise<UploadResponse> {
