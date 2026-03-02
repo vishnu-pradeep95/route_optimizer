@@ -18,9 +18,9 @@ Requirements for v1.1 Polish & Reliability milestone. Each maps to roadmap phase
 
 - [ ] **DASH-01**: All 4 dashboard pages use DaisyUI component vocabulary consistently (no mixed raw CSS + DaisyUI)
 - [ ] **DASH-02**: Sidebar uses SVG icons (lucide-react) instead of emoji for navigation items
-- [ ] **DASH-03**: Every page shows a skeleton loading state while data loads and a meaningful empty state when no data exists
-- [ ] **DASH-04**: Numeric values (distances, weights, counts) use tabular-number font variant for column alignment
-- [ ] **DASH-05**: Route cards display color-coded status badges (green=complete, amber=in-progress, red=issues)
+- [x] **DASH-03**: Every page shows a skeleton loading state while data loads and a meaningful empty state when no data exists
+- [x] **DASH-04**: Numeric values (distances, weights, counts) use tabular-number font variant for column alignment
+- [x] **DASH-05**: Route cards display color-coded status badges (green=complete, amber=in-progress, red=issues)
 - [ ] **DASH-06**: Sidebar collapses to icon-only on screens below 1280px and uses DaisyUI drawer on mobile
 - [ ] **DASH-07**: QR sheet prints cleanly with large QR codes, vehicle name, and driver name via @media print
 
@@ -88,9 +88,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GEO-04 | Phase 5 | Complete |
 | DASH-01 | Phase 6 | Pending |
 | DASH-02 | Phase 6 | Pending |
-| DASH-03 | Phase 6 | Pending |
-| DASH-04 | Phase 6 | Pending |
-| DASH-05 | Phase 6 | Pending |
+| DASH-03 | Phase 6 | Complete |
+| DASH-04 | Phase 6 | Complete |
+| DASH-05 | Phase 6 | Complete |
 | DASH-06 | Phase 6 | Pending |
 | DASH-07 | Phase 6 | Pending |
 | PWA-01 | Phase 7 | Pending |
