@@ -118,7 +118,15 @@ Plans:
   3. Every page displays a skeleton loading state while data loads and a meaningful empty state when no data exists
   4. Route cards show color-coded status badges (green/amber/red) and numeric values use tabular-number font variant for column alignment
   5. QR sheet prints cleanly with large QR codes, vehicle name, and driver name via @media print styles
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+- [x] 06-01-PLAN.md -- Responsive sidebar with lucide-react SVG icons and DaisyUI drawer
+- [ ] 06-02-PLAN.md
+- [ ] 06-03-PLAN.md
+- [ ] 06-04-PLAN.md
+- [ ] 06-05-PLAN.md
+- [ ] 06-06-PLAN.md
 
 ### Phase 7: Driver PWA Refresh
 **Goal**: Drivers see their next delivery prominently, track progress visually, and can work reliably in outdoor conditions with spotty network
@@ -145,5 +153,5 @@ Phases execute in numeric order: 4 -> 5 -> 6 -> 7
 | 3. Data Integrity | v1.0 | 3/3 | Complete | 2026-03-01 |
 | 4. Geocoding Cache Normalization | v1.1 | Complete    | 2026-03-01 | - |
 | 5. Geocoding Enhancements | v1.1 | 2/2 | Complete | 2026-03-02 |
-| 6. Dashboard UI Overhaul | v1.1 | 0/? | Not started | - |
+| 6. Dashboard UI Overhaul | v1.1 | 1/6 | In Progress | - |
 | 7. Driver PWA Refresh | v1.1 | 0/? | Not started | - |
