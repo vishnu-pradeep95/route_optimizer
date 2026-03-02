@@ -183,3 +183,12 @@ table {
   background: #94a3b8;
 }
 
+/* ── Numeric alignment utility ─────────────────────────────────── */
+/* Apply to any element displaying numbers (table cells, stat values,
+   route metrics) for columnar alignment. Uses IBM Plex Mono for
+   that technical, high-precision look matching the logistics identity. */
+.numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
