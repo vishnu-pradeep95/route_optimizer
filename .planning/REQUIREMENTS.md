@@ -16,7 +16,7 @@ Requirements for v1.1 Polish & Reliability milestone. Each maps to roadmap phase
 
 ### Dashboard UI
 
-- [ ] **DASH-01**: All 4 dashboard pages use DaisyUI component vocabulary consistently (no mixed raw CSS + DaisyUI)
+- [x] **DASH-01**: All 4 dashboard pages use DaisyUI component vocabulary consistently (no mixed raw CSS + DaisyUI)
 - [x] **DASH-02**: Sidebar uses SVG icons (lucide-react) instead of emoji for navigation items
 - [x] **DASH-03**: Every page shows a skeleton loading state while data loads and a meaningful empty state when no data exists
 - [x] **DASH-04**: Numeric values (distances, weights, counts) use tabular-number font variant for column alignment
@@ -86,7 +86,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GEO-02 | Phase 4 | Complete |
 | GEO-03 | Phase 5 | Complete |
 | GEO-04 | Phase 5 | Complete |
-| DASH-01 | Phase 6 | Pending |
+| DASH-01 | Phase 6 | Complete |
 | DASH-02 | Phase 6 | Complete |
 | DASH-03 | Phase 6 | Complete |
 | DASH-04 | Phase 6 | Complete |
