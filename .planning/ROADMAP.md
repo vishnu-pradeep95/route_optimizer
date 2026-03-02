@@ -153,5 +153,5 @@ Phases execute in numeric order: 4 -> 5 -> 6 -> 7
 | 3. Data Integrity | v1.0 | 3/3 | Complete | 2026-03-01 |
 | 4. Geocoding Cache Normalization | v1.1 | Complete    | 2026-03-01 | - |
 | 5. Geocoding Enhancements | v1.1 | 2/2 | Complete | 2026-03-02 |
-| 6. Dashboard UI Overhaul | v1.1 | 1/6 | In Progress | - |
+| 6. Dashboard UI Overhaul | 5/6 | In Progress|  | - |
 | 7. Driver PWA Refresh | v1.1 | 0/? | Not started | - |
