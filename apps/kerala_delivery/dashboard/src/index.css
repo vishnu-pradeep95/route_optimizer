@@ -183,6 +183,44 @@ table {
   background: #94a3b8;
 }
 
+/* ── Table cell padding (DaisyUI tw-table not generating these) ── */
+/* tw-table: standard size */
+.tw-table th,
+.tw-table td {
+  padding: 12px 16px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.tw-table th {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--color-border-strong);
+}
+
+.tw-table td {
+  font-size: 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* tw-table-sm: compact size */
+.tw-table-sm th,
+.tw-table-sm td {
+  padding: 8px 12px;
+}
+
+.tw-table-sm th {
+  font-size: 11px;
+}
+
+.tw-table-sm td {
+  font-size: 13px;
+}
+
 /* ── Numeric alignment utility ─────────────────────────────────── */
 /* Apply to any element displaying numbers (table cells, stat values,
    route metrics) for columnar alignment. Uses IBM Plex Mono for

@@ -61,7 +61,7 @@ function ImportSummary({ uploadResult }: { uploadResult: UploadResponse }) {
   if (failures.length === 0) {
     return (
       <div className="import-summary">
-        <div className="tw-flex tw-items-center tw-gap-2 tw-py-2 tw-px-3 tw-rounded-lg tw-bg-success/10 tw-text-success">
+        <div className="tw-flex tw-items-center tw-gap-2 tw-py-2 tw-px-3 tw-rounded-lg tw-text-success" style={{ backgroundColor: 'oklch(55% 0.2 145 / 0.1)' }}>
           <CheckCircle size={18} className="tw-shrink-0" />
           <span className="tw-text-sm tw-font-medium">All {totalRows} orders geocoded successfully</span>
         </div>

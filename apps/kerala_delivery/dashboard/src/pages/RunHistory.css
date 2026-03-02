@@ -125,7 +125,7 @@
 }
 
 /* Expanded detail row */
-.detail-row td {
+.detail-row > td {
   padding: 0 !important;
   background: var(--color-surface);
 }
