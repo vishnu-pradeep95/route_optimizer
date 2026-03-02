@@ -1388,7 +1388,7 @@ async def get_qr_sheet(session: AsyncSession = SessionDep):
             "segments": segments,
             # Generate PNG QR codes for print (more printer-compatible than SVG)
             "qr_pngs": [
-                generate_qr_base64_png(seg["url"], box_size=6)
+                generate_qr_base64_png(seg["url"], box_size=8)
                 for seg in segments
             ],
         })
@@ -1483,12 +1483,13 @@ async def get_qr_sheet(session: AsyncSession = SessionDep):
         .cards-grid {{
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 16px;
+            gap: 20px;
         }}
         .card {{
             border: 2px solid #333;
             border-radius: 8px;
-            padding: 12px;
+            padding: 16px;
+            break-inside: avoid;
             page-break-inside: avoid;
         }}
         .card-header {{
@@ -1500,18 +1501,19 @@ async def get_qr_sheet(session: AsyncSession = SessionDep):
             border-bottom: 1px solid #ddd;
         }}
         .vehicle-id {{
-            font-size: 18px;
+            font-size: 22px;
             font-weight: 800;
             font-family: 'Courier New', monospace;
         }}
         .driver-name {{
-            font-size: 14px;
-            color: #444;
+            font-size: 16px;
+            color: #333;
         }}
         .card-stats {{
             display: flex;
-            gap: 12px;
-            margin-bottom: 10px;
+            gap: 16px;
+            margin-bottom: 12px;
+            font-variant-numeric: tabular-nums;
         }}
         .stat {{
             display: flex;
@@ -1519,13 +1521,14 @@ async def get_qr_sheet(session: AsyncSession = SessionDep):
             align-items: center;
         }}
         .stat-value {{
-            font-size: 15px;
+            font-size: 16px;
             font-weight: 700;
         }}
         .stat-label {{
-            font-size: 10px;
-            color: #777;
+            font-size: 11px;
+            color: #555;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
         }}
         .qr-container {{
             display: flex;
@@ -1537,20 +1540,20 @@ async def get_qr_sheet(session: AsyncSession = SessionDep):
             text-align: center;
         }}
         .segment-label {{
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
-            margin-bottom: 4px;
-            color: #333;
+            margin-bottom: 6px;
+            color: #222;
         }}
         .qr-img {{
-            width: 150px;
-            height: 150px;
+            width: 210px;
+            height: 210px;
         }}
         .scan-instruction {{
             text-align: center;
-            font-size: 11px;
-            color: #666;
-            margin-top: 8px;
+            font-size: 13px;
+            color: #444;
+            margin-top: 10px;
             font-style: italic;
         }}
         /* Screen-only styles */
