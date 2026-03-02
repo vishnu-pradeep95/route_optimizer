@@ -165,23 +165,28 @@
 
 .fleet-edit-row td {
   vertical-align: middle;
-  padding-top: var(--space-2);
-  padding-bottom: var(--space-2);
 }
 
-/* Coordinate fields grouped as a vertical stack */
+/* Coordinate fields grouped horizontally to match display row's comma-separated format */
 .fleet-coord-group {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 4px;
 }
 
-/* Inline edit input sizing constraints */
-.fleet-edit-input--id { width: 130px; }
+/* Edit inputs fill their table cell width — responsive instead of fixed px */
+.fleet-edit-input--id,
 .fleet-edit-input--weight,
-.fleet-edit-input--speed { width: 85px; }
-.fleet-edit-input--items { width: 70px; }
-.fleet-edit-input--coord { width: 95px; font-size: 12px; }
+.fleet-edit-input--speed,
+.fleet-edit-input--items {
+  width: 100%;
+  min-width: 60px;
+}
+.fleet-edit-input--coord {
+  width: 100%;
+  min-width: 70px;
+  font-size: 12px;
+}
 
 /* Skeleton loading handled by DaisyUI tw-skeleton classes in FleetManagement.tsx */
 /* Empty state handled by EmptyState component */
