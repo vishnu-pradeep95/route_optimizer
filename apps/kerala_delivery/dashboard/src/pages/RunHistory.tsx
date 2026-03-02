@@ -269,7 +269,7 @@ export function RunHistory() {
                         ) : (
                           <div className="detail-routes">
                             <h4>Routes</h4>
-                            <table className="detail-routes-table">
+                            <table className="tw-table tw-table-sm">
                               <thead>
                                 <tr>
                                   <th>Vehicle</th>
