@@ -21,14 +21,13 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { Truck, Plus, RotateCw, X } from "lucide-react";
+import { Pencil, Truck, Plus, RotateCw, X, Check } from "lucide-react";
 import {
   fetchVehicles,
   createVehicle,
   updateVehicle,
   deleteVehicle,
 } from "../lib/api";
-// Note: updateVehicle is still used by handleReactivate
 import { EmptyState } from "../components/EmptyState";
 import type { Vehicle } from "../types";
 import "./FleetManagement.css";
@@ -110,6 +109,19 @@ function emptyForm(): VehicleFormState {
   };
 }
 
+/** Populate form state from an existing vehicle (for editing). */
+function vehicleToForm(v: Vehicle): VehicleFormState {
+  return {
+    vehicle_id: v.vehicle_id,
+    registration_no: v.registration_no ?? "",
+    vehicle_type: v.vehicle_type,
+    max_weight_kg: String(v.max_weight_kg),
+    max_items: String(v.max_items),
+    depot_latitude: v.depot_latitude !== null ? String(v.depot_latitude) : String(DEFAULT_DEPOT_LAT),
+    depot_longitude: v.depot_longitude !== null ? String(v.depot_longitude) : String(DEFAULT_DEPOT_LNG),
+    speed_limit_kmh: String(v.speed_limit_kmh),
+  };
+}
 
 // --- Component ---
 
@@ -131,6 +143,13 @@ export function FleetManagement() {
   /** Tracks which mutation is in-flight to disable buttons. */
   const [saving, setSaving] = useState(false);
 
+  /**
+   * ID of the vehicle currently being edited inline.
+   * null = no edit in progress. Only one row can be edited at a time
+   * to avoid confusing partial-save states.
+   */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<VehicleFormState>(emptyForm());
 
   // --- Data fetching ---
 
@@ -239,6 +258,48 @@ export function FleetManagement() {
     }
   }, [addForm, loadVehicles]);
 
+  /** Save an inline edit. */
+  const handleUpdate = useCallback(async () => {
+    if (!editingId) return;
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      // --- CRITICAL safety validations (same rules as handleCreate) ---
+      const editSpeed = parseFloat(editForm.speed_limit_kmh);
+      if (!isNaN(editSpeed) && editSpeed > MAX_SPEED_LIMIT_KMH) {
+        setError(`Speed limit cannot exceed ${MAX_SPEED_LIMIT_KMH} km/h (Kerala MVD safety rule).`);
+        setSaving(false);
+        return;
+      }
+      const editWeight = parseFloat(editForm.max_weight_kg);
+      if (!isNaN(editWeight) && (editWeight <= 0 || editWeight > MAX_RATED_PAYLOAD_KG)) {
+        setError(`Max weight must be between 1 and ${MAX_RATED_PAYLOAD_KG} kg (Piaggio rated payload).`);
+        setSaving(false);
+        return;
+      }
+
+      const payload: Record<string, unknown> = {
+        registration_no: editForm.registration_no.trim() || null,
+        vehicle_type: editForm.vehicle_type,
+        max_weight_kg: isNaN(editWeight) ? DEFAULT_MAX_WEIGHT_KG : editWeight,
+        max_items: parseInt(editForm.max_items, 10) || DEFAULT_MAX_ITEMS,
+        depot_latitude: parseFloat(editForm.depot_latitude) || DEFAULT_DEPOT_LAT,
+        depot_longitude: parseFloat(editForm.depot_longitude) || DEFAULT_DEPOT_LNG,
+        speed_limit_kmh: isNaN(editSpeed) ? DEFAULT_SPEED_LIMIT_KMH : editSpeed,
+      };
+
+      const result = await updateVehicle(editingId, payload);
+      setSuccessMsg(result.message);
+      setEditingId(null);
+      await loadVehicles();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update vehicle");
+    } finally {
+      setSaving(false);
+    }
+  }, [editingId, editForm, loadVehicles]);
 
   /**
    * Deactivate a vehicle (soft-delete).
@@ -292,6 +353,18 @@ export function FleetManagement() {
     [loadVehicles]
   );
 
+  /** Start editing a vehicle — populate the edit form from current data. */
+  const startEdit = useCallback((vehicle: Vehicle) => {
+    setEditingId(vehicle.vehicle_id);
+    setEditForm(vehicleToForm(vehicle));
+    // Close the add form to avoid two forms open simultaneously
+    setShowAddForm(false);
+  }, []);
+
+  /** Cancel an in-progress edit. */
+  const cancelEdit = useCallback(() => {
+    setEditingId(null);
+  }, []);
 
   // --- Helpers ---
 
@@ -366,6 +439,7 @@ export function FleetManagement() {
             className="tw-btn tw-btn-sm tw-btn-primary"
             onClick={() => {
               setShowAddForm(!showAddForm);
+              setEditingId(null); // Close any edit when toggling add form
               if (!showAddForm) setAddForm(emptyForm());
             }}
           >
@@ -537,7 +611,101 @@ export function FleetManagement() {
               </tr>
             </thead>
             <tbody>
-              {vehicles.map((v) => (
+              {vehicles.map((v) =>
+                editingId === v.vehicle_id ? (
+                  /* --- Inline edit row --- */
+                  <tr key={v.vehicle_id} className="fleet-edit-row">
+                    {/* Vehicle ID is immutable — show as plain text */}
+                    <td className="tw-font-semibold">{v.vehicle_id}</td>
+                    <td>
+                      <input
+                        type="text"
+                        value={editForm.registration_no}
+                        onChange={handleFieldChange(setEditForm, "registration_no")}
+                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--id"
+                      />
+                    </td>
+                    <td>
+                      <select
+                        value={editForm.vehicle_type}
+                        onChange={handleFieldChange(setEditForm, "vehicle_type")}
+                        className="tw-select tw-select-xs tw-select-bordered"
+                      >
+                        <option value="diesel">Diesel</option>
+                        <option value="electric">Electric</option>
+                        <option value="cng">CNG</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        min={1}
+                        max={MAX_RATED_PAYLOAD_KG}
+                        value={editForm.max_weight_kg}
+                        onChange={handleFieldChange(setEditForm, "max_weight_kg")}
+                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--weight"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        value={editForm.max_items}
+                        onChange={handleFieldChange(setEditForm, "max_items")}
+                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--items"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        min={1}
+                        max={MAX_SPEED_LIMIT_KMH}
+                        value={editForm.speed_limit_kmh}
+                        onChange={handleFieldChange(setEditForm, "speed_limit_kmh")}
+                        className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--speed"
+                      />
+                    </td>
+                    <td>
+                      <div className="fleet-coord-group">
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={editForm.depot_latitude}
+                          onChange={handleFieldChange(setEditForm, "depot_latitude")}
+                          className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--coord"
+                          placeholder="Lat"
+                        />
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={editForm.depot_longitude}
+                          onChange={handleFieldChange(setEditForm, "depot_longitude")}
+                          className="tw-input tw-input-xs tw-input-bordered fleet-edit-input--coord"
+                          placeholder="Lng"
+                        />
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`tw-badge tw-badge-sm ${v.is_active ? 'tw-badge-success' : 'tw-badge-ghost'}`}>
+                        {v.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="fleet-actions">
+                        <button
+                          className="tw-btn tw-btn-xs tw-btn-primary"
+                          onClick={handleUpdate}
+                          disabled={saving}
+                        >
+                          <Check size={16} /> {saving ? "..." : "Save"}
+                        </button>
+                        <button className="tw-btn tw-btn-xs tw-btn-ghost" onClick={cancelEdit}>
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  /* --- Normal display row --- */
                   <tr key={v.vehicle_id}>
                     <td>{v.vehicle_id}</td>
                     <td>{v.registration_no ?? "—"}</td>
@@ -557,6 +725,14 @@ export function FleetManagement() {
                     </td>
                     <td>
                       <div className="fleet-actions">
+                        <button
+                          className="tw-btn tw-btn-xs tw-btn-square tw-btn-ghost"
+                          onClick={() => startEdit(v)}
+                          disabled={saving}
+                          title="Edit vehicle details"
+                        >
+                          <Pencil size={16} />
+                        </button>
                         {v.is_active ? (
                           <button
                             className="tw-btn tw-btn-xs tw-btn-error tw-btn-outline"
@@ -579,7 +755,8 @@ export function FleetManagement() {
                       </div>
                     </td>
                   </tr>
-              ))}
+                )
+              )}
             </tbody>
           </table>
         </div>

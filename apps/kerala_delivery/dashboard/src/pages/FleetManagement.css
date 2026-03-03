@@ -157,5 +157,33 @@
   padding-top: var(--space-1);
 }
 
-/* Skeleton loading handled by DaisyUI tw-skeleton classes in FleetManagement.tsx */
-/* Empty state handled by EmptyState component */
+/* Inline edit row — highlight to distinguish from display rows */
+.fleet-edit-row {
+  background: var(--color-accent-bg) !important;
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+.fleet-edit-row td {
+  vertical-align: middle;
+}
+
+/* Coordinate fields grouped horizontally to match display row's comma-separated format */
+.fleet-coord-group {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+}
+
+/* Edit inputs fill their table cell width — responsive instead of fixed px */
+.fleet-edit-input--id,
+.fleet-edit-input--weight,
+.fleet-edit-input--speed,
+.fleet-edit-input--items {
+  width: 100%;
+  min-width: 60px;
+}
+.fleet-edit-input--coord {
+  width: 100%;
+  min-width: 70px;
+  font-size: 12px;
+}

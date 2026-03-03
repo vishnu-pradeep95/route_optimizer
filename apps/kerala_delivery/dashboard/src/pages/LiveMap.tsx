@@ -216,7 +216,7 @@ export function LiveMap() {
           </div>
           <div className="live-map-canvas">
             <div className="tw-flex tw-items-center tw-justify-center tw-h-full tw-bg-base-200">
-              <div className="tw-text-base-content/30">Loading map...</div>
+              <div className="text-muted-30">Loading map...</div>
             </div>
           </div>
         </div>

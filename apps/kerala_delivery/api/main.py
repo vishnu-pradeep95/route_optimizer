@@ -1024,12 +1024,14 @@ async def upload_and_optimize(
             )
 
         # Step 3: Build fleet and optimize
-        # Try loading fleet from database first; fall back to config if DB is empty
         db_vehicles = await repo.get_active_vehicles(session)
         if db_vehicles:
             fleet = [repo.vehicle_db_to_pydantic(v) for v in db_vehicles]
         else:
-            fleet = _build_fleet()
+            raise HTTPException(
+                status_code=400,
+                detail="No active vehicles configured. Add vehicles in Fleet Management before uploading orders.",
+            )
 
         # Apply monsoon multiplier (June–September) on top of base safety multiplier.
         # Kerala monsoon significantly increases travel times: flooded roads, reduced

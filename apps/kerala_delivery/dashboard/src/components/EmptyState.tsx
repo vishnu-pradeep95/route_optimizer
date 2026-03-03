@@ -32,11 +32,11 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <div className="tw-flex tw-flex-col tw-items-center tw-justify-center tw-py-16 tw-text-center">
-      <Icon size={48} className="tw-text-base-content/30" />
-      <h3 className="tw-text-lg tw-font-semibold tw-text-base-content/70 tw-mt-4">
+      <Icon size={48} className="text-muted-30" />
+      <h3 className="tw-text-lg tw-font-semibold text-muted-60 tw-mt-4">
         {title}
       </h3>
-      <p className="tw-text-sm tw-text-base-content/50 tw-mt-1 tw-max-w-sm">
+      <p className="tw-text-sm text-muted-50 tw-mt-1 tw-max-w-sm">
         {description}
       </p>
       {actionLabel && onAction && (

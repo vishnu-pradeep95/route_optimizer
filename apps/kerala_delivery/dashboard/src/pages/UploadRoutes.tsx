@@ -268,7 +268,7 @@ function DuplicateWarnings({ warnings }: { warnings: DuplicateLocationWarning[] 
                 </li>
               ))}
             </ul>
-            <p className="tw-text-xs tw-text-base-content/60 tw-mt-2">
+            <p className="tw-text-xs text-muted-60 tw-mt-2">
               Different addresses resolving to nearby coordinates may indicate a data entry error.
               If these are intentional (e.g., neighboring buildings), no action is needed.
             </p>
@@ -669,7 +669,7 @@ export function UploadRoutes() {
                     >
                       <h2 className="tw-card-title tw-text-sm tw-gap-2">
                         <span className="tw-badge tw-badge-neutral tw-font-mono">{route.vehicle_id}</span>
-                        <span className="tw-text-base-content/60">{route.driver_name}</span>
+                        <span className="text-muted-60">{route.driver_name}</span>
                       </h2>
                       <div className="tw-flex tw-items-center tw-gap-2">
                         {detail && <StatusBadge status={deriveRouteStatus(detail.stops)} />}

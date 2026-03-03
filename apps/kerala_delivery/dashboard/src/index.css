@@ -230,3 +230,45 @@ table {
   font-variant-numeric: tabular-nums;
 }
 
+/* ── DaisyUI tw- prefix fixes ────────────────────────────────── */
+/* Tailwind 4 prefix(tw) breaks DaisyUI's internal styles for some
+   components. These rules patch the gaps until DaisyUI 5 supports
+   prefixed output natively. */
+
+/* Select: text inherits transparent from DaisyUI internals with prefix */
+.tw-select {
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+/* Buttons: ensure pointer cursor and visible hover feedback */
+.tw-btn {
+  cursor: pointer;
+  transition: filter 150ms ease, transform 150ms ease;
+}
+.tw-btn:hover:not(:disabled) {
+  filter: brightness(0.92);
+  transform: translateY(-1px);
+}
+.tw-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Inputs: ensure text is readable */
+.tw-input,
+.tw-input-bordered {
+  color: var(--color-text-primary);
+}
+
+/* Opacity modifier workaround: tw-text-base-content/60 doesn't work
+   with the tw- prefix. Use explicit classes instead. */
+.text-muted-60 {
+  color: var(--color-text-secondary);
+}
+.text-muted-50 {
+  color: var(--color-text-muted);
+}
+.text-muted-30 {
+  color: #a8a29e; /* stone 400 */
+}
+
