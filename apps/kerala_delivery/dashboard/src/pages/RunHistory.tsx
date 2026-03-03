@@ -134,20 +134,20 @@ export function RunHistory() {
           <h2>Optimization Run History</h2>
         </div>
         <div className="run-history-table-wrapper">
-          <div className="tw-overflow-x-auto">
-            <table className="tw-table tw-table-sm">
+          <div className="tw:overflow-x-auto">
+            <table className="tw:table tw:table-sm">
               {tableHeaders}
               <tbody>
                 {Array.from({ length: 5 }).map((_, r) => (
                   <tr key={r}>
-                    <td><div className="tw-skeleton tw-h-4 tw-w-28" /></td>
-                    <td><div className="tw-skeleton tw-h-4 tw-w-12" /></td>
-                    <td><div className="tw-skeleton tw-h-4 tw-w-12" /></td>
-                    <td><div className="tw-skeleton tw-h-4 tw-w-12" /></td>
-                    <td><div className="tw-skeleton tw-h-4 tw-w-12" /></td>
-                    <td><div className="tw-skeleton tw-h-4 tw-w-16" /></td>
-                    <td><div className="tw-skeleton tw-h-4 tw-w-32" /></td>
-                    <td><div className="tw-skeleton tw-h-4 tw-w-16" /></td>
+                    <td><div className="tw:skeleton tw:h-4 tw:w-28" /></td>
+                    <td><div className="tw:skeleton tw:h-4 tw:w-12" /></td>
+                    <td><div className="tw:skeleton tw:h-4 tw:w-12" /></td>
+                    <td><div className="tw:skeleton tw:h-4 tw:w-12" /></td>
+                    <td><div className="tw:skeleton tw:h-4 tw:w-12" /></td>
+                    <td><div className="tw:skeleton tw:h-4 tw:w-16" /></td>
+                    <td><div className="tw:skeleton tw:h-4 tw:w-32" /></td>
+                    <td><div className="tw:skeleton tw:h-4 tw:w-16" /></td>
                   </tr>
                 ))}
               </tbody>
@@ -194,8 +194,8 @@ export function RunHistory() {
       )}
 
       <div className="run-history-table-wrapper">
-        <div className="tw-overflow-x-auto">
-          <table className="tw-table tw-table-sm">
+        <div className="tw:overflow-x-auto">
+          <table className="tw:table tw:table-sm">
             {tableHeaders}
             <tbody>
               {runs.map((run) => (
@@ -269,7 +269,7 @@ export function RunHistory() {
                         ) : (
                           <div className="detail-routes">
                             <h4>Routes</h4>
-                            <table className="tw-table tw-table-sm">
+                            <table className="tw:table tw:table-sm">
                               <thead>
                                 <tr>
                                   <th>Vehicle</th>

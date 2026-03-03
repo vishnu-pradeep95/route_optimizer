@@ -37,7 +37,7 @@ import "./UploadRoutes.css";
  * 2. Partial success: amber bar with counts + expandable failure detail table
  * 3. Zero success (all fail): failure details, no route cards, clear message
  *
- * Uses DaisyUI 5 components with tw- prefix alongside existing CSS patterns.
+ * Uses DaisyUI 5 components with tw: prefix alongside existing CSS patterns.
  */
 function ImportSummary({ uploadResult }: { uploadResult: UploadResponse }) {
   const [failuresOpen, setFailuresOpen] = useState(false);
@@ -61,9 +61,9 @@ function ImportSummary({ uploadResult }: { uploadResult: UploadResponse }) {
   if (failures.length === 0) {
     return (
       <div className="import-summary">
-        <div className="tw-flex tw-items-center tw-gap-2 tw-py-2 tw-px-3 tw-rounded-lg tw-text-success" style={{ backgroundColor: 'oklch(55% 0.2 145 / 0.1)' }}>
-          <CheckCircle size={18} className="tw-shrink-0" />
-          <span className="tw-text-sm tw-font-medium">All {totalRows} orders geocoded successfully</span>
+        <div className="tw:flex tw:items-center tw:gap-2 tw:py-2 tw:px-3 tw:rounded-lg tw:text-success" style={{ backgroundColor: 'oklch(55% 0.2 145 / 0.1)' }}>
+          <CheckCircle size={18} className="tw:shrink-0" />
+          <span className="tw:text-sm tw:font-medium">All {totalRows} orders geocoded successfully</span>
         </div>
       </div>
     );
@@ -73,8 +73,8 @@ function ImportSummary({ uploadResult }: { uploadResult: UploadResponse }) {
   return (
     <div className="import-summary">
       {/* Summary counts bar */}
-      <div className="tw-alert tw-alert-warning">
-        <svg xmlns="http://www.w3.org/2000/svg" className="tw-h-5 tw-w-5 tw-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div className="tw:alert tw:alert-warning">
+        <svg xmlns="http://www.w3.org/2000/svg" className="tw:h-5 tw:w-5 tw:shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
         </svg>
         <div className="summary-counts">
@@ -94,8 +94,8 @@ function ImportSummary({ uploadResult }: { uploadResult: UploadResponse }) {
 
       {/* Zero-success message */}
       {geocoded === 0 && failures.length > 0 && (
-        <div className="tw-alert tw-alert-error tw-mt-4">
-          <svg xmlns="http://www.w3.org/2000/svg" className="tw-h-5 tw-w-5 tw-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="tw:alert tw:alert-error tw:mt-4">
+          <svg xmlns="http://www.w3.org/2000/svg" className="tw:h-5 tw:w-5 tw:shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span>No orders could be geocoded -- check addresses below</span>
@@ -104,18 +104,18 @@ function ImportSummary({ uploadResult }: { uploadResult: UploadResponse }) {
 
       {/* Expandable failure detail table */}
       {failures.length > 0 && (
-        <div className="tw-collapse tw-collapse-arrow tw-bg-base-200 tw-mt-4">
+        <div className="tw:collapse tw:collapse-arrow tw:bg-base-200 tw:mt-4">
           <input
             type="checkbox"
             checked={failuresOpen}
             onChange={() => setFailuresOpen(!failuresOpen)}
           />
-          <div className="tw-collapse-title tw-font-semibold">
+          <div className="tw:collapse-title tw:font-semibold">
             {failures.length} failed row{failures.length !== 1 ? "s" : ""} -- click to expand
           </div>
-          <div className="tw-collapse-content">
-            <div className="tw-overflow-x-auto">
-              <table className="tw-table tw-table-sm">
+          <div className="tw:collapse-content">
+            <div className="tw:overflow-x-auto">
+              <table className="tw:table tw:table-sm">
                 <thead>
                   <tr>
                     <th>Row</th>
@@ -142,18 +142,18 @@ function ImportSummary({ uploadResult }: { uploadResult: UploadResponse }) {
 
       {/* Warnings section */}
       {warnings.length > 0 && (
-        <div className="tw-collapse tw-collapse-arrow tw-bg-base-100 tw-mt-3 tw-border tw-border-base-300">
+        <div className="tw:collapse tw:collapse-arrow tw:bg-base-100 tw:mt-3 tw:border tw:border-base-300">
           <input
             type="checkbox"
             checked={warningsOpen}
             onChange={() => setWarningsOpen(!warningsOpen)}
           />
-          <div className="tw-collapse-title tw-font-semibold tw-text-sm">
+          <div className="tw:collapse-title tw:font-semibold tw:text-sm">
             {warnings.length} warning{warnings.length !== 1 ? "s" : ""} -- defaults applied
           </div>
-          <div className="tw-collapse-content">
-            <div className="tw-overflow-x-auto">
-              <table className="tw-table tw-table-sm">
+          <div className="tw:collapse-content">
+            <div className="tw:overflow-x-auto">
+              <table className="tw:table tw:table-sm">
                 <thead>
                   <tr>
                     <th>Row</th>
@@ -185,7 +185,7 @@ function ImportSummary({ uploadResult }: { uploadResult: UploadResponse }) {
  * CostSummary — geocoding cost transparency display.
  *
  * Shows cache hits (free) vs API calls with estimated cost.
- * Uses DaisyUI 5 `stat` component with tw- prefix.
+ * Uses DaisyUI 5 `stat` component with tw: prefix.
  * Only renders when at least one address was geocoded.
  */
 function CostSummary({ uploadResult }: { uploadResult: UploadResponse }) {
@@ -201,32 +201,32 @@ function CostSummary({ uploadResult }: { uploadResult: UploadResponse }) {
   // All orders had pre-existing coordinates (no geocoding needed)
   if (hits === 0 && calls === 0 && geocoded > 0) {
     return (
-      <div className="tw-stats tw-stats-horizontal tw-shadow tw-w-full tw-mt-4">
-        <div className="tw-stat">
-          <div className="tw-stat-title">Geocoding</div>
-          <div className="tw-stat-value tw-text-lg tw-text-success">All cached</div>
-          <div className="tw-stat-desc">{geocoded} addresses resolved from cache (no API cost)</div>
+      <div className="tw:stats tw:stats-horizontal tw:shadow tw:w-full tw:mt-4">
+        <div className="tw:stat">
+          <div className="tw:stat-title">Geocoding</div>
+          <div className="tw:stat-value tw:text-lg tw:text-success">All cached</div>
+          <div className="tw:stat-desc">{geocoded} addresses resolved from cache (no API cost)</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="tw-stats tw-stats-vertical lg:tw-stats-horizontal tw-shadow tw-w-full tw-mt-4">
-      <div className="tw-stat">
-        <div className="tw-stat-title">Cache Hits</div>
-        <div className="tw-stat-value tw-text-success">{hits}</div>
-        <div className="tw-stat-desc">Free (from database)</div>
+    <div className="tw:stats tw:stats-vertical lg:tw:stats-horizontal tw:shadow tw:w-full tw:mt-4">
+      <div className="tw:stat">
+        <div className="tw:stat-title">Cache Hits</div>
+        <div className="tw:stat-value tw:text-success">{hits}</div>
+        <div className="tw:stat-desc">Free (from database)</div>
       </div>
-      <div className="tw-stat">
-        <div className="tw-stat-title">API Calls</div>
-        <div className="tw-stat-value">{calls}</div>
-        <div className="tw-stat-desc">~${cost.toFixed(2)} estimated</div>
+      <div className="tw:stat">
+        <div className="tw:stat-title">API Calls</div>
+        <div className="tw:stat-value">{calls}</div>
+        <div className="tw:stat-desc">~${cost.toFixed(2)} estimated</div>
       </div>
       {note && (
-        <div className="tw-stat">
-          <div className="tw-stat-title">Cost Note</div>
-          <div className="tw-stat-desc tw-text-sm">{note}</div>
+        <div className="tw:stat">
+          <div className="tw:stat-title">Cost Note</div>
+          <div className="tw:stat-desc tw:text-sm">{note}</div>
         </div>
       )}
     </div>
@@ -237,16 +237,16 @@ function CostSummary({ uploadResult }: { uploadResult: UploadResponse }) {
  * DuplicateWarnings — alerts for orders with suspiciously close GPS coordinates.
  *
  * Non-blocking: shown alongside results, does not prevent route display.
- * Uses DaisyUI 5 `alert` + `collapse` components with tw- prefix.
+ * Uses DaisyUI 5 `alert` + `collapse` components with tw: prefix.
  * Each cluster is expandable showing order IDs, addresses, and distance.
  */
 function DuplicateWarnings({ warnings }: { warnings: DuplicateLocationWarning[] }) {
   if (!warnings || warnings.length === 0) return null;
 
   return (
-    <div className="tw-mt-4">
-      <div role="alert" className="tw-alert tw-alert-warning">
-        <svg xmlns="http://www.w3.org/2000/svg" className="tw-h-5 tw-w-5 tw-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <div className="tw:mt-4">
+      <div role="alert" className="tw:alert tw:alert-warning">
+        <svg xmlns="http://www.w3.org/2000/svg" className="tw:h-5 tw:w-5 tw:shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
         </svg>
         <span>
@@ -255,20 +255,20 @@ function DuplicateWarnings({ warnings }: { warnings: DuplicateLocationWarning[] 
         </span>
       </div>
       {warnings.map((cluster, idx) => (
-        <div key={idx} className="tw-collapse tw-collapse-arrow tw-bg-base-200 tw-mt-2">
+        <div key={idx} className="tw:collapse tw:collapse-arrow tw:bg-base-200 tw:mt-2">
           <input type="checkbox" defaultChecked />
-          <div className="tw-collapse-title tw-font-semibold">
+          <div className="tw:collapse-title tw:font-semibold">
             Orders {cluster.order_ids.join(", ")} — within {cluster.max_distance_m.toFixed(0)}m of each other
           </div>
-          <div className="tw-collapse-content">
-            <ul className="tw-list-disc tw-pl-4 tw-space-y-1">
+          <div className="tw:collapse-content">
+            <ul className="tw:list-disc tw:pl-4 tw:space-y-1">
               {cluster.order_ids.map((id, i) => (
                 <li key={id}>
                   <strong>{id}</strong>: {cluster.addresses[i]}
                 </li>
               ))}
             </ul>
-            <p className="tw-text-xs text-muted-60 tw-mt-2">
+            <p className="tw:text-xs text-muted-60 tw:mt-2">
               Different addresses resolving to nearby coordinates may indicate a data entry error.
               If these are intentional (e.g., neighboring buildings), no action is needed.
             </p>
@@ -591,45 +591,45 @@ export function UploadRoutes() {
               {/* Summary Bar */}
               <div className="results-header">
                 <div>
-                  <h2 className="tw-text-xl tw-font-bold tw-text-base-content tw-mb-3">Routes Generated</h2>
+                  <h2 className="tw:text-xl tw:font-bold tw:text-base-content tw:mb-3">Routes Generated</h2>
                   {uploadResult ? (
-                    <div className="tw-stats tw-stats-horizontal tw-shadow tw-bg-base-100">
-                      <div className="tw-stat tw-py-2 tw-px-4">
-                        <div className="tw-stat-title tw-text-xs">Orders</div>
-                        <div className="tw-stat-value tw-text-lg numeric">{uploadResult.orders_assigned}</div>
+                    <div className="tw:stats tw:stats-horizontal tw:shadow tw:bg-base-100">
+                      <div className="tw:stat tw:py-2 tw:px-4">
+                        <div className="tw:stat-title tw:text-xs">Orders</div>
+                        <div className="tw:stat-value tw:text-lg numeric">{uploadResult.orders_assigned}</div>
                       </div>
-                      <div className="tw-stat tw-py-2 tw-px-4">
-                        <div className="tw-stat-title tw-text-xs">Vehicles</div>
-                        <div className="tw-stat-value tw-text-lg numeric">{uploadResult.vehicles_used}</div>
+                      <div className="tw:stat tw:py-2 tw:px-4">
+                        <div className="tw:stat-title tw:text-xs">Vehicles</div>
+                        <div className="tw:stat-value tw:text-lg numeric">{uploadResult.vehicles_used}</div>
                       </div>
                       {uploadResult.orders_unassigned > 0 && (
-                        <div className="tw-stat tw-py-2 tw-px-4">
-                          <div className="tw-stat-title tw-text-xs">Unassigned</div>
-                          <div className="tw-stat-value tw-text-lg tw-text-error numeric">{uploadResult.orders_unassigned}</div>
+                        <div className="tw:stat tw:py-2 tw:px-4">
+                          <div className="tw:stat-title tw:text-xs">Unassigned</div>
+                          <div className="tw:stat-value tw:text-lg tw:text-error numeric">{uploadResult.orders_unassigned}</div>
                         </div>
                       )}
-                      <div className="tw-stat tw-py-2 tw-px-4">
-                        <div className="tw-stat-title tw-text-xs">Solve Time</div>
-                        <div className="tw-stat-value tw-text-lg numeric">{uploadResult.optimization_time_ms.toFixed(0)} ms</div>
+                      <div className="tw:stat tw:py-2 tw:px-4">
+                        <div className="tw:stat-title tw:text-xs">Solve Time</div>
+                        <div className="tw:stat-value tw:text-lg numeric">{uploadResult.optimization_time_ms.toFixed(0)} ms</div>
                       </div>
                     </div>
                   ) : routes.length > 0 && (
-                    <div className="tw-stats tw-stats-horizontal tw-shadow tw-bg-base-100">
-                      <div className="tw-stat tw-py-2 tw-px-4">
-                        <div className="tw-stat-title tw-text-xs">Stops</div>
-                        <div className="tw-stat-value tw-text-lg numeric">{routes.reduce((s, r) => s + r.total_stops, 0)}</div>
+                    <div className="tw:stats tw:stats-horizontal tw:shadow tw:bg-base-100">
+                      <div className="tw:stat tw:py-2 tw:px-4">
+                        <div className="tw:stat-title tw:text-xs">Stops</div>
+                        <div className="tw:stat-value tw:text-lg numeric">{routes.reduce((s, r) => s + r.total_stops, 0)}</div>
                       </div>
-                      <div className="tw-stat tw-py-2 tw-px-4">
-                        <div className="tw-stat-title tw-text-xs">Vehicles</div>
-                        <div className="tw-stat-value tw-text-lg numeric">{routes.length}</div>
+                      <div className="tw:stat tw:py-2 tw:px-4">
+                        <div className="tw:stat-title tw:text-xs">Vehicles</div>
+                        <div className="tw:stat-value tw:text-lg numeric">{routes.length}</div>
                       </div>
-                      <div className="tw-stat tw-py-2 tw-px-4">
-                        <div className="tw-stat-title tw-text-xs">Distance</div>
-                        <div className="tw-stat-value tw-text-lg numeric">{routes.reduce((s, r) => s + r.total_distance_km, 0).toFixed(1)} km</div>
+                      <div className="tw:stat tw:py-2 tw:px-4">
+                        <div className="tw:stat-title tw:text-xs">Distance</div>
+                        <div className="tw:stat-value tw:text-lg numeric">{routes.reduce((s, r) => s + r.total_distance_km, 0).toFixed(1)} km</div>
                       </div>
-                      <div className="tw-stat tw-py-2 tw-px-4">
-                        <div className="tw-stat-title tw-text-xs">Weight</div>
-                        <div className="tw-stat-value tw-text-lg numeric">{routes.reduce((s, r) => s + r.total_weight_kg, 0).toFixed(1)} kg</div>
+                      <div className="tw:stat tw:py-2 tw:px-4">
+                        <div className="tw:stat-title tw:text-xs">Weight</div>
+                        <div className="tw:stat-value tw:text-lg numeric">{routes.reduce((s, r) => s + r.total_weight_kg, 0).toFixed(1)} kg</div>
                       </div>
                     </div>
                   )}
@@ -660,23 +660,23 @@ export function UploadRoutes() {
               return (
                 <div
                   key={route.vehicle_id}
-                  className="tw-card tw-bg-base-100 tw-shadow-sm tw-border tw-border-base-300"
+                  className="tw:card tw:bg-base-100 tw:shadow-sm tw:border tw:border-base-300"
                 >
-                  <div className="tw-card-body tw-p-4">
+                  <div className="tw:card-body tw:p-4">
                     <div
-                      className="tw-flex tw-items-center tw-justify-between tw-cursor-pointer"
+                      className="tw:flex tw:items-center tw:justify-between tw:cursor-pointer"
                       onClick={() => toggleVehicle(route.vehicle_id)}
                     >
-                      <h2 className="tw-card-title tw-text-sm tw-gap-2">
-                        <span className="tw-badge tw-badge-neutral tw-font-mono">{route.vehicle_id}</span>
+                      <h2 className="tw:card-title tw:text-sm tw:gap-2">
+                        <span className="tw:badge tw:badge-neutral tw:font-mono">{route.vehicle_id}</span>
                         <span className="text-muted-60">{route.driver_name}</span>
                       </h2>
-                      <div className="tw-flex tw-items-center tw-gap-2">
+                      <div className="tw:flex tw:items-center tw:gap-2">
                         {detail && <StatusBadge status={deriveRouteStatus(detail.stops)} />}
                         <span className={`expand-arrow ${isExpanded ? "open" : ""}`}>▼</span>
                       </div>
                     </div>
-                    <div className="tw-flex tw-gap-4 tw-mt-2">
+                    <div className="tw:flex tw:gap-4 tw:mt-2">
                       <span className="numeric"><strong>{route.total_stops}</strong> stops</span>
                       <span className="numeric"><strong>{route.total_distance_km}</strong> km</span>
                       <span className="numeric"><strong>{Math.round(route.total_duration_minutes)}</strong> min</span>
@@ -685,7 +685,7 @@ export function UploadRoutes() {
 
                     {/* Expanded: QR codes + stop list */}
                     {isExpanded && (
-                      <div className="tw-mt-4 tw-border-t tw-border-base-300 tw-pt-4">
+                      <div className="tw:mt-4 tw:border-t tw:border-base-300 tw:pt-4">
                         {/* QR Codes */}
                         {vehicleQr && (
                           <div className="qr-section">

@@ -2,7 +2,7 @@
  * EmptyState -- meaningful empty state displayed when a page has no data.
  *
  * Per CONTEXT.md: lucide icon + descriptive message + primary action button.
- * Uses DaisyUI Tailwind classes with tw- prefix for consistent styling.
+ * Uses DaisyUI Tailwind classes with tw: prefix for consistent styling.
  *
  * Usage:
  *   <EmptyState
@@ -31,18 +31,18 @@ export function EmptyState({
   onAction,
 }: EmptyStateProps) {
   return (
-    <div className="tw-flex tw-flex-col tw-items-center tw-justify-center tw-py-16 tw-text-center">
+    <div className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:py-16 tw:text-center">
       <Icon size={48} className="text-muted-30" />
-      <h3 className="tw-text-lg tw-font-semibold text-muted-60 tw-mt-4">
+      <h3 className="tw:text-lg tw:font-semibold text-muted-60 tw:mt-4">
         {title}
       </h3>
-      <p className="tw-text-sm text-muted-50 tw-mt-1 tw-max-w-sm">
+      <p className="tw:text-sm text-muted-50 tw:mt-1 tw:max-w-sm">
         {description}
       </p>
       {actionLabel && onAction && (
         <button
           type="button"
-          className="tw-btn tw-btn-primary tw-mt-4"
+          className="tw:btn tw:btn-primary tw:mt-4"
           onClick={onAction}
         >
           {actionLabel}

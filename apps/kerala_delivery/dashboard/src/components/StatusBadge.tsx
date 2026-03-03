@@ -2,9 +2,9 @@
  * StatusBadge -- color-coded status indicator using DaisyUI badge.
  *
  * Maps status strings to DaisyUI semantic badge classes:
- * - delivered/completed -> tw-badge-success (green)
- * - pending/running -> tw-badge-warning (amber)
- * - failed -> tw-badge-error (red)
+ * - delivered/completed -> tw:badge-success (green)
+ * - pending/running -> tw:badge-warning (amber)
+ * - failed -> tw:badge-error (red)
  *
  * Also exports deriveRouteStatus() for computing route-level status
  * from individual stop statuses (used by UploadRoutes route cards).
@@ -14,11 +14,11 @@ import type { RouteStop } from "../types";
 type BadgeStatus = "pending" | "delivered" | "failed" | "completed" | "running";
 
 const BADGE_CLASSES: Record<BadgeStatus, string> = {
-  delivered: "tw-badge-success",
-  completed: "tw-badge-success",
-  pending: "tw-badge-warning",
-  running: "tw-badge-warning",
-  failed: "tw-badge-error",
+  delivered: "tw:badge-success",
+  completed: "tw:badge-success",
+  pending: "tw:badge-warning",
+  running: "tw:badge-warning",
+  failed: "tw:badge-error",
 };
 
 const BADGE_LABELS: Record<BadgeStatus, string> = {
@@ -30,10 +30,10 @@ const BADGE_LABELS: Record<BadgeStatus, string> = {
 };
 
 export function StatusBadge({ status }: { status: BadgeStatus }) {
-  const badgeClass = BADGE_CLASSES[status] ?? "tw-badge-ghost";
+  const badgeClass = BADGE_CLASSES[status] ?? "tw:badge-ghost";
   const label = BADGE_LABELS[status] ?? status;
   return (
-    <span className={`tw-badge tw-badge-sm ${badgeClass}`}>{label}</span>
+    <span className={`tw-badge tw:badge-sm ${badgeClass}`}>{label}</span>
   );
 }
 

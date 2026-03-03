@@ -188,8 +188,8 @@ export function LiveMap() {
         <div className="stats-bar">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="stat-card" style={{ borderLeftColor: 'var(--color-border)' }}>
-              <div className="tw-skeleton tw-h-8 tw-w-12 tw-mb-1" />
-              <div className="tw-skeleton tw-h-3 tw-w-20" />
+              <div className="tw:skeleton tw:h-8 tw:w-12 tw:mb-1" />
+              <div className="tw:skeleton tw:h-3 tw:w-20" />
             </div>
           ))}
         </div>
@@ -198,16 +198,16 @@ export function LiveMap() {
           <div className="live-map-sidebar">
             <div className="vehicle-list">
               <div className="vehicle-list-header">
-                <div className="tw-skeleton tw-h-5 tw-w-20" />
+                <div className="tw:skeleton tw:h-5 tw:w-20" />
               </div>
               <div className="vehicle-list-items">
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="tw-p-3 tw-border-b tw-border-base-300">
-                    <div className="tw-skeleton tw-h-4 tw-w-24 tw-mb-2" />
-                    <div className="tw-skeleton tw-h-3 tw-w-32 tw-mb-2" />
-                    <div className="tw-flex tw-gap-2">
-                      <div className="tw-skeleton tw-h-3 tw-w-16" />
-                      <div className="tw-skeleton tw-h-3 tw-w-16" />
+                  <div key={i} className="tw:p-3 tw:border-b tw:border-base-300">
+                    <div className="tw:skeleton tw:h-4 tw:w-24 tw:mb-2" />
+                    <div className="tw:skeleton tw:h-3 tw:w-32 tw:mb-2" />
+                    <div className="tw:flex tw:gap-2">
+                      <div className="tw:skeleton tw:h-3 tw:w-16" />
+                      <div className="tw:skeleton tw:h-3 tw:w-16" />
                     </div>
                   </div>
                 ))}
@@ -215,7 +215,7 @@ export function LiveMap() {
             </div>
           </div>
           <div className="live-map-canvas">
-            <div className="tw-flex tw-items-center tw-justify-center tw-h-full tw-bg-base-200">
+            <div className="tw:flex tw:items-center tw:justify-center tw:h-full tw:bg-base-200">
               <div className="text-muted-30">Loading map...</div>
             </div>
           </div>
@@ -227,7 +227,7 @@ export function LiveMap() {
   // Empty state when no active routes exist
   if (routes.length === 0) {
     return (
-      <div className="live-map-page tw-flex tw-items-center tw-justify-center">
+      <div className="live-map-page tw:flex tw:items-center tw:justify-center">
         <EmptyState
           icon={MapPin}
           title="No active routes"
@@ -242,7 +242,7 @@ export function LiveMap() {
       {/* Error banner — non-blocking, shown above content */}
       {error && (
         <div className="live-map-error">
-          <AlertTriangle size={16} className="tw-inline tw-mr-1" />
+          <AlertTriangle size={16} className="tw:inline tw:mr-1" />
           <span>{error}</span>
           <button onClick={loadRouteData}>Retry</button>
         </div>

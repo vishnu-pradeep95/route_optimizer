@@ -126,11 +126,11 @@ function App() {
   );
 
   return (
-    <div className="tw-drawer">
-      <input id="mobile-drawer" type="checkbox" className="tw-drawer-toggle" />
+    <div className="tw:drawer">
+      <input id="mobile-drawer" type="checkbox" className="tw:drawer-toggle" />
 
       {/* Drawer content -- everything visible normally */}
-      <div className="tw-drawer-content">
+      <div className="tw:drawer-content">
         {/* Desktop/Tablet sidebar -- hidden on mobile via CSS */}
         <aside className="app-sidebar">
           {/* Brand -- logo area at top of sidebar */}
@@ -165,20 +165,20 @@ function App() {
       </div>
 
       {/* Mobile drawer side panel -- slides in from left on mobile */}
-      <div className="tw-drawer-side tw-z-[200]">
-        <label htmlFor="mobile-drawer" aria-label="Close menu" className="tw-drawer-overlay" />
-        <nav className="tw-menu tw-bg-base-200 tw-min-h-full tw-w-64 tw-p-4">
+      <div className="tw:drawer-side tw:z-[200]">
+        <label htmlFor="mobile-drawer" aria-label="Close menu" className="tw:drawer-overlay" />
+        <nav className="tw:menu tw:bg-base-200 tw:min-h-full tw:w-64 tw:p-4">
           {/* Drawer brand */}
-          <div className="tw-mb-4 tw-flex tw-items-center tw-gap-2 tw-px-2">
+          <div className="tw:mb-4 tw:flex tw:items-center tw:gap-2 tw:px-2">
             <Fuel size={22} />
-            <span className="tw-font-bold">Kerala LPG</span>
+            <span className="tw:font-bold">Kerala LPG</span>
           </div>
 
           {/* Drawer nav items */}
           {NAV_ITEMS.map(({ page, icon: Icon, label }) => (
             <li key={page}>
               <button
-                className={activePage === page ? "tw-active" : ""}
+                className={activePage === page ? "tw:active" : ""}
                 onClick={() => {
                   setActivePage(page);
                   closeDrawer();
@@ -190,7 +190,7 @@ function App() {
           ))}
 
           {/* Drawer health indicator */}
-          <div className="tw-mt-auto tw-pt-4 tw-border-t tw-border-base-300">
+          <div className="tw:mt-auto tw:pt-4 tw:border-t tw:border-base-300">
             {renderHealth()}
           </div>
         </nav>

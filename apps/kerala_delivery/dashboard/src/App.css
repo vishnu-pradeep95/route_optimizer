@@ -73,7 +73,7 @@
 @media (min-width: 768px) {
   /* The tw-drawer-content holds both sidebar and main.
    * Apply grid here so sidebar + main are in a 2-column grid. */
-  .tw-drawer-content {
+  .tw\:drawer-content {
     display: grid;
     grid-template-columns: var(--sidebar-collapsed) 1fr;
     height: 100vh;
@@ -114,7 +114,7 @@
  */
 
 @media (min-width: 1280px) {
-  .tw-drawer-content {
+  .tw\:drawer-content {
     grid-template-columns: var(--sidebar-expanded) 1fr;
   }
 
