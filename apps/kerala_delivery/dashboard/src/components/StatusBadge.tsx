@@ -33,7 +33,7 @@ export function StatusBadge({ status }: { status: BadgeStatus }) {
   const badgeClass = BADGE_CLASSES[status] ?? "tw:badge-ghost";
   const label = BADGE_LABELS[status] ?? status;
   return (
-    <span className={`tw-badge tw:badge-sm ${badgeClass}`}>{label}</span>
+    <span className={`tw:badge tw:badge-sm ${badgeClass}`}>{label}</span>
   );
 }
 

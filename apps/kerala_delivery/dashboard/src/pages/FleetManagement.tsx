@@ -685,7 +685,7 @@ export function FleetManagement() {
                       </div>
                     </td>
                     <td>
-                      <span className={`tw-badge tw:badge-sm ${v.is_active ? 'tw:badge-success' : 'tw:badge-ghost'}`}>
+                      <span className={`tw:badge tw:badge-sm ${v.is_active ? 'tw:badge-success' : 'tw:badge-ghost'}`}>
                         {v.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
@@ -719,7 +719,7 @@ export function FleetManagement() {
                       {formatCoord(v.depot_latitude)}, {formatCoord(v.depot_longitude)}
                     </td>
                     <td>
-                      <span className={`tw-badge tw:badge-sm ${v.is_active ? 'tw:badge-success' : 'tw:badge-ghost'}`}>
+                      <span className={`tw:badge tw:badge-sm ${v.is_active ? 'tw:badge-success' : 'tw:badge-ghost'}`}>
                         {v.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
