@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish & Reliability
-status: unknown
-last_updated: "2026-03-03T20:58:09.963Z"
+status: completed
+last_updated: "2026-03-03T21:15:42.240Z"
 progress:
   total_phases: 7
   completed_phases: 7
@@ -15,26 +15,20 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-01)
+See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Phase 7 - Driver PWA Refresh (IN PROGRESS)
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 7 of 7 (Driver PWA Refresh)
-Plan: 2 of 3 complete
-Status: Executing plan 07-03
-Last activity: 2026-03-03 -- Plan 07-02 complete (hero card + fail dialog + Call Office FAB)
-
-Progress: [##############......] 67% (2 of 3 plans complete in phase 7)
+Milestone v1.1 complete. All 7 phases (24 plans) shipped.
+Next: `/gsd:new-milestone` to define v1.2 or v2.0.
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 17 (8 v1.0 + 9 v1.1)
-- Average duration: --
-- Total execution time: --
+- Total plans completed: 24 (8 v1.0 + 16 v1.1)
 
 **By Phase:**
 
@@ -46,79 +40,26 @@ Progress: [##############......] 67% (2 of 3 plans complete in phase 7)
 | 4. Geocoding Cache | 2/2 | 7min | 3.5min |
 | 5. Geocoding Enhancements | 2/2 | 9min | 4.5min |
 | 6. Dashboard UI Overhaul | 9/9 | 15min | 1.7min |
-| 7. Driver PWA Refresh | 2/3 | 10min | 5min |
-
-**Recent Trend:**
-- Last 5 plans: --
-- Trend: --
-
-*Updated after each plan completion*
+| 7. Driver PWA Refresh | 3/3 | 10min | 5min |
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Carried from v1.0:
-
-- [Init]: Tailwind CSS + DaisyUI chosen over React component libraries
-- [Init]: Fix geocoding before UI overhaul -- data integrity before cosmetics
-- [Init]: Tailwind prefix(tw) mandatory to prevent CSS variable collision
-- [Phase 01]: oklch color format for DaisyUI theme -- perceptually uniform
-- [Phase 02]: CSP allows unsafe-inline styles (required for Leaflet)
-- [Phase 03]: Zero-success returns structured HTTP 200 (not HTTPException 400)
-- [Phase 04]: normalize_address() is single source of truth -- stdlib only (unicodedata, re), strips periods/commas, preserves slashes/hyphens/parentheses
-- [Phase 04]: GoogleGeocoder stripped to pure API caller -- all caching delegated to CachedGeocoder decorator
-- [Phase 04]: Upload endpoint uses CachedGeocoder for unified cache-then-API flow with cache-only fallback when no API key
-- [Phase 05]: Default confidence 0.4 (approximate tier) when geocode_confidence is None -- conservative for GPS-provided coordinates
-- [Phase 05]: Mixed-confidence duplicate detection pairs use max(threshold_a, threshold_b) -- wider threshold dominates uncertainty
-- [Phase 05]: Per-order geocode source tracked via CachedGeocoder.stats snapshot before/after each geocode call
-- [Phase 05]: All new UploadResponse fields optional (?) for backward compatibility with pre-Phase-5 backends
-- [Phase 05]: CostSummary hides entirely when cache_hits and api_calls are both 0 (no geocoding happened)
-- [Phase 05]: DuplicateWarnings clusters default to expanded (defaultChecked) for immediate visibility
-- [Phase 06]: lucide-react for SVG nav icons -- consistent stroke width, tree-shakeable, React-native components
-- [Phase 06]: CSS-only responsive sidebar (no JS matchMedia) -- mobile-first min-width breakpoints at 768px and 1280px
-- [Phase 06]: Sidebar in CSS Grid flow (not position:fixed) -- simpler layout, no grid-column workaround on main
-- [Phase 06]: DaisyUI drawer for mobile nav -- native checkbox toggle, zero JS state management
-- [Phase 06]: EmptyState icon prop typed as React.ComponentType<{size?, className?}> -- compatible with all lucide-react icons
-- [Phase 06]: StatusBadge delivered label is "Complete" (not "Delivered") for user-friendly route context
-- [Phase 06]: deriveRouteStatus prioritizes failed > all-delivered > pending -- issues surface first
-- [Phase 06]: 210px QR size chosen as midpoint of 200-220px range for arm-length scanning in three-wheeler cabs
-- [Phase 06]: Print CSS uses both break-inside: avoid (modern) and page-break-inside: avoid (legacy) for cross-browser support
-- [Phase 06]: Darker text colors for print contrast (#777->#555, #666->#444) -- thermal printers lose lighter grays
-- [Phase 06]: LiveMap skeleton mirrors 3-panel layout (stats bar + vehicle list + map placeholder) for perceived performance
-- [Phase 06]: StatsBar keeps accent-border card design (not migrated to tw-stat) -- visual consistency with industrial aesthetic
-- [Phase 06]: FleetManagement uses tw-table-sm for compact row density -- ops need many vehicles visible at once
-- [Phase 06]: FleetManagement empty state uses EmptyState component with Add Vehicle CTA for zero-data onboarding
-- [Phase 06]: CheckCircle from lucide-react (18px) replaces inline SVG checkmark for consistent icon system
-- [Phase 06]: tw-bg-success/10 subtle tint replaces tw-alert for routine success states (less visually dominant)
-- [Phase 06]: DaisyUI tw-table-sm for detail routes table ensures identical padding/font to main table
-- [Phase 06]: tw-input-xs for edit row inputs in tw-table-sm -- fits row height without dimension mismatch
-- [Phase 06]: 16px lucide-react icons (up from 14px) -- clearly visible as icons in tw-btn-xs buttons
-- [Phase 06]: tw-btn-square on icon-only Pencil button -- equal width/height for proper icon sizing
-- [Phase 06]: 100% width edit inputs with min-width -- responsive to column instead of fixed pixel overflow
-- [Phase 07]: Two-tier text hierarchy only: primary #F0EFFB and secondary #A3A2BC -- eliminated #4E4D65 muted tier
-- [Phase 07]: Saffron accent reserved for large elements only (buttons, progress segments) -- white for body text
-- [Phase 07]: Navigate button 66px, Done/Fail buttons 60px -- enlarged from 56px/48px
-- [Phase 07]: checkAllDone() extracted from deleted updateSummary() to preserve route completion banner
-- [Phase 07]: Hero card + compact list architecture -- only next pending stop gets action buttons, rest are read-only compact cards
-- [Phase 07]: Toast-then-advance pattern: 1.5s toast display before re-render auto-advances next stop into hero
-- [Phase 07]: Native `<dialog>` with showModal() replaces browser confirm() for fail action -- dark-themed, accessible
-- [Phase 07]: FAB and dialog HTML placed before main `<script>` block for correct DOM availability
+See `.planning/milestones/v1.1-ROADMAP.md` for full v1.1 phase details.
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
-- [Phase 5]: Confidence-weighted duplicate detection thresholds (10m/25m/100m) are estimates -- validate against actual geocode_cache table distribution of location_type values.
-- [Phase 7]: Physical Android device testing required for outdoor contrast validation -- browser DevTools cannot replicate Kerala sunlight conditions.
-- [Research] RESOLVED: google_cache.json has 27 entries -- migrate_file_cache.py script created; run before archiving.
-- [Research]: DaisyUI oklch vs existing hex #D97706 amber may not be visually identical -- plan one design review after first page migration.
+- Confidence-weighted duplicate detection thresholds (10m/25m/100m) are estimates -- validate against actual geocode_cache table distribution of location_type values.
+- Physical Android device testing required for outdoor contrast validation -- browser DevTools cannot replicate Kerala sunlight conditions.
 
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 07-02-PLAN.md (hero card + fail dialog + Call Office FAB)
+Stopped at: Milestone v1.1 archived
 Resume file: None

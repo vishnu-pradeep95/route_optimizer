@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A route optimization system for LPG cylinder delivery in Kerala's Vatakara region. An office employee uploads CDCMS export CSVs, the system geocodes addresses, optimizes delivery routes across a 13-vehicle fleet (Piaggio Ape Xtra LDX), and generates QR codes/links that drivers open on their phones via a PWA for turn-by-turn navigation.
+A route optimization system for LPG cylinder delivery in Kerala's Vatakara region. An office employee uploads CDCMS export CSVs, the system geocodes addresses, optimizes delivery routes across a 13-vehicle fleet (Piaggio Ape Xtra LDX), and generates QR codes/links that drivers open on their phones via a PWA for turn-by-turn navigation. The dashboard provides a professional logistics SaaS interface with skeleton loading, status badges, and responsive layout; the driver PWA is optimized for outdoor readability with WCAG AAA contrast and large touch targets.
 
 ## Core Value
 
@@ -28,14 +28,25 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ Import summary UI (success/partial/zero states) — v1.0
 - ✓ Depot coordinates audited (Vatakara 11.62°N throughout pipeline) — v1.0
 - ✓ CSV row-level validation before geocoding — v1.0
+- ✓ Geocoding cache normalization — single address key across all cache layers — v1.1
+- ✓ DB-only geocoding cache — file-based JSON cache deprecated — v1.1
+- ✓ Duplicate location detection — warnings for orders within 15m proximity — v1.1
+- ✓ Geocoding cost tracking — cache hits vs API calls with estimated cost — v1.1
+- ✓ Dashboard UI overhaul — DaisyUI components, lucide-react icons, responsive sidebar — v1.1
+- ✓ Skeleton loading and empty states on all dashboard pages — v1.1
+- ✓ Tabular-number font variant for numeric column alignment — v1.1
+- ✓ Color-coded status badges (green/amber/red) — v1.1
+- ✓ QR sheet print optimization (210px codes, cross-browser CSS fragmentation) — v1.1
+- ✓ Driver PWA hero card next-stop architecture — v1.1
+- ✓ Delivery progress bar with header stats — v1.1
+- ✓ Refresh button with "Last updated" timestamp — v1.1
+- ✓ 60px+ touch targets for all primary driver actions — v1.1
+- ✓ WCAG AAA contrast ratio for outdoor readability — v1.1
+- ✓ Offline route data persistence — v1.1
 
 ### Active
 
-- [ ] Dashboard UI overhaul — clean, minimal, professional logistics SaaS aesthetic
-- [ ] Driver PWA refresh — outdoor readability, simplified next-stop flow, better offline
-- [ ] Geocoding cache normalization fix — inconsistent DB vs file cache causing duplicate locations
-- [ ] Duplicate location detection — flag orders resolving to same GPS coordinates
-- [ ] Geocoding cost tracking — cache hit vs API call indicator per address
+(None — awaiting next milestone definition)
 
 ### Out of Scope
 
@@ -44,21 +55,14 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - Multi-tenant/multi-region — Vatakara-only for now
 - Payment processing — handled outside this system
 - Customer-facing tracking — drivers and office staff only
-- Elegant error handling across pipeline — deferred to future milestone
-- Code quality cleanup / refactoring — deferred to future milestone
-- Property-based unit tests / coverage gate — deferred to future milestone
-- Streamlined installation docs / README — deferred to future milestone
-
-## Current Milestone: v1.1 Polish & Reliability
-
-**Goal:** Transform the prototype-feeling UI into a professional logistics product and fix geocoding data integrity issues that confuse drivers.
-
-**Target features:**
-- Dashboard UI overhaul — clean, minimal, professional logistics SaaS aesthetic with DaisyUI
-- Driver PWA refresh — high-contrast outdoor readability, simplified next-stop flow, better offline behavior
-- Geocoding cache normalization — fix DB vs file cache inconsistency causing duplicate map locations
-- Duplicate location detection — flag orders resolving to same GPS coordinates
-- Geocoding cost tracking — cache hit vs API call indicator per address
+- Drag-and-drop route reordering — undermines VROOM optimizer
+- Turn-by-turn navigation in-app — Google Maps handles this
+- Photo proof-of-delivery — camera API complexity, upload on spotty Kerala networks
+- Countdown timers for delivery windows — prohibited for Kerala MVD compliance
+- Pre-cached map tiles — 50-100MB+ storage, unpredictable on low-memory Android
+- Fuzzy address matching (Levenshtein) — false positives assign wrong coordinates
+- Multiple geocoding provider fallback — mixing providers creates inconsistency
+- Reverse geocoding for telemetry pings — $45K/year at scale
 
 ## Context
 
@@ -66,8 +70,8 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v1.0 shipped — foundation, security, and data integrity complete. 380 tests passing. 16.6k Python LOC, 3.3k TypeScript LOC. Starting v1.1 Polish & Reliability.
-- **Known issues**: Geocoding cache normalization inconsistency causes duplicate map locations; UI needs professional redesign
+- **Current state**: v1.1 shipped — geocoding integrity, dashboard UI overhaul, and driver PWA refresh complete. 17.5k Python LOC, 3.6k TypeScript LOC, 1.8k HTML/JS LOC.
+- **Known tech debt**: Stale docstring in cache.py referencing removed SHA-256; `save_driver_verified()` implemented but unwired; confidence-weighted duplicate thresholds are estimates needing real-world validation
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
 ## Constraints
@@ -83,9 +87,17 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Tailwind CSS + DaisyUI for UI | Clean logistics SaaS look without React component library lock-in; works for both server-rendered and React pages | — Pending |
-| Playwright + Context7 MCPs installed | Visual feedback during UI development + live docs for Leaflet/Tailwind APIs | — Pending |
-| Fix geocoding before UI overhaul | Silent order drops are data-integrity bugs; UI polish on broken data is wasted effort | — Pending |
+| Tailwind CSS + DaisyUI for UI | Clean logistics SaaS look without React component library lock-in | ✓ Good — consistent across dashboard and PWA |
+| Playwright + Context7 MCPs installed | Visual feedback during UI development + live docs | ✓ Good — caught bugs in visual verification |
+| Fix geocoding before UI overhaul | Silent order drops are data-integrity bugs; UI polish on broken data is wasted effort | ✓ Good — clean data foundation before cosmetics |
+| normalize_address() stdlib-only (unicodedata, re) | No external dependencies for cache key normalization | ✓ Good — pure function, 15 tests, zero dependencies |
+| DB-only caching, deprecate file cache | Single source of truth eliminates cache key mismatch | ✓ Good — eliminated duplicate map pins |
+| lucide-react for SVG nav icons | Consistent stroke width, tree-shakeable, React-native components | ✓ Good — unified icon system across all pages |
+| CSS-only responsive sidebar | No JS matchMedia; mobile-first min-width breakpoints at 768px and 1280px | ✓ Good — simpler than JS-based approach |
+| DaisyUI drawer for mobile nav | Native checkbox toggle, zero JS state management | ✓ Good — works without framework overhead |
+| WCAG AAA contrast for driver PWA | Outdoor readability in Kerala sunlight conditions | ✓ Good — two-tier text hierarchy, saffron accents |
+| Hero card + compact list architecture | Only next pending stop gets action buttons; rest are read-only | ✓ Good — reduces cognitive load for drivers |
+| Native `<dialog>` for fail confirmation | Dark-themed, accessible, replaces browser confirm() | ✓ Good — consistent with PWA aesthetic |
 
 ---
-*Last updated: 2026-03-01 after v1.1 milestone start*
+*Last updated: 2026-03-03 after v1.1 milestone*
