@@ -254,8 +254,8 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 _secweb_options = {
     "csp": {
         "default-src": ["'self'"],
-        "script-src": ["'self'"],
-        "style-src": ["'self'", "'unsafe-inline'"],
+        "script-src": ["'self'", "'unsafe-inline'", "https://unpkg.com"],
+        "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
         "img-src": [
             "'self'",
             "data:",
@@ -264,7 +264,7 @@ _secweb_options = {
             "https://unpkg.com",
         ],
         "connect-src": ["'self'"],
-        "font-src": ["'self'"],
+        "font-src": ["'self'", "https://fonts.gstatic.com"],
         "frame-ancestors": ["'none'"],
     },
     "xframe": "DENY",
