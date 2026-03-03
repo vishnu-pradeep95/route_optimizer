@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish & Reliability
 status: in-progress
-last_updated: "2026-03-03T12:29:13Z"
+last_updated: "2026-03-03T12:37:48Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 24
-  completed_plans: 22
+  completed_plans: 23
 ---
 
 # Project State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Phase: 7 of 7 (Driver PWA Refresh)
-Plan: 1 of 3 complete
-Status: Executing plan 07-02
-Last activity: 2026-03-03 -- Plan 07-01 complete (WCAG AAA + progress bar + touch targets)
+Plan: 2 of 3 complete
+Status: Executing plan 07-03
+Last activity: 2026-03-03 -- Plan 07-02 complete (hero card + fail dialog + Call Office FAB)
 
-Progress: [#######.............] 33% (1 of 3 plans complete in phase 7)
+Progress: [##############......] 67% (2 of 3 plans complete in phase 7)
 
 ## Performance Metrics
 
@@ -46,7 +46,7 @@ Progress: [#######.............] 33% (1 of 3 plans complete in phase 7)
 | 4. Geocoding Cache | 2/2 | 7min | 3.5min |
 | 5. Geocoding Enhancements | 2/2 | 9min | 4.5min |
 | 6. Dashboard UI Overhaul | 9/9 | 15min | 1.7min |
-| 7. Driver PWA Refresh | 1/3 | 5min | 5min |
+| 7. Driver PWA Refresh | 2/3 | 10min | 5min |
 
 **Recent Trend:**
 - Last 5 plans: --
@@ -101,6 +101,10 @@ Carried from v1.0:
 - [Phase 07]: Saffron accent reserved for large elements only (buttons, progress segments) -- white for body text
 - [Phase 07]: Navigate button 66px, Done/Fail buttons 60px -- enlarged from 56px/48px
 - [Phase 07]: checkAllDone() extracted from deleted updateSummary() to preserve route completion banner
+- [Phase 07]: Hero card + compact list architecture -- only next pending stop gets action buttons, rest are read-only compact cards
+- [Phase 07]: Toast-then-advance pattern: 1.5s toast display before re-render auto-advances next stop into hero
+- [Phase 07]: Native `<dialog>` with showModal() replaces browser confirm() for fail action -- dark-themed, accessible
+- [Phase 07]: FAB and dialog HTML placed before main `<script>` block for correct DOM availability
 
 ### Pending Todos
 
@@ -116,5 +120,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 07-01-PLAN.md (WCAG AAA + progress bar + touch targets)
+Stopped at: Completed 07-02-PLAN.md (hero card + fail dialog + Call Office FAB)
 Resume file: None
