@@ -25,7 +25,7 @@
            Outfit (UI) + JetBrains Mono (data).
            Saffron #FF9410 accent — high visibility against dark base.
            Electric green #00C853 for delivered, hot red #FF3B30 for failed.
-           48px minimum touch targets, 60px primary action buttons.
+           60px minimum touch targets, 66px primary navigate button.
            WCAG AAA (7:1) contrast throughout.
            No countdown timers — Kerala MVD compliance.
            ============================================================ */
@@ -44,8 +44,7 @@
             --color-danger: #FF3B30;
             --color-danger-bg: rgba(255,59,48,0.08);
             --color-text: #F0EFFB;
-            --color-text-secondary: #9897B0;
-            --color-text-muted: #4E4D65;
+            --color-text-secondary: #A3A2BC;
             --color-border: #1E1E2E;
             --color-border-bright: #2E2E42;
             --radius-card: 14px;
@@ -91,8 +90,8 @@
         }
         .header .stats {
             font-family: var(--font-data);
-            font-size: 12px;
-            color: var(--color-accent);
+            font-size: 14px;
+            color: var(--color-text);
             font-weight: 500;
             margin-top: 1px;
         }
@@ -116,7 +115,7 @@
             cursor: pointer;
             border: none;
             background: transparent;
-            color: var(--color-text-muted);
+            color: var(--color-text-secondary);
             transition: color 0.2s;
             position: relative;
             letter-spacing: 0.01em;
@@ -153,7 +152,7 @@
            ============================================================ */
         .stop-list {
             display: none;
-            padding: 12px 12px 92px;  /* bottom padding clears summary bar */
+            padding: 12px 12px 16px;
         }
         .stop-list.visible { display: block; }
 
@@ -213,8 +212,8 @@
             justify-content: center;
             font-family: var(--font-data);
             font-weight: 700;
-            font-size: 13px;
-            color: var(--color-accent);
+            font-size: 14px;
+            color: var(--color-text);
         }
         .stop-card.delivered .stop-number-inner {
             border-color: var(--color-success);
@@ -239,13 +238,13 @@
         }
         .stop-meta {
             font-family: var(--font-data);
-            font-size: 12px;
+            font-size: 14px;
             color: var(--color-text-secondary);
             letter-spacing: 0.01em;
         }
         .stop-notes {
-            font-size: 12px;
-            color: var(--color-accent);
+            font-size: 14px;
+            color: var(--color-text);
             margin-top: 5px;
             line-height: 1.4;
         }
@@ -264,7 +263,7 @@
             font-size: 14px;
             font-weight: 700;
             cursor: pointer;
-            height: 48px;
+            height: 60px;
             transition: transform 0.1s, opacity 0.1s;
             display: flex;
             align-items: center;
@@ -278,7 +277,7 @@
             background: var(--color-accent);
             color: #000000;
             flex: 1;
-            height: 56px;
+            height: 66px;
             font-size: 15px;
             font-weight: 800;
             box-shadow: 0 4px 20px var(--color-accent-glow);
@@ -299,8 +298,8 @@
             background: rgba(255,59,48,0.1);
             color: var(--color-danger);
             border: 1.5px solid rgba(255,59,48,0.3);
-            width: 48px;
-            min-width: 48px;
+            width: 60px;
+            min-width: 60px;
             font-size: 18px;
         }
         .btn-fail:hover { background: rgba(255,59,48,0.2); }
@@ -377,7 +376,7 @@
         #upload-status {
             margin-top: 20px;
             font-family: var(--font-data);
-            font-size: 13px;
+            font-size: 14px;
             color: var(--color-text-secondary);
             min-height: 20px;
         }
@@ -386,7 +385,7 @@
            Vehicle selector
            ============================================================ */
         .vehicle-selector {
-            padding: 16px 12px 92px;
+            padding: 16px 12px 16px;
             display: none;
         }
         .vehicle-selector.visible { display: block; }
@@ -425,7 +424,7 @@
         .vehicle-btn .v-stats {
             font-family: var(--font-data);
             color: var(--color-text-secondary);
-            font-size: 12px;
+            font-size: 14px;
         }
 
         /* Back button */
@@ -511,58 +510,6 @@
         .all-done-close:hover { opacity: 1; }
 
         /* ============================================================
-           Summary bar — fixed bottom strip
-           ============================================================ */
-        .summary-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(11,11,15,0.95);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            padding: 10px 8px;
-            border-top: 1px solid var(--color-border-bright);
-            display: none;
-            justify-content: space-around;
-            z-index: 1000;
-        }
-        .summary-bar.visible { display: flex; }
-
-        .summary-item {
-            text-align: center;
-            flex: 1;
-            position: relative;
-        }
-        /* Vertical dividers between items */
-        .summary-item + .summary-item::before {
-            content: '';
-            position: absolute;
-            left: 0; top: 8px; bottom: 8px;
-            width: 1px;
-            background: var(--color-border-bright);
-        }
-        .summary-item .value {
-            font-family: var(--font-data);
-            font-size: 26px;
-            font-weight: 700;
-            color: var(--color-text);
-            line-height: 1;
-            display: block;
-        }
-        /* Highlight done count in accent color */
-        #summary-done { color: var(--color-accent); }
-        .summary-item .label {
-            font-family: var(--font-ui);
-            color: var(--color-text-muted);
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin-top: 2px;
-            display: block;
-        }
-
-        /* ============================================================
            Delivered/failed status chips (inline in stop card)
            ============================================================ */
         .status-chip {
@@ -571,7 +518,7 @@
             gap: 5px;
             margin-top: 8px;
             font-family: var(--font-ui);
-            font-size: 13px;
+            font-size: 14px;
             font-weight: 700;
         }
         .status-chip.delivered { color: var(--color-success); }
@@ -622,22 +569,6 @@
     </div>
     <div id="map"></div>
     <div id="stop-list" class="stop-list visible"></div>
-</div>
-
-<!-- Summary bar -->
-<div id="summary-bar" class="summary-bar">
-    <div class="summary-item">
-        <div class="value" id="summary-done">0</div>
-        <div class="label">Done</div>
-    </div>
-    <div class="summary-item">
-        <div class="value" id="summary-remaining">0</div>
-        <div class="label">Remaining</div>
-    </div>
-    <div class="summary-item">
-        <div class="value" id="summary-distance">0</div>
-        <div class="label">km total</div>
-    </div>
 </div>
 
 <!-- Leaflet JS -->
@@ -730,7 +661,7 @@ window.addEventListener('offline', () => {
     if (!document.getElementById('offline-banner')) {
         const banner = document.createElement('div');
         banner.id = 'offline-banner';
-        banner.style.cssText = 'position:fixed;top:48px;left:0;right:0;background:#FF9410;color:#000000;text-align:center;padding:8px;font-family:Outfit,sans-serif;font-size:13px;font-weight:700;z-index:1001;letter-spacing:0.01em;';
+        banner.style.cssText = 'position:fixed;top:48px;left:0;right:0;background:#FF9410;color:#000000;text-align:center;padding:8px;font-family:Outfit,sans-serif;font-size:14px;font-weight:700;z-index:1001;letter-spacing:0.01em;';
         banner.textContent = '📡 Offline — updates will sync when connected';
         document.body.prepend(banner);
     }
@@ -852,12 +783,8 @@ window.addEventListener('DOMContentLoaded', () => {
         currentRoute = cachedRoute;
         document.getElementById('upload-section').style.display = 'none';
         document.getElementById('route-view').style.display = 'block';
-        document.getElementById('summary-bar').classList.add('visible');
         document.getElementById('header-title').textContent = currentRoute.driver_name;
-        document.getElementById('header-stats').textContent =
-            `${currentRoute.total_stops} stops · ${currentRoute.total_distance_km} km`;
         renderStopList();
-        updateSummary();
         // Show header action buttons so driver isn't stuck if wrong route was restored
         document.getElementById('header-actions').style.display = 'flex';
         // Resume telemetry for the cached route
@@ -940,7 +867,6 @@ function showVehicleSelector(routes) {
 async function loadRoute(vehicleId) {
     document.getElementById('vehicle-selector').classList.remove('visible');
     document.getElementById('route-view').style.display = 'block';
-    document.getElementById('summary-bar').classList.add('visible');
     // Show the reload / change-vehicle buttons in the header
     document.getElementById('header-actions').style.display = 'flex';
 
@@ -969,7 +895,6 @@ async function loadRoute(vehicleId) {
         `${currentRoute.total_stops} stops · ${currentRoute.total_distance_km} km`;
 
     renderStopList();
-    updateSummary();
 
     // Start GPS telemetry for speed alerts + live tracking
     startTelemetry();
@@ -1131,7 +1056,6 @@ async function updateStatus(vehicleId, orderId, status) {
     saveToStorage(STORAGE_KEYS.ROUTE_DATA, currentRoute);
 
     renderStopList();
-    updateSummary();
 
     // Send to server — the API expects a JSON body with { status: "..." }
     // See: apps/kerala_delivery/api/main.py StatusUpdate model
@@ -1148,36 +1072,6 @@ async function updateStatus(vehicleId, orderId, status) {
         // The local state is already updated, so the driver isn't blocked.
         queueOfflineUpdate(vehicleId, orderId, status);
         console.log(`[Offline] Queued status update: ${orderId} → ${status}`);
-    }
-}
-
-function updateSummary() {
-    if (!currentRoute) return;
-    const done = currentRoute.stops.filter(s => s.status === 'delivered').length;
-    const failed = currentRoute.stops.filter(s => s.status === 'failed').length;
-    const remaining = currentRoute.stops.filter(s => s.status === 'pending').length;
-
-    document.getElementById('summary-done').textContent = done;
-    document.getElementById('summary-remaining').textContent = remaining;
-    document.getElementById('summary-distance').textContent = currentRoute.total_distance_km;
-
-    // Show a completion banner when every stop is resolved.
-    // Without this, the driver has no clear signal that the route is done —
-    // the list just stays there indefinitely with no feedback.
-    const allDone = remaining === 0 && (done + failed) > 0;
-    const existing = document.getElementById('all-done-banner');
-    if (allDone && !existing) {
-        const banner = document.createElement('div');
-        banner.id = 'all-done-banner';
-        banner.className = 'all-done-banner';
-        const failNote = failed > 0 ? ` · ${failed} failed` : '';
-        banner.innerHTML = `
-            <div>🎉 Route complete! ${done} delivered${failNote}</div>
-            <button class="all-done-close" onclick="this.parentElement.remove()">✕</button>
-        `;
-        document.getElementById('stop-list').prepend(banner);
-    } else if (!allDone && existing) {
-        existing.remove();
     }
 }
 
@@ -1318,7 +1212,6 @@ function changeVehicle() {
     currentRoute = null;
 
     document.getElementById('route-view').style.display = 'none';
-    document.getElementById('summary-bar').classList.remove('visible');
     document.getElementById('header-actions').style.display = 'none';
     document.getElementById('header-title').textContent = 'LPG Delivery Route';
     document.getElementById('header-stats').textContent = '';
