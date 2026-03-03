@@ -46,7 +46,18 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 
 ### Active
 
-(None — awaiting next milestone definition)
+## Current Milestone: v1.2 Tech Debt & Cleanup
+
+**Goal:** Eliminate all known tech debt, dead code, and consistency issues across the API, dashboard, and driver PWA.
+
+**Target fixes:**
+- Critical: fake Call Office phone number, GPS watchPosition leak
+- Dead code: `_build_fleet()`, unused imports, unused config vars
+- Consistency: depot coords duplication, safety multiplier duplication, QR sheet magic number
+- Driver PWA: replace `alert()` with `<dialog>`, proper PWA icons, SW pre-cache gap, reduce console.log
+- Dashboard: dead CSS variables, hardcoded hex token, TypeScript type gaps, unsafe casts, N+1 route fetching
+- API: mid-file import, PostGIS type:ignore → helper function, stale docstrings
+- Data: wire `save_driver_verified()`, validate duplicate detection thresholds
 
 ### Out of Scope
 
@@ -70,8 +81,8 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v1.1 shipped — geocoding integrity, dashboard UI overhaul, and driver PWA refresh complete. 17.5k Python LOC, 3.6k TypeScript LOC, 1.8k HTML/JS LOC.
-- **Known tech debt**: Stale docstring in cache.py referencing removed SHA-256; `save_driver_verified()` implemented but unwired; confidence-weighted duplicate thresholds are estimates needing real-world validation
+- **Current state**: v1.2 in progress — tech debt cleanup across all layers. 17.5k Python LOC, 3.6k TypeScript LOC, 1.8k HTML/JS LOC.
+- **Known tech debt**: 21 items identified via full codebase audit (see REQUIREMENTS.md for complete list)
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
 ## Constraints
@@ -100,4 +111,4 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | Native `<dialog>` for fail confirmation | Dark-themed, accessible, replaces browser confirm() | ✓ Good — consistent with PWA aesthetic |
 
 ---
-*Last updated: 2026-03-03 after v1.1 milestone*
+*Last updated: 2026-03-03 after v1.2 milestone start*

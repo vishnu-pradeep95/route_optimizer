@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Polish & Reliability
-status: completed
-last_updated: "2026-03-03T21:15:42.240Z"
+milestone: v1.2
+milestone_name: Tech Debt & Cleanup
+status: active
+last_updated: "2026-03-03T22:00:00.000Z"
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 24
-  completed_plans: 24
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
@@ -18,12 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Planning next milestone
+**Current focus:** Defining requirements for v1.2 Tech Debt & Cleanup
 
 ## Current Position
 
-Milestone v1.1 complete. All 7 phases (24 plans) shipped.
-Next: `/gsd:new-milestone` to define v1.2 or v2.0.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-03 — Milestone v1.2 started
 
 ## Performance Metrics
 
