@@ -63,7 +63,7 @@ async function apiFetch<T>(path: string): Promise<T> {
   }
 
   try {
-    const response = await fetch(url, { headers });
+    const response = await fetch(url, { headers, cache: "no-store" });
 
     if (!response.ok) {
       // Extract error detail from FastAPI's standard error format if available
