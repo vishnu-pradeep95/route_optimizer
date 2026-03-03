@@ -21,7 +21,7 @@
 // Bump this version string to force re-caching after a deploy.
 // The browser detects the byte-level change in sw.js and triggers the
 // install event, which re-caches everything.
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = `lpg-driver-${CACHE_VERSION}`;
 
 // App shell: files needed for the app to render without network.
@@ -36,9 +36,9 @@ const APP_SHELL = [
     // Google Fonts CSS — pre-cache the stylesheet so font-face declarations
     // are available offline. The actual .woff2 files are fetched lazily and
     // cached by the network-first strategy below. If fonts fail to load,
-    // the CSS font stack falls back to system fonts (DM Sans → system sans,
-    // IBM Plex Mono → Courier New).
-    'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap',
+    // the CSS font stack falls back to system fonts (Outfit → system sans,
+    // JetBrains Mono → Courier New).
+    'https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap',
 ];
 
 // ============================================================
