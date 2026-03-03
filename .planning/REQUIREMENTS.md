@@ -27,10 +27,10 @@ Requirements for v1.1 Polish & Reliability milestone. Each maps to roadmap phase
 ### Driver PWA
 
 - [ ] **PWA-01**: Next stop is displayed as a prominent hero card at top of stop list with large address, distance, and Navigate button
-- [ ] **PWA-02**: Header shows delivery progress as "X of Y delivered" with a visual progress bar
-- [ ] **PWA-03**: Driver can tap a visible Refresh button to reload route data, with "Last updated" timestamp shown
-- [ ] **PWA-04**: All primary action buttons (Delivered, Failed, Navigate, Call Office) are 60px+ touch targets
-- [ ] **PWA-05**: All text/background color combinations meet WCAG AAA contrast ratio (7:1 body, 4.5:1 large text)
+- [x] **PWA-02**: Header shows delivery progress as "X of Y delivered" with a visual progress bar
+- [x] **PWA-03**: Driver can tap a visible Refresh button to reload route data, with "Last updated" timestamp shown
+- [x] **PWA-04**: All primary action buttons (Delivered, Failed, Navigate, Call Office) are 60px+ touch targets
+- [x] **PWA-05**: All text/background color combinations meet WCAG AAA contrast ratio (7:1 body, 4.5:1 large text)
 - [ ] **PWA-06**: Route data persists offline -- loading, viewing stops, and marking deliveries work without network
 
 ## Future Requirements
@@ -94,10 +94,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DASH-06 | Phase 6 | Complete |
 | DASH-07 | Phase 6 | Complete |
 | PWA-01 | Phase 7 | Pending |
-| PWA-02 | Phase 7 | Pending |
-| PWA-03 | Phase 7 | Pending |
-| PWA-04 | Phase 7 | Pending |
-| PWA-05 | Phase 7 | Pending |
+| PWA-02 | Phase 7 | Complete |
+| PWA-03 | Phase 7 | Complete |
+| PWA-04 | Phase 7 | Complete |
+| PWA-05 | Phase 7 | Complete |
 | PWA-06 | Phase 7 | Pending |
 
 **Coverage:**
