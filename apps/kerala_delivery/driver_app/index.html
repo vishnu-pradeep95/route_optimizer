@@ -156,41 +156,153 @@
         }
         .stop-list.visible { display: block; }
 
-        /* Individual stop card */
-        .stop-card {
+        /* ============================================================
+           Hero card — next delivery, prominent and elevated
+           ============================================================ */
+        .hero-card {
+            background: var(--color-surface);
+            border: 2px solid var(--color-accent);
+            border-radius: var(--radius-card);
+            padding: 16px;
+            margin-bottom: 12px;
+            position: relative;
+            box-shadow: 0 0 30px var(--color-accent-glow), 0 4px 20px rgba(0,0,0,0.4);
+        }
+        .hero-label {
+            font-family: var(--font-ui);
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--color-accent);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 10px;
+        }
+        .hero-address {
+            font-family: var(--font-ui);
+            font-size: 22px;
+            font-weight: 700;
+            line-height: 1.3;
+            color: var(--color-text);
+            margin-bottom: 8px;
+        }
+        .hero-meta {
+            font-family: var(--font-data);
+            font-size: 14px;
+            color: var(--color-text-secondary);
+            line-height: 1.6;
+            margin-bottom: 4px;
+        }
+        .hero-notes {
+            font-family: var(--font-ui);
+            font-size: 14px;
+            color: var(--color-text);
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: var(--color-surface-2);
+            border-radius: 8px;
+            border-left: 3px solid var(--color-accent);
+            line-height: 1.4;
+        }
+        .hero-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 14px;
+        }
+        .hero-actions .btn-navigate {
+            width: 100%;
+            height: 66px;
+            font-size: 17px;
+        }
+        .hero-actions .btn-row {
+            display: flex;
+            gap: 8px;
+        }
+        .hero-actions .btn-deliver {
+            flex: 1;
+            height: 60px;
+            font-size: 15px;
+        }
+        .hero-actions .btn-fail {
+            width: 80px;
+            min-width: 80px;
+            height: 60px;
+            font-size: 15px;
+        }
+
+        /* ============================================================
+           Compact stop card — smaller, less prominent than hero
+           ============================================================ */
+        .compact-card {
             background: var(--color-surface);
             border-radius: var(--radius-card);
-            padding: 14px 14px 14px 0;
-            margin-bottom: 8px;
+            padding: 12px 12px 12px 0;
+            margin-bottom: 6px;
             display: flex;
             gap: 0;
-            align-items: flex-start;
+            align-items: center;
             border: 1px solid var(--color-border);
             overflow: hidden;
             position: relative;
             transition: opacity 0.3s, background 0.3s;
         }
-
-        /* Left color stripe — pending=accent, delivered=success, failed=danger */
-        .stop-card::before {
+        .compact-card::before {
             content: '';
             width: 4px;
             min-height: 100%;
-            background: var(--color-accent);
             flex-shrink: 0;
             align-self: stretch;
         }
-        .stop-card.delivered::before { background: var(--color-success); }
-        .stop-card.failed::before    { background: var(--color-danger); }
+        .compact-card.pending::before { background: var(--color-border-bright); }
+        .compact-card.delivered::before { background: var(--color-success); }
+        .compact-card.failed::before    { background: var(--color-danger); }
+        .compact-card.delivered, .compact-card.failed {
+            opacity: 0.55;
+        }
+        .compact-card.delivered { background: var(--color-success-bg); }
+        .compact-card.failed    { background: var(--color-danger-bg); }
+        .compact-card .stop-number { width: 40px; min-width: 40px; }
+        .compact-card .stop-info {
+            flex: 1;
+            padding: 0;
+        }
+        .compact-card .stop-address {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-text);
+            line-height: 1.3;
+        }
+        .compact-card .stop-meta {
+            font-family: var(--font-data);
+            font-size: 14px;
+            color: var(--color-text-secondary);
+        }
+        .compact-card .status-chip {
+            margin-top: 4px;
+        }
 
-        .stop-card.delivered {
-            opacity: 0.55;
-            background: var(--color-success-bg);
+        /* ============================================================
+           Toast notification — centered feedback on action
+           ============================================================ */
+        .toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-family: var(--font-ui);
+            font-size: 18px;
+            font-weight: 700;
+            z-index: 2000;
+            animation: toast-in 0.2s ease-out, toast-out 0.3s ease-in 1.2s forwards;
+            pointer-events: none;
         }
-        .stop-card.failed {
-            opacity: 0.55;
-            background: var(--color-danger-bg);
-        }
+        .toast-delivered { background: var(--color-success); color: #000; }
+        .toast-failed    { background: var(--color-danger); color: #FFF; }
+
+        @keyframes toast-in  { from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+        @keyframes toast-out { from { opacity: 1; } to { opacity: 0; } }
 
         /* Sequence number badge */
         .stop-number {
@@ -215,11 +327,11 @@
             font-size: 14px;
             color: var(--color-text);
         }
-        .stop-card.delivered .stop-number-inner {
+        .compact-card.delivered .stop-number-inner {
             border-color: var(--color-success);
             color: var(--color-success);
         }
-        .stop-card.failed .stop-number-inner {
+        .compact-card.failed .stop-number-inner {
             border-color: var(--color-danger);
             color: var(--color-danger);
         }
@@ -242,19 +354,7 @@
             color: var(--color-text-secondary);
             letter-spacing: 0.01em;
         }
-        .stop-notes {
-            font-size: 14px;
-            color: var(--color-text);
-            margin-top: 5px;
-            line-height: 1.4;
-        }
-
         /* Action buttons — large tap targets, thumb-reachable at bottom */
-        .stop-actions {
-            display: flex;
-            gap: 6px;
-            margin-top: 10px;
-        }
         .btn {
             padding: 0 14px;
             border: none;
@@ -1028,45 +1128,99 @@ async function loadRoute(vehicleId) {
 }
 
 // ============================================================
-// Render the delivery stop list
+// Render the delivery stop list — hero card + compact list
 // ============================================================
+// The next pending stop is rendered as a prominent hero card at the top.
+// All other stops render as compact cards below it.
+// When all stops are done, checkAllDone() shows the completion banner.
+
 function renderStopList() {
     const container = document.getElementById('stop-list');
-    container.innerHTML = currentRoute.stops.map(stop => `
-        <div class="stop-card ${escapeHtml(stop.status)}" id="stop-${escapeHtml(stop.order_id)}">
-            <div class="stop-number">
-                <div class="stop-number-inner">${stop.sequence}</div>
-            </div>
-            <div class="stop-info">
-                <div class="stop-address">${escapeHtml(stop.address) || 'Address pending'}</div>
-                <div class="stop-meta">
-                    ${stop.quantity} cyl · ${stop.weight_kg} kg
-                    ${stop.distance_from_prev_km > 0 ? ` · ${stop.distance_from_prev_km} km` : ''}
-                </div>
-                ${stop.notes ? `<div class="stop-notes">📝 ${escapeHtml(stop.notes)}</div>` : ''}
-                ${stop.status === 'pending' ? `
-                <div class="stop-actions">
-                    <button class="btn btn-navigate" onclick="navigateTo(${stop.latitude}, ${stop.longitude})">
-                        &#x2316; Navigate
-                    </button>
-                    <button class="btn btn-deliver" onclick="markDelivered('${escapeHtml(currentRoute.vehicle_id)}', '${escapeHtml(stop.order_id)}')">
-                        &#x2713; Done
-                    </button>
-                    <button class="btn btn-fail" onclick="markFailed('${escapeHtml(currentRoute.vehicle_id)}', '${escapeHtml(stop.order_id)}')">
-                        &#x2715;
-                    </button>
-                </div>
-                ` : `<div class="status-chip ${escapeHtml(stop.status)}">
-                    ${stop.status === 'delivered' ? '✓ Delivered' : '✗ Failed'}
-                </div>`}
-            </div>
-        </div>
-    `).join('');
+    if (!currentRoute || !currentRoute.stops) {
+        container.innerHTML = '';
+        return;
+    }
 
-    // Update progress indicators after rendering stop list
+    const nextStop = currentRoute.stops.find(s => s.status === 'pending');
+    const otherStops = currentRoute.stops.filter(s => s !== nextStop);
+
+    container.innerHTML = [
+        nextStop ? renderHeroCard(nextStop) : '',
+        ...otherStops.map(s => renderCompactCard(s)),
+    ].join('');
+
     updateProgressBar();
     updateHeaderStats();
     checkAllDone();
+}
+
+// Hero card — prominent display for the next delivery
+function renderHeroCard(stop) {
+    const total = currentRoute.stops.length;
+    const distInfo = stop.distance_from_prev_km > 0
+        ? `${stop.distance_from_prev_km} km away`
+        : '';
+    const refInfo = stop.customer_ref
+        ? `<div class="hero-meta">Ref: ${escapeHtml(stop.customer_ref)}</div>`
+        : '';
+    return `
+    <div class="hero-card" id="stop-${escapeHtml(stop.order_id)}">
+        <div class="hero-label">NEXT DELIVERY &middot; Stop ${stop.sequence} of ${total}</div>
+        <div class="hero-address">${escapeHtml(stop.address) || 'Address pending'}</div>
+        <div class="hero-meta">
+            ${stop.quantity} cyl &middot; ${stop.weight_kg} kg${distInfo ? ` &middot; ${distInfo}` : ''}
+        </div>
+        ${refInfo}
+        ${stop.notes ? `<div class="hero-notes">${escapeHtml(stop.notes)}</div>` : ''}
+        <div class="hero-actions">
+            <button class="btn btn-navigate" onclick="navigateTo(${stop.latitude}, ${stop.longitude})">
+                &#x2316; Navigate
+            </button>
+            <div class="btn-row">
+                <button class="btn btn-deliver" onclick="markDelivered('${escapeHtml(currentRoute.vehicle_id)}', '${escapeHtml(stop.order_id)}')">
+                    &#x2713; Done
+                </button>
+                <button class="btn btn-fail" onclick="markFailed('${escapeHtml(currentRoute.vehicle_id)}', '${escapeHtml(stop.order_id)}')">
+                    &#x2715; Fail
+                </button>
+            </div>
+        </div>
+    </div>`;
+}
+
+// Compact card — smaller display for remaining stops (no action buttons)
+function renderCompactCard(stop) {
+    const statusClass = escapeHtml(stop.status);
+    const isPending = stop.status === 'pending';
+    return `
+    <div class="compact-card ${statusClass}" id="stop-${escapeHtml(stop.order_id)}">
+        <div class="stop-number">
+            <div class="stop-number-inner">${stop.sequence}</div>
+        </div>
+        <div class="stop-info">
+            <div class="stop-address">${escapeHtml(stop.address) || 'Address pending'}</div>
+            <div class="stop-meta">
+                ${stop.quantity} cyl &middot; ${stop.weight_kg} kg
+                ${stop.distance_from_prev_km > 0 ? ` &middot; ${stop.distance_from_prev_km} km` : ''}
+            </div>
+            ${!isPending ? `<div class="status-chip ${statusClass}">
+                ${stop.status === 'delivered' ? '&#x2713; Delivered' : '&#x2715; Failed'}
+            </div>` : ''}
+        </div>
+    </div>`;
+}
+
+// ============================================================
+// Toast notifications — centered feedback on delivery actions
+// ============================================================
+function showToast(message, type) {
+    // Remove any existing toast
+    document.querySelector('.toast')?.remove();
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 1500);
 }
 
 // ============================================================
@@ -1179,15 +1333,24 @@ async function markFailed(vehicleId, orderId) {
 
 async function updateStatus(vehicleId, orderId, status) {
     // Always update local state immediately — optimistic UI.
-    // The driver sees the change instantly, even if the network call
-    // is pending or queued for later.
     const stop = currentRoute.stops.find(s => s.order_id === orderId);
     if (stop) stop.status = status;
-
-    // Persist to localStorage so the updated status survives page refresh
     saveToStorage(STORAGE_KEYS.ROUTE_DATA, currentRoute);
 
-    renderStopList();
+    // Show toast feedback immediately
+    showToast(
+        status === 'delivered' ? 'Delivered!' : 'Marked failed',
+        status
+    );
+
+    // Update progress bar and header stats immediately (no delay)
+    updateProgressBar();
+    updateHeaderStats();
+
+    // Delay re-render for toast visibility, then auto-advance
+    setTimeout(() => {
+        renderStopList();
+    }, 1500);
 
     // Send to server — the API expects a JSON body with { status: "..." }
     // See: apps/kerala_delivery/api/main.py StatusUpdate model
@@ -1196,9 +1359,7 @@ async function updateStatus(vehicleId, orderId, status) {
             `${API_BASE}/api/routes/${vehicleId}/stops/${orderId}/status`,
             { status },
         );
-
         if (!resp.ok) throw new Error('Server rejected update');
-
     } catch {
         // Network failed — queue for replay when connectivity returns.
         // The local state is already updated, so the driver isn't blocked.
