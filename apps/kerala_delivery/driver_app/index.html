@@ -524,6 +524,60 @@
         .status-chip.delivered { color: var(--color-success); }
         .status-chip.failed    { color: var(--color-danger); }
 
+        /* ============================================================
+           Segmented progress bar — one segment per stop
+           ============================================================ */
+        .progress-bar {
+            display: flex;
+            gap: 3px;
+            height: 8px;
+            padding: 0 16px;
+            margin: 8px 0 0;
+            background: transparent;
+        }
+        .progress-segment {
+            flex: 1;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        .progress-delivered { background: var(--color-success); }
+        .progress-failed    { background: var(--color-danger); }
+        .progress-current   { background: var(--color-accent); }
+        .progress-pending   { background: var(--color-border); }
+
+        /* Refresh row — below progress bar */
+        .refresh-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 16px 8px;
+            font-family: var(--font-ui);
+            font-size: 14px;
+        }
+        .refresh-row .last-updated {
+            color: var(--color-text-secondary);
+        }
+        .refresh-row .btn-refresh {
+            background: var(--color-surface-2);
+            border: 1px solid var(--color-border-bright);
+            color: var(--color-text);
+            padding: 0 16px;
+            height: 36px;
+            border-radius: var(--radius-btn);
+            font-family: var(--font-ui);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .refresh-row .btn-refresh:active {
+            background: rgba(255,148,16,0.15);
+            border-color: var(--color-accent);
+        }
+
     </style>
 </head>
 <body>
@@ -539,6 +593,15 @@
     <div id="header-actions" class="header-actions">
         <button class="header-btn" onclick="reloadCurrentRoute()" title="Reload route from server">&#x29F3;</button>
         <button class="header-btn" onclick="changeVehicle()" title="Switch to a different vehicle">&#x21C4;</button>
+    </div>
+</div>
+
+<!-- Progress bar + refresh row (hidden until route loaded) -->
+<div id="progress-section" style="display: none; background: rgba(11,11,15,0.92); border-bottom: 1px solid var(--color-border);">
+    <div id="progress-bar" class="progress-bar"></div>
+    <div class="refresh-row">
+        <span id="last-updated" class="last-updated">--</span>
+        <button class="btn-refresh" onclick="reloadCurrentRoute()">&#x21BB; Refresh</button>
     </div>
 </div>
 
@@ -680,6 +743,7 @@ const STORAGE_KEYS = {
     ROUTES_LIST: 'lpg_routes_list',
     VEHICLE_ID: 'lpg_current_vehicle',
     OFFLINE_QUEUE: 'lpg_offline_queue',
+    LAST_UPDATED: 'lpg_last_updated',
 };
 
 function saveToStorage(key, data) {
@@ -698,6 +762,64 @@ function loadFromStorage(key) {
     } catch (e) {
         console.warn('[Storage] Failed to load:', key, e);
         return null;
+    }
+}
+
+// ============================================================
+// Progress Bar, Header Stats, Refresh Row
+// ============================================================
+// Segmented progress bar shows one colored segment per stop.
+// Header stats show "X of Y delivered" format.
+// Refresh row shows last-updated timestamp and manual refresh button.
+
+function updateProgressBar() {
+    if (!currentRoute) return;
+    const bar = document.getElementById('progress-bar');
+    const nextIdx = currentRoute.stops.findIndex(s => s.status === 'pending');
+    bar.innerHTML = currentRoute.stops.map((stop, i) => {
+        let cls = 'progress-pending';
+        if (stop.status === 'delivered') cls = 'progress-delivered';
+        else if (stop.status === 'failed') cls = 'progress-failed';
+        else if (i === nextIdx) cls = 'progress-current';
+        return `<div class="progress-segment ${cls}"></div>`;
+    }).join('');
+}
+
+function updateHeaderStats() {
+    if (!currentRoute) return;
+    const done = currentRoute.stops.filter(s => s.status === 'delivered').length;
+    const total = currentRoute.stops.length;
+    document.getElementById('header-stats').textContent = `${done} of ${total} delivered`;
+}
+
+function updateRefreshRow() {
+    const ts = loadFromStorage(STORAGE_KEYS.LAST_UPDATED);
+    const el = document.getElementById('last-updated');
+    if (ts && el) {
+        const d = new Date(ts);
+        el.textContent = `Last updated: ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
+}
+
+function checkAllDone() {
+    if (!currentRoute) return;
+    const done = currentRoute.stops.filter(s => s.status === 'delivered').length;
+    const failed = currentRoute.stops.filter(s => s.status === 'failed').length;
+    const remaining = currentRoute.stops.filter(s => s.status === 'pending').length;
+    const allDone = remaining === 0 && (done + failed) > 0;
+    const existing = document.getElementById('all-done-banner');
+    if (allDone && !existing) {
+        const banner = document.createElement('div');
+        banner.id = 'all-done-banner';
+        banner.className = 'all-done-banner';
+        const failNote = failed > 0 ? ` \u00B7 ${failed} failed` : '';
+        banner.innerHTML = `
+            <div>Route complete! ${done} delivered${failNote}</div>
+            <button class="all-done-close" onclick="this.parentElement.remove()">&#x2715;</button>
+        `;
+        document.getElementById('stop-list').prepend(banner);
+    } else if (!allDone && existing) {
+        existing.remove();
     }
 }
 
@@ -783,8 +905,10 @@ window.addEventListener('DOMContentLoaded', () => {
         currentRoute = cachedRoute;
         document.getElementById('upload-section').style.display = 'none';
         document.getElementById('route-view').style.display = 'block';
+        document.getElementById('progress-section').style.display = 'block';
         document.getElementById('header-title').textContent = currentRoute.driver_name;
         renderStopList();
+        updateRefreshRow();
         // Show header action buttons so driver isn't stuck if wrong route was restored
         document.getElementById('header-actions').style.display = 'flex';
         // Resume telemetry for the cached route
@@ -889,10 +1013,13 @@ async function loadRoute(vehicleId) {
     // while online, it's available even if they lose signal.
     saveToStorage(STORAGE_KEYS.ROUTE_DATA, currentRoute);
     saveToStorage(STORAGE_KEYS.VEHICLE_ID, vehicleId);
+    saveToStorage(STORAGE_KEYS.LAST_UPDATED, new Date().toISOString());
 
     document.getElementById('header-title').textContent = currentRoute.driver_name;
-    document.getElementById('header-stats').textContent =
-        `${currentRoute.total_stops} stops · ${currentRoute.total_distance_km} km`;
+    document.getElementById('progress-section').style.display = 'block';
+    updateHeaderStats();
+    updateProgressBar();
+    updateRefreshRow();
 
     renderStopList();
 
@@ -935,6 +1062,11 @@ function renderStopList() {
             </div>
         </div>
     `).join('');
+
+    // Update progress indicators after rendering stop list
+    updateProgressBar();
+    updateHeaderStats();
+    checkAllDone();
 }
 
 // ============================================================
@@ -1212,6 +1344,7 @@ function changeVehicle() {
     currentRoute = null;
 
     document.getElementById('route-view').style.display = 'none';
+    document.getElementById('progress-section').style.display = 'none';
     document.getElementById('header-actions').style.display = 'none';
     document.getElementById('header-title').textContent = 'LPG Delivery Route';
     document.getElementById('header-stats').textContent = '';
