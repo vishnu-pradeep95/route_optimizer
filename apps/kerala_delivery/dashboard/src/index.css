@@ -74,6 +74,7 @@
   --color-text-primary: #1C1917;   /* Stone 900 */
   --color-text-secondary: #57534E; /* Stone 600 */
   --color-text-muted: #78716C;     /* Stone 500 */
+  --color-text-faint: #A8A29E;     /* Stone 400 — very subtle text */
   --color-text-inverse: #FAFAF9;   /* Stone 50 — on dark backgrounds */
 
   /* ── Status colors ──────────────────────────────────────────── */
@@ -89,11 +90,6 @@
   /* ── Border colors ──────────────────────────────────────────── */
   --color-border: #E7E5E4;         /* Stone 200 */
   --color-border-strong: #D6D3D1;  /* Stone 300 */
-
-  /* ── Legacy aliases (keep for components not yet migrated) ─── */
-  --color-bg: var(--color-surface);
-  --color-text: var(--color-text-primary);
-  --color-primary: var(--color-accent);
 
   /* ── Typography ─────────────────────────────────────────────── */
   --font-heading: 'DM Sans', system-ui, -apple-system, sans-serif;
@@ -268,6 +264,6 @@ table {
   color: var(--color-text-muted);
 }
 .text-muted-30 {
-  color: #a8a29e; /* stone 400 */
+  color: var(--color-text-faint);
 }
 
