@@ -386,6 +386,178 @@ class TestRoutesEndpoints:
             )
         assert resp.status_code == 404
 
+    def test_update_stop_status_delivered_with_gps_saves_geocache(
+        self, client, mock_run_id
+    ):
+        """Delivered + GPS should save driver-verified location to geocode cache.
+
+        When a driver marks a stop as delivered AND includes GPS coordinates,
+        the system persists that high-confidence location into geocode_cache
+        with source='driver_verified' and confidence=0.95.
+        """
+        from core.database.models import OptimizationRunDB, RouteDB
+
+        mock_run = MagicMock(spec=OptimizationRunDB)
+        mock_run.id = mock_run_id
+
+        mock_stop = MagicMock()
+        mock_stop.order = MagicMock()
+        mock_stop.order.order_id = "ORD-001"
+        mock_stop.order.address_raw = "Test Address, Vatakara"
+        mock_stop.order_id = uuid.uuid4()
+
+        mock_route = MagicMock(spec=RouteDB)
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "VEH-01"
+        mock_route.stops = [mock_stop]
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=mock_run)
+            mock_repo.get_route_for_vehicle = AsyncMock(return_value=mock_route)
+            mock_repo.update_stop_status = AsyncMock(return_value=True)
+            mock_repo.save_geocode_cache = AsyncMock()
+
+            resp = client.post(
+                "/api/routes/VEH-01/stops/ORD-001/status",
+                json={
+                    "status": "delivered",
+                    "latitude": 11.5950,
+                    "longitude": 75.5700,
+                },
+            )
+
+        assert resp.status_code == 200
+        # Verify save_geocode_cache was called with driver-verified params
+        mock_repo.save_geocode_cache.assert_called_once()
+        call_kwargs = mock_repo.save_geocode_cache.call_args.kwargs
+        assert call_kwargs["address_raw"] == "Test Address, Vatakara"
+        assert call_kwargs["source"] == "driver_verified"
+        assert call_kwargs["confidence"] == 0.95
+        assert call_kwargs["location"].latitude == pytest.approx(11.5950)
+        assert call_kwargs["location"].longitude == pytest.approx(75.5700)
+
+    def test_update_stop_status_delivered_without_gps_skips_geocache(
+        self, client, mock_run_id
+    ):
+        """Delivered without GPS should NOT save to geocode cache.
+
+        No GPS coordinates means we have no location data to persist.
+        """
+        from core.database.models import OptimizationRunDB, RouteDB
+
+        mock_run = MagicMock(spec=OptimizationRunDB)
+        mock_run.id = mock_run_id
+
+        mock_stop = MagicMock()
+        mock_stop.order = MagicMock()
+        mock_stop.order.order_id = "ORD-001"
+        mock_stop.order.address_raw = "Test Address, Vatakara"
+        mock_stop.order_id = uuid.uuid4()
+
+        mock_route = MagicMock(spec=RouteDB)
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "VEH-01"
+        mock_route.stops = [mock_stop]
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=mock_run)
+            mock_repo.get_route_for_vehicle = AsyncMock(return_value=mock_route)
+            mock_repo.update_stop_status = AsyncMock(return_value=True)
+            mock_repo.save_geocode_cache = AsyncMock()
+
+            resp = client.post(
+                "/api/routes/VEH-01/stops/ORD-001/status",
+                json={"status": "delivered"},
+            )
+
+        assert resp.status_code == 200
+        mock_repo.save_geocode_cache.assert_not_called()
+
+    def test_update_stop_status_failed_with_gps_skips_geocache(
+        self, client, mock_run_id
+    ):
+        """Failed + GPS should NOT save to geocode cache.
+
+        Driver may not be at the exact delivery address when marking failed
+        (e.g., they gave up before reaching the door). Location data from
+        failed deliveries is unreliable for geocoding.
+        """
+        from core.database.models import OptimizationRunDB, RouteDB
+
+        mock_run = MagicMock(spec=OptimizationRunDB)
+        mock_run.id = mock_run_id
+
+        mock_stop = MagicMock()
+        mock_stop.order = MagicMock()
+        mock_stop.order.order_id = "ORD-001"
+        mock_stop.order.address_raw = "Test Address, Vatakara"
+        mock_stop.order_id = uuid.uuid4()
+
+        mock_route = MagicMock(spec=RouteDB)
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "VEH-01"
+        mock_route.stops = [mock_stop]
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=mock_run)
+            mock_repo.get_route_for_vehicle = AsyncMock(return_value=mock_route)
+            mock_repo.update_stop_status = AsyncMock(return_value=True)
+            mock_repo.save_geocode_cache = AsyncMock()
+
+            resp = client.post(
+                "/api/routes/VEH-01/stops/ORD-001/status",
+                json={
+                    "status": "failed",
+                    "latitude": 11.5950,
+                    "longitude": 75.5700,
+                },
+            )
+
+        assert resp.status_code == 200
+        mock_repo.save_geocode_cache.assert_not_called()
+
+    def test_update_stop_status_delivered_gps_null_address_skips_geocache(
+        self, client, mock_run_id
+    ):
+        """Delivered + GPS but null address_raw should NOT save to geocode cache.
+
+        Guard against null address: if order has no address text, there is
+        nothing meaningful to cache as a geocode key.
+        """
+        from core.database.models import OptimizationRunDB, RouteDB
+
+        mock_run = MagicMock(spec=OptimizationRunDB)
+        mock_run.id = mock_run_id
+
+        mock_stop = MagicMock()
+        mock_stop.order = MagicMock()
+        mock_stop.order.order_id = "ORD-001"
+        mock_stop.order.address_raw = None  # No address text
+        mock_stop.order_id = uuid.uuid4()
+
+        mock_route = MagicMock(spec=RouteDB)
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "VEH-01"
+        mock_route.stops = [mock_stop]
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=mock_run)
+            mock_repo.get_route_for_vehicle = AsyncMock(return_value=mock_route)
+            mock_repo.update_stop_status = AsyncMock(return_value=True)
+            mock_repo.save_geocode_cache = AsyncMock()
+
+            resp = client.post(
+                "/api/routes/VEH-01/stops/ORD-001/status",
+                json={
+                    "status": "delivered",
+                    "latitude": 11.5950,
+                    "longitude": 75.5700,
+                },
+            )
+
+        assert resp.status_code == 200
+        mock_repo.save_geocode_cache.assert_not_called()
+
 
 class TestUploadAndOptimize:
     """Tests for POST /api/upload-orders — the main workflow endpoint.
