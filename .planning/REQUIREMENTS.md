@@ -41,7 +41,7 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 - [x] **DASH-02**: `.text-muted-30` uses design token instead of hardcoded hex
 - [x] **DASH-03**: `RouteDetail` TypeScript interface includes `total_weight_kg` and `total_items`
 - [x] **DASH-04**: `RunHistory.tsx` status cast replaced with proper type narrowing
-- [ ] **DASH-05**: LiveMap batch endpoint replaces N+1 route detail fetching
+- [x] **DASH-05**: LiveMap batch endpoint replaces N+1 route detail fetching
 
 ### Data Validation
 
@@ -86,7 +86,7 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 | DASH-02 | Phase 11 | Complete |
 | DASH-03 | Phase 11 | Complete |
 | DASH-04 | Phase 11 | Complete |
-| DASH-05 | Phase 11 | Pending |
+| DASH-05 | Phase 11 | Complete |
 | DATA-01 | Phase 12 | Pending |
 
 **Coverage:**

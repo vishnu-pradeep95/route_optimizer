@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Tech Debt & Cleanup
 status: executing
-stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-03-04T03:05:20.550Z"
+stopped_at: Completed 11-02-PLAN.md
+last_updated: "2026-03-04T03:09:25.919Z"
 last_activity: "2026-03-04 -- Completed 11-01 (CSS/TS cleanup: dead aliases, tokens, exhaustive switch)"
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 7
-  completed_plans: 6
-  percent: 93
+  completed_plans: 7
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 
 ## Current Position
 
-Phase: 11 of 12 (Dashboard Cleanup)
-Plan: 11-01 complete, 11-02 remaining
-Status: Executing Phase 11
-Last activity: 2026-03-04 -- Completed 11-01 (CSS/TS cleanup: dead aliases, tokens, exhaustive switch)
+Phase: 11 of 12 (Dashboard Cleanup) -- COMPLETE
+Plan: 11-02 complete (all plans done)
+Status: Phase 11 Complete
+Last activity: 2026-03-04 -- Completed 11-02 (Batch route loading: N+1 to single API call)
 
-Progress: [█████████░] 93% (14/15 v1.2 plans)
+Progress: [██████████] 100% (15/15 v1.2 plans)
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Progress: [█████████░] 93% (14/15 v1.2 plans)
 | Phase 10 P01 | 2min | 2 tasks | 1 files |
 | Phase 10 P02 | 2min | 2 tasks | 5 files |
 | Phase 11 P01 | 2min | 2 tasks | 4 files |
+| Phase 11 P02 | 2 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,7 @@ See `.planning/milestones/v1.1-ROADMAP.md` for full v1.1 phase details.
 - [Phase 10]: Generated PWA icons with pure Python struct+zlib (no image libraries needed)
 - [Phase 10]: Debug logging gated via console.log override (no-op) instead of wrapping call sites
 - [Phase 11]: StatusBadge uses exhaustive switch with never-typed default (per DASH-04 user decision)
+- [Phase 11]: Used optional query param (include_stops=true) on existing endpoint for batch route data, preserving backward compatibility
 
 ### Pending Todos
 
@@ -75,6 +77,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-04T03:05:20.548Z
-Stopped at: Completed 11-01-PLAN.md
+Last session: 2026-03-04T03:09:25.918Z
+Stopped at: Completed 11-02-PLAN.md
 Resume file: None
