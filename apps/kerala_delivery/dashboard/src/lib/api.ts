@@ -15,6 +15,7 @@
 
 import type {
   RoutesResponse,
+  BatchRoutesResponse,
   RouteDetail,
   TelemetryResponse,
   FleetTelemetryResponse,
@@ -177,6 +178,11 @@ export async function fetchRouteDetail(
   vehicleId: string
 ): Promise<RouteDetail> {
   return apiFetch<RouteDetail>(`/api/routes/${encodeURIComponent(vehicleId)}`);
+}
+
+/** Fetch all routes with full stop details in a single request. */
+export async function fetchRoutesWithStops(): Promise<BatchRoutesResponse> {
+  return apiFetch<BatchRoutesResponse>("/api/routes?include_stops=true");
 }
 
 // --- Telemetry endpoints ---

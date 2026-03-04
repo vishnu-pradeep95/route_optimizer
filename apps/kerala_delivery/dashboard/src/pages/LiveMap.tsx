@@ -6,10 +6,9 @@
  * three-panel layout: stats bar (top), vehicle list (left), map (center).
  *
  * Data flow:
- * 1. On mount: fetch /api/routes for route summaries
- * 2. For each vehicle: fetch /api/routes/{vehicle_id} for stop details
- * 3. Every 15s: fetch /api/telemetry/{vehicle_id} for live positions
- * 4. Pass data down to StatsBar, VehicleList, RouteMap components
+ * 1. On mount: fetch /api/routes?include_stops=true for all routes with stops
+ * 2. Every 15s: fetch /api/telemetry/fleet for live positions
+ * 3. Pass data down to StatsBar, VehicleList, RouteMap components
  *
  * Why 15-second polling instead of WebSockets:
  * - Simpler to implement and debug
@@ -25,7 +24,7 @@ import { StatsBar } from "../components/StatsBar";
 import { VehicleList } from "../components/VehicleList";
 import { RouteMap } from "../components/RouteMap";
 import { EmptyState } from "../components/EmptyState";
-import { fetchRoutes, fetchRouteDetail, fetchFleetTelemetry } from "../lib/api";
+import { fetchRoutesWithStops, fetchFleetTelemetry } from "../lib/api";
 import type {
   RouteSummary,
   RouteDetail,
@@ -60,33 +59,34 @@ export function LiveMap() {
   // --- Data fetching ---
 
   /**
-   * Fetch all route data: summaries, then details for each vehicle.
+   * Fetch all route data in a single batch request.
    *
-   * Why sequential fetch (summaries first, then details):
-   * We need the vehicle IDs from the summary response before we can
-   * fetch individual route details. Promise.allSettled handles partial
-   * failures gracefully — if one vehicle's detail fails, others still show.
+   * Uses GET /api/routes?include_stops=true to get summaries and full
+   * stop details for every vehicle in one HTTP call. Replaces the old
+   * N+1 pattern (1 summary request + N detail requests per vehicle).
    */
   const loadRouteData = useCallback(async () => {
     try {
-      const routesRes = await fetchRoutes();
-      setRoutes(routesRes.routes);
-      setUnassignedOrders(routesRes.unassigned_orders);
+      const batchRes = await fetchRoutesWithStops();
 
-      // Fetch details for all vehicles in parallel
-      // TODO Phase 3: Replace this N+1 pattern with a single batch endpoint
-      // (e.g. GET /api/routes?include_stops=true) to reduce HTTP round-trips.
-      // At current scale (5-13 vehicles) this is fine, but won't scale to 50+.
-      const detailResults = await Promise.allSettled(
-        routesRes.routes.map((r) => fetchRouteDetail(r.vehicle_id))
-      );
+      // Extract summaries for the vehicle list (RouteSummary shape)
+      setRoutes(batchRes.routes.map((r) => ({
+        route_id: r.route_id,
+        vehicle_id: r.vehicle_id,
+        driver_name: r.driver_name,
+        total_stops: r.total_stops,
+        total_distance_km: r.total_distance_km,
+        total_duration_minutes: r.total_duration_minutes,
+        total_weight_kg: r.total_weight_kg,
+        total_items: r.total_items,
+      })));
+      setUnassignedOrders(batchRes.unassigned_orders);
 
+      // Build route details map directly from batch response
       const newDetailsMap = new Map<string, RouteDetail>();
-      detailResults.forEach((result, index) => {
-        if (result.status === "fulfilled") {
-          newDetailsMap.set(routesRes.routes[index].vehicle_id, result.value);
-        }
-      });
+      for (const route of batchRes.routes) {
+        newDetailsMap.set(route.vehicle_id, route);
+      }
       setRouteDetailsMap(newDetailsMap);
       setError(null);
     } catch (err) {

@@ -42,6 +42,13 @@ export interface RoutesResponse {
   unassigned_orders: number;
 }
 
+/** Response from GET /api/routes?include_stops=true — all routes with stops. */
+export interface BatchRoutesResponse {
+  assignment_id: string;
+  routes: RouteDetail[];
+  unassigned_orders: number;
+}
+
 /** Response from GET /api/routes/{vehicle_id} — full route with stops. */
 export interface RouteDetail {
   route_id: string;
