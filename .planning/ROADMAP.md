@@ -111,10 +111,11 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. When a driver marks a stop as delivered or failed via the PWA, `save_driver_verified()` is called and the verification record is persisted in the database
   2. Duplicate detection distance thresholds (10m/25m/100m) are validated against actual `geocode_cache` table `location_type` distribution, with documented evidence of appropriate threshold selection
-**Plans**: TBD
+**Plans**: 2 plans (Wave 1, parallel -- no shared files)
 
 Plans:
-- [ ] 12-01: TBD
+- [ ] 12-01-PLAN.md — Wire driver-verified geocode save into delivery status endpoint (API-07)
+- [ ] 12-02-PLAN.md — Validate duplicate detection thresholds against production geocode_cache data (DATA-01)
 
 ## Progress
 
@@ -135,7 +136,7 @@ Recommended order: 8 -> 9 -> 10 -> 11 -> 12
 | 9. Config Consolidation | v1.2 | 0/? | Not started | - |
 | 10. Driver PWA Hardening | 2/2 | Complete    | 2026-03-04 | - |
 | 11. Dashboard Cleanup | 2/2 | Complete    | 2026-03-04 | - |
-| 12. Data Wiring & Validation | v1.2 | 0/? | Not started | - |
+| 12. Data Wiring & Validation | v1.2 | 0/2 | Not started | - |
 
 ---
 *Full phase details for v1.0 and v1.1 archived in `.planning/milestones/`*
