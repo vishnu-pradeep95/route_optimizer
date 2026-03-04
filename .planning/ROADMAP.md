@@ -82,11 +82,11 @@ Plans:
   3. Offline error notification uses a styled `<dialog>` element -- browser `alert()` is not called anywhere in the PWA source
   4. PWA "Add to Home Screen" prompt shows a proper PNG icon (192px and 512px), not a data-URI SVG emoji
   5. After installing the PWA and going offline, `tailwind.css` loads from service worker cache (no unstyled flash)
-**Plans**: TBD
+**Plans**: 2 plans (Wave 1 -> Wave 2, sequential due to shared index.html)
 
 Plans:
-- [ ] 10-01: TBD
-- [ ] 10-02: TBD
+- [ ] 10-01-PLAN.md — Safety fixes: config endpoint phone fetch, GPS watch leak fix, offline dialog replacement (PWA-01, PWA-02, PWA-03)
+- [ ] 10-02-PLAN.md — PWA quality: PNG icons, SW tailwind.css cache, debug logging gate (PWA-04, PWA-05, PWA-06)
 
 ### Phase 11: Dashboard Cleanup
 **Goal**: Dashboard CSS is minimal and token-driven, TypeScript types are complete and safe, and map rendering uses efficient batched data loading
@@ -133,7 +133,7 @@ Recommended order: 8 -> 9 -> 10 -> 11 -> 12
 | 7. Driver PWA Refresh | v1.1 | 3/3 | Complete | 2026-03-03 |
 | 8. API Dead Code & Hygiene | v1.2 | 0/? | Not started | - |
 | 9. Config Consolidation | v1.2 | 0/? | Not started | - |
-| 10. Driver PWA Hardening | v1.2 | 0/? | Not started | - |
+| 10. Driver PWA Hardening | v1.2 | 0/2 | Planned | - |
 | 11. Dashboard Cleanup | v1.2 | 0/? | Not started | - |
 | 12. Data Wiring & Validation | v1.2 | 0/? | Not started | - |
 
