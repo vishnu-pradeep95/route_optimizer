@@ -30,6 +30,8 @@ const APP_SHELL = [
     './',
     './index.html',
     './manifest.json',
+    './icon-192.png',
+    './icon-512.png',
     // Leaflet library — pinned version to avoid CDN dependency at runtime
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',

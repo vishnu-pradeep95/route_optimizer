@@ -5,13 +5,20 @@
     "start_url": "/driver/",
     "display": "standalone",
     "orientation": "portrait",
-    "background_color": "#f5f5f5",
-    "theme_color": "#1a73e8",
+    "background_color": "#0B0B0F",
+    "theme_color": "#FF9410",
     "icons": [
         {
-            "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🚛</text></svg>",
-            "sizes": "any",
-            "type": "image/svg+xml"
+            "src": "icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
         }
     ]
 }
