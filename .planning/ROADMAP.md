@@ -53,11 +53,11 @@
   3. All imports in `main.py` are consolidated at file top -- no mid-file imports
   4. `config.py` has no `OSRM_URL` variable and existing OSRM references use correct config path
   5. PostGIS geometry operations use a typed helper function with zero `type: ignore` suppressions for geometry columns
-**Plans**: TBD
+**Plans**: 2 plans (Wave 1 -> Wave 2, sequential due to shared main.py)
 
 Plans:
-- [ ] 08-01: TBD
-- [ ] 08-02: TBD
+- [ ] 08-01: Dead code removal, import consolidation, OSRM_URL cleanup, docstring corrections (API-01, API-02, API-03, API-04, API-05)
+- [ ] 08-02: PostGIS geometry helper extraction (API-06)
 
 ### Phase 9: Config Consolidation
 **Goal**: Frontend applications read depot coordinates, safety multiplier, and office phone number from a single API config endpoint instead of hardcoded values
