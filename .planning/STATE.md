@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Tech Debt & Cleanup
-status: completed
-stopped_at: Phase 11 context gathered
-last_updated: "2026-03-04T02:49:06.600Z"
-last_activity: 2026-03-04 -- Completed 10-02 (PWA icons, tailwind.css cache, debug logging)
+status: executing
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-03-04T03:05:20.550Z"
+last_activity: "2026-03-04 -- Completed 11-01 (CSS/TS cleanup: dead aliases, tokens, exhaustive switch)"
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  total_plans: 7
+  completed_plans: 6
+  percent: 93
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Phase 10 - Driver PWA Hardening (v1.2 Tech Debt & Cleanup)
+**Current focus:** Phase 11 - Dashboard Cleanup (v1.2 Tech Debt & Cleanup)
 
 ## Current Position
 
-Phase: 10 of 12 (Driver PWA Hardening) -- COMPLETE
-Plan: 10-02 complete (all plans done)
-Status: Phase 10 complete
-Last activity: 2026-03-04 -- Completed 10-02 (PWA icons, tailwind.css cache, debug logging)
+Phase: 11 of 12 (Dashboard Cleanup)
+Plan: 11-01 complete, 11-02 remaining
+Status: Executing Phase 11
+Last activity: 2026-03-04 -- Completed 11-01 (CSS/TS cleanup: dead aliases, tokens, exhaustive switch)
 
-Progress: [██████████] 100% (13/13 v1.2 plans)
+Progress: [█████████░] 93% (14/15 v1.2 plans)
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Progress: [██████████] 100% (13/13 v1.2 plans)
 | 7. Driver PWA Refresh | 3/3 | 10min | 5min |
 | Phase 10 P01 | 2min | 2 tasks | 1 files |
 | Phase 10 P02 | 2min | 2 tasks | 5 files |
+| Phase 11 P01 | 2min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -61,6 +62,7 @@ See `.planning/milestones/v1.1-ROADMAP.md` for full v1.1 phase details.
 - [Phase 10]: FAB hidden entirely when config unavailable rather than showing broken link
 - [Phase 10]: Generated PWA icons with pure Python struct+zlib (no image libraries needed)
 - [Phase 10]: Debug logging gated via console.log override (no-op) instead of wrapping call sites
+- [Phase 11]: StatusBadge uses exhaustive switch with never-typed default (per DASH-04 user decision)
 
 ### Pending Todos
 
@@ -73,6 +75,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-04T02:49:06.597Z
-Stopped at: Phase 11 context gathered
-Resume file: .planning/phases/11-dashboard-cleanup/11-CONTEXT.md
+Last session: 2026-03-04T03:05:20.548Z
+Stopped at: Completed 11-01-PLAN.md
+Resume file: None

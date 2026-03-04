@@ -37,10 +37,10 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 
 ### Dashboard Cleanup
 
-- [ ] **DASH-01**: Dead CSS variable aliases removed from `index.css`
-- [ ] **DASH-02**: `.text-muted-30` uses design token instead of hardcoded hex
-- [ ] **DASH-03**: `RouteDetail` TypeScript interface includes `total_weight_kg` and `total_items`
-- [ ] **DASH-04**: `RunHistory.tsx` status cast replaced with proper type narrowing
+- [x] **DASH-01**: Dead CSS variable aliases removed from `index.css`
+- [x] **DASH-02**: `.text-muted-30` uses design token instead of hardcoded hex
+- [x] **DASH-03**: `RouteDetail` TypeScript interface includes `total_weight_kg` and `total_items`
+- [x] **DASH-04**: `RunHistory.tsx` status cast replaced with proper type narrowing
 - [ ] **DASH-05**: LiveMap batch endpoint replaces N+1 route detail fetching
 
 ### Data Validation
@@ -82,10 +82,10 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 | CFG-01 | Phase 9 | Complete |
 | CFG-02 | Phase 9 | Complete |
 | CFG-03 | Phase 9 | Complete |
-| DASH-01 | Phase 11 | Pending |
-| DASH-02 | Phase 11 | Pending |
-| DASH-03 | Phase 11 | Pending |
-| DASH-04 | Phase 11 | Pending |
+| DASH-01 | Phase 11 | Complete |
+| DASH-02 | Phase 11 | Complete |
+| DASH-03 | Phase 11 | Complete |
+| DASH-04 | Phase 11 | Complete |
 | DASH-05 | Phase 11 | Pending |
 | DATA-01 | Phase 12 | Pending |
 
