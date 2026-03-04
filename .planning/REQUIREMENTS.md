@@ -9,9 +9,9 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 
 ### Driver PWA Safety
 
-- [ ] **PWA-01**: Call Office FAB reads phone number from API config endpoint -- no hardcoded placeholder
-- [ ] **PWA-02**: GPS `watchPosition` watch ID saved and cleared on route reset/page unload
-- [ ] **PWA-03**: Offline error dialog uses styled `<dialog>` element, not browser `alert()`
+- [x] **PWA-01**: Call Office FAB reads phone number from API config endpoint -- no hardcoded placeholder
+- [x] **PWA-02**: GPS `watchPosition` watch ID saved and cleared on route reset/page unload
+- [x] **PWA-03**: Offline error dialog uses styled `<dialog>` element, not browser `alert()`
 
 ### Driver PWA Quality
 
@@ -66,9 +66,9 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PWA-01 | Phase 10 | Pending |
-| PWA-02 | Phase 10 | Pending |
-| PWA-03 | Phase 10 | Pending |
+| PWA-01 | Phase 10 | Complete |
+| PWA-02 | Phase 10 | Complete |
+| PWA-03 | Phase 10 | Complete |
 | PWA-04 | Phase 10 | Pending |
 | PWA-05 | Phase 10 | Pending |
 | PWA-06 | Phase 10 | Pending |

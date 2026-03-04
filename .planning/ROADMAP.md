@@ -133,7 +133,7 @@ Recommended order: 8 -> 9 -> 10 -> 11 -> 12
 | 7. Driver PWA Refresh | v1.1 | 3/3 | Complete | 2026-03-03 |
 | 8. API Dead Code & Hygiene | v1.2 | 0/? | Not started | - |
 | 9. Config Consolidation | v1.2 | 0/? | Not started | - |
-| 10. Driver PWA Hardening | v1.2 | 0/2 | Planned | - |
+| 10. Driver PWA Hardening | 1/2 | In Progress|  | - |
 | 11. Dashboard Cleanup | v1.2 | 0/? | Not started | - |
 | 12. Data Wiring & Validation | v1.2 | 0/? | Not started | - |
 
