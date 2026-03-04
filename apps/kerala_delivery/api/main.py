@@ -1320,6 +1320,27 @@ async def update_stop_status(
     if not updated:
         raise HTTPException(status_code=404, detail="Stop not found")
 
+    # --- API-07: Save driver-verified location to geocode cache ---
+    # Only on successful delivery WITH GPS — builds verified Kerala address DB.
+    # Do NOT fire on "failed" (driver may not be at exact address).
+    # Do NOT fire without GPS (no location data to save).
+    if body.status == "delivered" and delivery_loc is not None and target_stop.order.address_raw:
+        try:
+            await repo.save_geocode_cache(
+                session=session,
+                address_raw=target_stop.order.address_raw,
+                location=delivery_loc,
+                source="driver_verified",
+                confidence=0.95,
+            )
+            await session.commit()
+        except Exception:
+            logger.warning(
+                "Failed to save driver-verified location for order %s (non-fatal)",
+                order_id,
+                exc_info=True,
+            )
+
     return {
         "message": f"Order {order_id} marked as {body.status}",
         "order_id": order_id,
