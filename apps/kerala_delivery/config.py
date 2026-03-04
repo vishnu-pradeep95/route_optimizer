@@ -113,13 +113,8 @@ DEFAULT_SHIFT_END = "22:00"
 # EXTERNAL SERVICES
 # =============================================================================
 # Read from environment variables so Docker Compose networking works.
-# In Docker, services reference each other by container name (e.g., http://osrm:5000).
+# In Docker, services reference each other by container name (e.g., http://vroom:3000).
 # Locally, they default to localhost.
-
-# OSRM_URL: reserved for future direct OSRM queries (e.g., distance matrix
-# endpoint, speed profile calibration). Currently VROOM calls OSRM internally,
-# but we'll need direct access in Phase 2 for pre-optimization analysis.
-OSRM_URL = os.environ.get("OSRM_URL", "http://localhost:5000")
 VROOM_URL = os.environ.get("VROOM_URL", "http://localhost:3000")
 
 # =============================================================================

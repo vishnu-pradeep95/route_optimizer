@@ -182,11 +182,6 @@ class TestCoordinateBounds:
 class TestExternalServiceUrls:
     """Service URL defaults."""
 
-    def test_osrm_url_defaults_to_localhost(self):
-        """OSRM URL should default to localhost:5000 for local dev."""
-        # Default value when OSRM_URL env var is not set
-        assert "5000" in config.OSRM_URL
-
     def test_vroom_url_defaults_to_localhost(self):
         """VROOM URL should default to localhost:3000 for local dev."""
         assert "3000" in config.VROOM_URL

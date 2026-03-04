@@ -39,7 +39,7 @@ Architecture:
 Data flow:
     Address text
       → normalize (lowercase, strip)
-      → SHA-256 hash for cache key (in repo layer)
+      → normalize (lowercase, strip, NFC) for cache key
       → PostGIS lookup (idx_geocode_cache_address index)
       → HIT: return Location + bump hit_count
       → MISS: upstream.geocode() → save result → return

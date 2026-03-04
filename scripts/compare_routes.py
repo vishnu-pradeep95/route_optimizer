@@ -172,7 +172,7 @@ def main():
     args = parser.parse_args()
 
     # Resolve config values: CLI overrides > Kerala defaults
-    osrm_url = args.osrm_url or config.OSRM_URL
+    osrm_url = args.osrm_url or os.environ.get("OSRM_URL", "http://localhost:5000")
     vroom_url = args.vroom_url or config.VROOM_URL
     num_vehicles = args.num_vehicles or config.NUM_VEHICLES
     max_weight = args.max_weight or config.VEHICLE_MAX_WEIGHT_KG

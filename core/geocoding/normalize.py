@@ -4,7 +4,7 @@ Single source of truth for all address normalization in the project.
 Every cache read and cache write MUST use this function.
 
 Why a dedicated module?
-The codebase previously had three separate normalization implementations:
+The codebase previously had three separate normalization implementations (all replaced by this module):
 - GoogleGeocoder: `" ".join(address.lower().split())` then SHA-256
 - repository.get_cached_geocode(): `address_raw.strip().lower()`
 - repository.save_geocode_cache(): `address_raw.strip().lower()`
