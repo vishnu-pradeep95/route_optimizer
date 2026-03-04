@@ -62,6 +62,20 @@ from geoalchemy2.shape import to_shape
 logger = logging.getLogger(__name__)
 
 
+def _point_lat(geom: object) -> float | None:
+    """Extract latitude from a PostGIS Point geometry, or None."""
+    if geom is None:
+        return None
+    return float(to_shape(geom).y)
+
+
+def _point_lng(geom: object) -> float | None:
+    """Extract longitude from a PostGIS Point geometry, or None."""
+    if geom is None:
+        return None
+    return float(to_shape(geom).x)
+
+
 # Google Geocoding API status codes → user-friendly failure reasons.
 # Office staff see these messages, so they must be actionable and jargon-free.
 # The raw status is still logged server-side for debugging.
@@ -1689,8 +1703,8 @@ async def get_fleet_telemetry(
         "count": len(pings),
         "vehicles": {
             p.vehicle_id: {
-                "latitude": to_shape(p.location).y if p.location else None,  # type: ignore[union-attr]
-                "longitude": to_shape(p.location).x if p.location else None,  # type: ignore[union-attr]
+                "latitude": _point_lat(p.location),
+                "longitude": _point_lng(p.location),
                 "speed_kmh": p.speed_kmh,
                 "accuracy_m": p.accuracy_m,
                 "heading": p.heading,
@@ -1792,9 +1806,8 @@ async def get_vehicle_telemetry(
         "count": len(pings),
         "pings": [
             {
-                # Cast to Point for type checker — telemetry stores Point geometry
-                "latitude": to_shape(p.location).y if p.location else None,  # type: ignore[union-attr]
-                "longitude": to_shape(p.location).x if p.location else None,  # type: ignore[union-attr]
+                "latitude": _point_lat(p.location),
+                "longitude": _point_lng(p.location),
                 "speed_kmh": p.speed_kmh,
                 "accuracy_m": p.accuracy_m,
                 "heading": p.heading,
@@ -1854,15 +1867,14 @@ def _vehicle_to_dict(v: "VehicleDB") -> dict:
     Centralizes the DB→JSON conversion for vehicle responses.
     Extracts coordinates from PostGIS geometry and formats timestamps.
     """
-    depot = to_shape(v.depot_location) if v.depot_location else None
     return {
         "vehicle_id": v.vehicle_id,
         "registration_no": v.registration_no,
         "vehicle_type": v.vehicle_type,
         "max_weight_kg": v.max_weight_kg,
         "max_items": v.max_items,
-        "depot_latitude": depot.y if depot else None,
-        "depot_longitude": depot.x if depot else None,
+        "depot_latitude": _point_lat(v.depot_location),
+        "depot_longitude": _point_lng(v.depot_location),
         "speed_limit_kmh": v.speed_limit_kmh,
         "is_active": v.is_active,
         "created_at": v.created_at.isoformat() if v.created_at else None,
