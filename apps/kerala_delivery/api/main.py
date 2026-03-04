@@ -19,7 +19,7 @@ import pathlib
 import tempfile
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, time as dt_time, timezone
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -850,7 +850,6 @@ async def upload_and_optimize(
                     new_end_mins = new_end_mins % (24 * 60)
                     new_end_hour = new_end_mins // 60
                     new_end_minute = new_end_mins % 60
-                    from datetime import time as dt_time
                     order.delivery_window_end = dt_time(new_end_hour, new_end_minute)
                     widened_count += 1
 
