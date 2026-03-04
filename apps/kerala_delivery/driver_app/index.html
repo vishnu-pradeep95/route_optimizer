@@ -865,6 +865,20 @@
     </div>
 </dialog>
 
+<!-- Offline error dialog — styled to match fail-dialog dark theme -->
+<dialog id="offline-dialog">
+    <div class="fail-modal">
+        <h3>No Connection</h3>
+        <p style="color: var(--color-text-muted); margin: 0.5rem 0 1rem; font-size: 0.95rem;">
+            Cannot load route — no network and no cached data.
+            Please check your connection and try again.
+        </p>
+        <div class="fail-actions">
+            <button class="btn btn-fail-cancel" id="offline-dismiss">OK</button>
+        </div>
+    </div>
+</dialog>
+
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -1273,7 +1287,7 @@ async function loadRoute(vehicleId) {
         if (cached && cached.vehicle_id === vehicleId) {
             currentRoute = cached;
         } else {
-            alert('Cannot load route — no network and no cached data.');
+            document.getElementById('offline-dialog').showModal();
             return;
         }
     }
@@ -1733,6 +1747,19 @@ document.getElementById('fail-dialog').addEventListener('click', (e) => {
         e.target.close();
         pendingFailVehicleId = null;
         pendingFailOrderId = null;
+    }
+});
+
+// ============================================================
+// Offline Dialog — dismiss button + backdrop click
+// ============================================================
+document.getElementById('offline-dismiss').addEventListener('click', () => {
+    document.getElementById('offline-dialog').close();
+});
+
+document.getElementById('offline-dialog').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+        e.target.close();
     }
 });
 
