@@ -56,7 +56,16 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 
 ### Active
 
-(No active requirements — define next milestone with `/gsd:new-milestone`)
+## Current Milestone: v1.3 Office-Ready Deployment
+
+**Goal:** Make the system installable and usable by a non-technical office employee — one-command install from WSL, one-command daily startup, comprehensive documentation of CSV formats and workflow.
+
+**Target features:**
+- Comprehensive docs: CSV format spec, column constraints, address cleaning, rejection reasons
+- README accuracy: fix stale container names, remove manual steps now automated, fill placeholder URLs
+- One-command install from fresh WSL (Docker auto-install if missing)
+- One-command daily startup with clear success output
+- Office-focused workflow: upload CSV → print QR sheets → hand to drivers
 
 ### Out of Scope
 
@@ -80,7 +89,7 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v1.2 shipped — all known tech debt resolved. 8.3k Python LOC, 3.7k TypeScript LOC, 1.9k HTML/JS LOC (~13.9k total).
+- **Current state**: v1.3 in progress — docs overhaul and office-ready deployment. 8.3k Python LOC, 3.7k TypeScript LOC, 1.9k HTML/JS LOC (~13.9k total).
 - **Known tech debt**: All 22 items from v1.2 audit resolved. Remaining: physical Android device testing for outdoor contrast.
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
@@ -117,4 +126,4 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | Direct `repo.save_geocode_cache` call | Skip CachedGeocoder instantiation for driver-verified saves | ✓ Good — simpler, avoids unnecessary Google API key validation |
 
 ---
-*Last updated: 2026-03-04 after v1.2 milestone*
+*Last updated: 2026-03-04 after v1.3 milestone started*

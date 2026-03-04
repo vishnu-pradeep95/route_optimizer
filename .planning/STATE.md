@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Tech Debt & Cleanup
-status: archived
-stopped_at: Milestone v1.2 archived
-last_updated: "2026-03-04T22:00:00.000Z"
-last_activity: 2026-03-04 -- Milestone v1.2 archived
+milestone: v1.3
+milestone_name: Office-Ready Deployment
+status: active
+stopped_at: null
+last_updated: "2026-03-04T23:00:00.000Z"
+last_activity: 2026-03-04 -- Milestone v1.3 started
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,13 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-04)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Planning next milestone
+**Current focus:** Defining requirements for v1.3
 
 ## Current Position
 
-Milestone v1.2 Tech Debt & Cleanup: ARCHIVED
-All 12 phases (v1.0 + v1.1 + v1.2) complete.
-Next: `/gsd:new-milestone` to define v1.3+
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-04 — Milestone v1.3 started
 
 ## Performance Metrics
 
@@ -60,5 +61,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-04
-Stopped at: Milestone v1.2 archived
+Stopped at: Defining v1.3 requirements
 Resume file: None
