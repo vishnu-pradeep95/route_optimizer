@@ -15,9 +15,9 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 
 ### Driver PWA Quality
 
-- [ ] **PWA-04**: PWA manifest uses proper PNG icons (192px, 512px) instead of `data:` SVG emoji
-- [ ] **PWA-05**: `tailwind.css` included in service worker `APP_SHELL` pre-cache list
-- [ ] **PWA-06**: Production `console.log` calls gated behind debug flag or removed
+- [x] **PWA-04**: PWA manifest uses proper PNG icons (192px, 512px) instead of `data:` SVG emoji
+- [x] **PWA-05**: `tailwind.css` included in service worker `APP_SHELL` pre-cache list
+- [x] **PWA-06**: Production `console.log` calls gated behind debug flag or removed
 
 ### API Cleanup
 
@@ -69,9 +69,9 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 | PWA-01 | Phase 10 | Complete |
 | PWA-02 | Phase 10 | Complete |
 | PWA-03 | Phase 10 | Complete |
-| PWA-04 | Phase 10 | Pending |
-| PWA-05 | Phase 10 | Pending |
-| PWA-06 | Phase 10 | Pending |
+| PWA-04 | Phase 10 | Complete |
+| PWA-05 | Phase 10 | Complete |
+| PWA-06 | Phase 10 | Complete |
 | API-01 | Phase 8 | Complete |
 | API-02 | Phase 8 | Complete |
 | API-03 | Phase 8 | Complete |

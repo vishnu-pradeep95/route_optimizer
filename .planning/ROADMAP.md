@@ -37,7 +37,7 @@
 
 - [ ] **Phase 8: API Dead Code & Hygiene** - Remove dead functions, unused imports, fix import ordering, correct stale docstrings, extract PostGIS helper
 - [ ] **Phase 9: Config Consolidation** - Single API config endpoint serves depot coords, safety multiplier, and office phone number; QR sheet magic number aligned
-- [ ] **Phase 10: Driver PWA Hardening** - Safety fixes (GPS leak, alert replacement), consume config endpoint for phone number, proper PWA icons, SW cache gap, debug logging
+- [x] **Phase 10: Driver PWA Hardening** - Safety fixes (GPS leak, alert replacement), consume config endpoint for phone number, proper PWA icons, SW cache gap, debug logging (completed 2026-03-04)
 - [ ] **Phase 11: Dashboard Cleanup** - Dead CSS removal, design token consistency, TypeScript type gaps, N+1 fetch elimination
 - [ ] **Phase 12: Data Wiring & Validation** - Wire save_driver_verified into status endpoint, validate duplicate detection thresholds against production data
 
@@ -133,7 +133,7 @@ Recommended order: 8 -> 9 -> 10 -> 11 -> 12
 | 7. Driver PWA Refresh | v1.1 | 3/3 | Complete | 2026-03-03 |
 | 8. API Dead Code & Hygiene | v1.2 | 0/? | Not started | - |
 | 9. Config Consolidation | v1.2 | 0/? | Not started | - |
-| 10. Driver PWA Hardening | 1/2 | In Progress|  | - |
+| 10. Driver PWA Hardening | 2/2 | Complete   | 2026-03-04 | - |
 | 11. Dashboard Cleanup | v1.2 | 0/? | Not started | - |
 | 12. Data Wiring & Validation | v1.2 | 0/? | Not started | - |
 
