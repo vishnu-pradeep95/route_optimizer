@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Tech Debt & Cleanup
 status: active
-last_updated: "2026-03-03T22:00:00.000Z"
+last_updated: "2026-03-03T23:00:00.000Z"
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -18,14 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Defining requirements for v1.2 Tech Debt & Cleanup
+**Current focus:** Phase 8 - API Dead Code & Hygiene (v1.2 Tech Debt & Cleanup)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-03 — Milestone v1.2 started
+Phase: 8 of 12 (API Dead Code & Hygiene) -- first of 5 phases in v1.2
+Plan: --
+Status: Ready to plan
+Last activity: 2026-03-03 -- Roadmap created for v1.2 milestone (phases 8-12)
+
+Progress: [░░░░░░░░░░] 0% (0/5 v1.2 phases)
 
 ## Performance Metrics
 
@@ -57,11 +59,11 @@ None.
 
 ### Blockers/Concerns
 
-- Confidence-weighted duplicate detection thresholds (10m/25m/100m) are estimates -- validate against actual geocode_cache table distribution of location_type values.
+- Confidence-weighted duplicate detection thresholds (10m/25m/100m) are estimates -- validate against actual geocode_cache table distribution of location_type values (Phase 12, DATA-01).
 - Physical Android device testing required for outdoor contrast validation -- browser DevTools cannot replicate Kerala sunlight conditions.
 
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Milestone v1.1 archived
+Stopped at: v1.2 roadmap created (phases 8-12, 22 requirements mapped)
 Resume file: None
