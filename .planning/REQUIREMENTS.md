@@ -27,7 +27,7 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 - [x] **API-04**: Unused `OSRM_URL` removed from `config.py`
 - [x] **API-05**: Stale SHA-256 docstring in `cache.py` corrected
 - [x] **API-06**: PostGIS geometry helper replaces 6x `type: ignore` suppressions
-- [ ] **API-07**: `save_driver_verified()` wired into delivery status update endpoint
+- [x] **API-07**: `save_driver_verified()` wired into delivery status update endpoint
 
 ### Config Consistency
 
@@ -78,7 +78,7 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 | API-04 | Phase 8 | Complete |
 | API-05 | Phase 8 | Complete |
 | API-06 | Phase 8 | Complete |
-| API-07 | Phase 12 | Pending |
+| API-07 | Phase 12 | Complete |
 | CFG-01 | Phase 9 | Complete |
 | CFG-02 | Phase 9 | Complete |
 | CFG-03 | Phase 9 | Complete |

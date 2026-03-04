@@ -39,7 +39,7 @@
 - [ ] **Phase 9: Config Consolidation** - Single API config endpoint serves depot coords, safety multiplier, and office phone number; QR sheet magic number aligned
 - [x] **Phase 10: Driver PWA Hardening** - Safety fixes (GPS leak, alert replacement), consume config endpoint for phone number, proper PWA icons, SW cache gap, debug logging (completed 2026-03-04)
 - [x] **Phase 11: Dashboard Cleanup** - Dead CSS removal, design token consistency, TypeScript type gaps, N+1 fetch elimination (completed 2026-03-04)
-- [ ] **Phase 12: Data Wiring & Validation** - Wire save_driver_verified into status endpoint, validate duplicate detection thresholds against production data
+- [x] **Phase 12: Data Wiring & Validation** - Wire save_driver_verified into status endpoint, validate duplicate detection thresholds against production data (completed 2026-03-04)
 
 ## Phase Details
 
@@ -136,7 +136,7 @@ Recommended order: 8 -> 9 -> 10 -> 11 -> 12
 | 9. Config Consolidation | v1.2 | 0/? | Not started | - |
 | 10. Driver PWA Hardening | 2/2 | Complete    | 2026-03-04 | - |
 | 11. Dashboard Cleanup | 2/2 | Complete    | 2026-03-04 | - |
-| 12. Data Wiring & Validation | v1.2 | 0/2 | Not started | - |
+| 12. Data Wiring & Validation | 2/2 | Complete   | 2026-03-04 | - |
 
 ---
 *Full phase details for v1.0 and v1.1 archived in `.planning/milestones/`*

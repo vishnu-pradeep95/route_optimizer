@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Tech Debt & Cleanup
 status: completed
-stopped_at: Phase 12 context gathered
-last_updated: "2026-03-04T15:43:42.326Z"
-last_activity: "2026-03-04 -- Completed 11-02 (Batch route loading: N+1 to single API call)"
+stopped_at: Completed 12-02-PLAN.md (Phase 12 complete, all v1.2 plans done)
+last_updated: "2026-03-04T16:07:00Z"
+last_activity: "2026-03-04 -- Completed 12-02 (Threshold validation against production geocode_cache)"
 progress:
   total_phases: 5
-  completed_phases: 4
-  total_plans: 7
-  completed_plans: 7
+  completed_phases: 5
+  total_plans: 9
+  completed_plans: 9
   percent: 100
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Phase 11 - Dashboard Cleanup (v1.2 Tech Debt & Cleanup)
+**Current focus:** Phase 12 - Data Wiring & Validation (v1.2 Tech Debt & Cleanup)
 
 ## Current Position
 
-Phase: 11 of 12 (Dashboard Cleanup) -- COMPLETE
-Plan: 11-02 complete (all plans done)
-Status: Phase 11 Complete
-Last activity: 2026-03-04 -- Completed 11-02 (Batch route loading: N+1 to single API call)
+Phase: 12 of 12 (Data Wiring & Validation) -- COMPLETE
+Plan: 12-02 complete (all plans done)
+Status: Phase 12 Complete -- v1.2 Milestone Complete
+Last activity: 2026-03-04 -- Completed 12-02 (Threshold validation against production geocode_cache)
 
-Progress: [██████████] 100% (15/15 v1.2 plans)
+Progress: [██████████] 100% (17/17 v1.2 plans)
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [██████████] 100% (15/15 v1.2 plans)
 | Phase 10 P02 | 2min | 2 tasks | 5 files |
 | Phase 11 P01 | 2min | 2 tasks | 4 files |
 | Phase 11 P02 | 2 | 2 tasks | 4 files |
+| Phase 12 P01 | 3min | 1 task (TDD) | 2 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,7 @@ See `.planning/milestones/v1.1-ROADMAP.md` for full v1.1 phase details.
 - [Phase 10]: Debug logging gated via console.log override (no-op) instead of wrapping call sites
 - [Phase 11]: StatusBadge uses exhaustive switch with never-typed default (per DASH-04 user decision)
 - [Phase 11]: Used optional query param (include_stops=true) on existing endpoint for batch route data, preserving backward compatibility
+- [Phase 12]: Called repo.save_geocode_cache directly instead of CachedGeocoder.save_driver_verified to avoid unnecessary geocoder instantiation
 
 ### Pending Todos
 
@@ -77,6 +79,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-04T15:43:42.322Z
-Stopped at: Phase 12 context gathered
-Resume file: .planning/phases/12-data-wiring-validation/12-CONTEXT.md
+Last session: 2026-03-04T16:06:38Z
+Stopped at: Completed 12-01-PLAN.md
+Resume file: .planning/phases/12-data-wiring-validation/12-01-SUMMARY.md
