@@ -50,6 +50,8 @@ export interface RouteDetail {
   total_stops: number;
   total_distance_km: number;
   total_duration_minutes: number;
+  total_weight_kg: number;
+  total_items: number;
   stops: RouteStop[];
 }
 

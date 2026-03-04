@@ -228,7 +228,7 @@ export function RunHistory() {
                     </td>
                     <td className="numeric">
                       {run.orders_unassigned > 0 ? (
-                        <span style={{ color: "#dc2626", fontWeight: 600 }}>
+                        <span style={{ color: "var(--color-danger)", fontWeight: 600 }}>
                           {run.orders_unassigned}
                         </span>
                       ) : (
@@ -241,7 +241,7 @@ export function RunHistory() {
                     </td>
                     <td className="source-file">{run.source_filename}</td>
                     <td>
-                      <StatusBadge status={run.status as "pending" | "delivered" | "failed" | "completed" | "running"} />
+                      <StatusBadge status={run.status} />
                     </td>
                   </tr>
 

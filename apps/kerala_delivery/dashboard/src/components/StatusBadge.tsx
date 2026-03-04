@@ -13,25 +13,38 @@ import type { RouteStop } from "../types";
 
 type BadgeStatus = "pending" | "delivered" | "failed" | "completed" | "running";
 
-const BADGE_CLASSES: Record<BadgeStatus, string> = {
-  delivered: "tw:badge-success",
-  completed: "tw:badge-success",
-  pending: "tw:badge-warning",
-  running: "tw:badge-warning",
-  failed: "tw:badge-error",
-};
-
-const BADGE_LABELS: Record<BadgeStatus, string> = {
-  delivered: "Complete",
-  completed: "Completed",
-  pending: "Pending",
-  running: "Running",
-  failed: "Failed",
-};
-
 export function StatusBadge({ status }: { status: BadgeStatus }) {
-  const badgeClass = BADGE_CLASSES[status] ?? "tw:badge-ghost";
-  const label = BADGE_LABELS[status] ?? status;
+  let badgeClass: string;
+  let label: string;
+
+  switch (status) {
+    case "delivered":
+      badgeClass = "tw:badge-success";
+      label = "Complete";
+      break;
+    case "completed":
+      badgeClass = "tw:badge-success";
+      label = "Completed";
+      break;
+    case "pending":
+      badgeClass = "tw:badge-warning";
+      label = "Pending";
+      break;
+    case "running":
+      badgeClass = "tw:badge-warning";
+      label = "Running";
+      break;
+    case "failed":
+      badgeClass = "tw:badge-error";
+      label = "Failed";
+      break;
+    default: {
+      const _exhaustive: never = status;
+      badgeClass = "tw:badge-ghost";
+      label = String(_exhaustive);
+    }
+  }
+
   return (
     <span className={`tw:badge tw:badge-sm ${badgeClass}`}>{label}</span>
   );
