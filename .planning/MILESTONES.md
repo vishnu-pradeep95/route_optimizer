@@ -1,5 +1,22 @@
 # Milestones
 
+## v1.2 Tech Debt & Cleanup (Shipped: 2026-03-04)
+
+**Phases completed:** 5 phases (8-12), 9 plans
+**Timeline:** 2 days (2026-03-03 → 2026-03-04)
+**Git range:** `a92bcff`..`0305804` (43 commits)
+**Files modified:** 48 (+4,345 / -196)
+
+**Key accomplishments:**
+- Removed all dead code from API: `_build_fleet()`, unused imports, stale `OSRM_URL` config, incorrect docstrings
+- Created typed PostGIS geometry helpers (`_point_lat`/`_point_lng`) eliminating all `type: ignore` suppressions
+- Consolidated config into single `GET /api/config` endpoint serving depot coords, safety multiplier, and office phone number
+- Hardened Driver PWA: real phone number from API, GPS `watchPosition` leak fix, styled offline `<dialog>`, PNG icons, SW pre-cache, debug logging gate
+- Cleaned dashboard: dead CSS alias removal, design token consistency, `RouteDetail` type fix, exhaustive `StatusBadge` switch, batch route loading replacing N+1
+- Wired driver-verified geocode saves into delivery status endpoint; validated duplicate detection thresholds against 54 production geocode entries
+
+---
+
 ## v1.1 Polish & Reliability (Shipped: 2026-03-03)
 
 **Phases completed:** 4 phases (4-7), 16 plans

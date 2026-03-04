@@ -43,21 +43,20 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ 60px+ touch targets for all primary driver actions — v1.1
 - ✓ WCAG AAA contrast ratio for outdoor readability — v1.1
 - ✓ Offline route data persistence — v1.1
+- ✓ API dead code removal (_build_fleet, unused imports, stale OSRM_URL, incorrect docstrings) — v1.2
+- ✓ Typed PostGIS geometry helpers eliminating type:ignore suppressions — v1.2
+- ✓ Single /api/config endpoint for depot coords, safety multiplier, office phone — v1.2
+- ✓ Driver PWA safety: real phone from API, GPS leak fix, styled offline dialog — v1.2
+- ✓ PWA installability: proper PNG icons, SW pre-cache for tailwind.css, debug logging gate — v1.2
+- ✓ Dashboard cleanup: dead CSS removal, design token consistency, TypeScript type safety — v1.2
+- ✓ Exhaustive StatusBadge switch with compile-time safety — v1.2
+- ✓ Batch route loading (GET /api/routes?include_stops=true) replacing N+1 — v1.2
+- ✓ Driver-verified geocode wiring into delivery status endpoint — v1.2
+- ✓ Duplicate detection thresholds validated against production data — v1.2
 
 ### Active
 
-## Current Milestone: v1.2 Tech Debt & Cleanup
-
-**Goal:** Eliminate all known tech debt, dead code, and consistency issues across the API, dashboard, and driver PWA.
-
-**Target fixes:**
-- Critical: fake Call Office phone number, GPS watchPosition leak
-- Dead code: `_build_fleet()`, unused imports, unused config vars
-- Consistency: depot coords duplication, safety multiplier duplication, QR sheet magic number
-- Driver PWA: replace `alert()` with `<dialog>`, proper PWA icons, SW pre-cache gap, reduce console.log
-- Dashboard: dead CSS variables, hardcoded hex token, TypeScript type gaps, unsafe casts, N+1 route fetching
-- API: mid-file import, PostGIS type:ignore → helper function, stale docstrings
-- Data: wire `save_driver_verified()`, validate duplicate detection thresholds
+(No active requirements — define next milestone with `/gsd:new-milestone`)
 
 ### Out of Scope
 
@@ -81,8 +80,8 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v1.2 in progress — tech debt cleanup across all layers. 17.5k Python LOC, 3.6k TypeScript LOC, 1.8k HTML/JS LOC.
-- **Known tech debt**: 21 items identified via full codebase audit (see REQUIREMENTS.md for complete list)
+- **Current state**: v1.2 shipped — all known tech debt resolved. 8.3k Python LOC, 3.7k TypeScript LOC, 1.9k HTML/JS LOC (~13.9k total).
+- **Known tech debt**: All 22 items from v1.2 audit resolved. Remaining: physical Android device testing for outdoor contrast.
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
 ## Constraints
@@ -109,6 +108,13 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | WCAG AAA contrast for driver PWA | Outdoor readability in Kerala sunlight conditions | ✓ Good — two-tier text hierarchy, saffron accents |
 | Hero card + compact list architecture | Only next pending stop gets action buttons; rest are read-only | ✓ Good — reduces cognitive load for drivers |
 | Native `<dialog>` for fail confirmation | Dark-themed, accessible, replaces browser confirm() | ✓ Good — consistent with PWA aesthetic |
+| Public `/api/config` endpoint | Serve depot coords, safety multiplier, phone number from single source | ✓ Good — eliminates frontend hardcoding |
+| `QR_SHEET_DURATION_BUFFER` named constant | Replace magic 1.2 multiplier in QR sheet generation | ✓ Good — single source of truth in config.py |
+| `console.log` override for debug gating | No-op override vs wrapping call sites | ✓ Good — zero call-site changes needed |
+| Pure Python PNG icon generation | struct+zlib instead of Pillow/image library | ✓ Good — zero new dependencies |
+| Exhaustive switch for StatusBadge | TypeScript never-typed default ensures compile-time safety | ✓ Good — catches missing status values at build |
+| Optional `include_stops` query param | Batch route data via existing endpoint, backward compatible | ✓ Good — no breaking changes for existing consumers |
+| Direct `repo.save_geocode_cache` call | Skip CachedGeocoder instantiation for driver-verified saves | ✓ Good — simpler, avoids unnecessary Google API key validation |
 
 ---
-*Last updated: 2026-03-03 after v1.2 milestone start*
+*Last updated: 2026-03-04 after v1.2 milestone*

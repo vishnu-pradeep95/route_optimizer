@@ -2,6 +2,54 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.2 — Tech Debt & Cleanup
+
+**Shipped:** 2026-03-04
+**Phases:** 5 | **Plans:** 9 | **Timeline:** 2 days
+
+### What Was Built
+- API dead code removal: `_build_fleet()`, unused imports, stale `OSRM_URL`, incorrect docstrings
+- Typed PostGIS geometry helpers (`_point_lat`/`_point_lng`) replacing all `type: ignore` suppressions
+- Single `/api/config` endpoint consolidating depot coords, safety multiplier, and office phone number
+- Driver PWA safety: real phone from API config, GPS `watchPosition` leak fix, styled offline `<dialog>`
+- PWA quality: proper PNG icons (192/512px), tailwind.css in SW pre-cache, debug logging gate
+- Dashboard cleanup: dead CSS aliases removed, design tokens, `RouteDetail` type fix, exhaustive `StatusBadge` switch
+- Batch route loading (`GET /api/routes?include_stops=true`) replacing N+1 LiveMap pattern
+- Driver-verified geocode wiring: successful GPS deliveries auto-populate geocode cache
+- Duplicate detection threshold validation against 54 production geocode entries
+
+### What Worked
+- Parallel phase execution: Phases 8, 11, 12 ran independently with zero conflicts
+- TDD in Phase 12: writing failing tests first for geocode wiring caught guard condition edge cases
+- Backward-compatible API changes: `include_stops` query param preserved existing consumers
+- Minimal dependency approach: pure Python PNG generation (struct+zlib) avoided adding Pillow
+- Config endpoint as forward-wiring: depot_lat/depot_lng served but not yet consumed by PWA, ready for future use
+
+### What Was Inefficient
+- Phases 8 and 9 ROADMAP entries still showed "Not started" in the progress table despite being complete — state tracking fell behind
+- Phase 9 plan was marked "TBD" in ROADMAP even after execution completed
+- SUMMARY.md `one_liner` field was null for all v1.2 phases — not populated during execution
+
+### Patterns Established
+- `console.log` override pattern for debug gating: `console.log = () => {}` when `!DEBUG`
+- Non-blocking geocache save: try/except after primary commit so cache failures never break delivery flow
+- Optional query params for backward-compatible batch endpoints
+- Exhaustive switch + `never`-typed default for TypeScript enum-like unions
+
+### Key Lessons
+1. Tech debt milestones benefit from fine-grained requirements mapping — 22 specific REQ-IDs made verification unambiguous
+2. `type: ignore` suppressions should be replaced with typed helpers as soon as the pattern repeats (PostGIS geometry was 6 sites)
+3. Config consolidation should happen early — hardcoded values across 3 codebases (API, PWA, dashboard) create drift risk
+4. Production data validation (12-02) is high-value/low-effort — 54 rows confirmed all 4 threshold values were appropriate
+5. ROADMAP progress table needs automated sync — manual updates fell behind during rapid phase execution
+
+### Cost Observations
+- Model mix: opus for planning/execution, sonnet for integration checker
+- Sessions: ~3 sessions across 2 days
+- Notable: 9 plans in 2 days (4.5 plans/day) — faster than v1.1's 5.3 plans/day due to cleanup scope being well-defined
+
+---
+
 ## Milestone: v1.1 — Polish & Reliability
 
 **Shipped:** 2026-03-03
@@ -86,6 +134,7 @@
 |-----------|----------|--------|-------|------------|
 | v1.0 | ~1 day | 3 | 8 | Foundation-first approach |
 | v1.1 | 3 days | 4 | 16 | Visual verification as formal plans; Playwright MCP E2E testing |
+| v1.2 | 2 days | 5 | 9 | Fine-grained REQ-IDs; parallel independent phases; TDD for data wiring |
 
 ### Cumulative Quality
 
@@ -93,9 +142,12 @@
 |-----------|-------------|----------|---------------|-------------|
 | v1.0 | 16.6k | 3.3k | -- | Security headers, test baseline |
 | v1.1 | 17.5k | 3.6k | 1.8k | DaisyUI migration, PWA refresh |
+| v1.2 | 8.3k | 3.7k | 1.9k | Dead code removed (-9.2k Python), typed helpers, config consolidation |
 
 ### Top Lessons (Verified Across Milestones)
 
 1. Foundation phases (design system, test infra, security) pay off immediately in subsequent phases
 2. Data integrity before UI polish — always fix the data pipeline before making it look good
 3. CSS conventions must be established and enforced in the first phase — late fixes are expensive
+4. Tech debt milestones with specific, measurable requirements (not vague "cleanup") execute faster and verify unambiguously
+5. Config consolidation eliminates cross-codebase drift — do it early in the project lifecycle
