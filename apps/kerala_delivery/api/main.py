@@ -1107,18 +1107,62 @@ async def upload_and_optimize(
 
 
 @app.get("/api/routes")
-async def list_routes(session: AsyncSession = SessionDep):
+async def list_routes(include_stops: bool = False, session: AsyncSession = SessionDep):
     """Get all routes from the latest optimization.
 
     Returns a summary list — one entry per vehicle/driver.
     Used by the office dashboard to see the full picture.
     Reads from PostgreSQL instead of in-memory (Phase 2+).
+
+    Query params:
+        include_stops: When true, each route includes its full stops array,
+            total_weight_kg, and total_items. Used by the dashboard LiveMap
+            to load all route data in a single request instead of N+1 calls.
+            Default false for backward compatibility.
     """
     run = await repo.get_latest_run(session)
     if not run:
         raise HTTPException(status_code=404, detail="No routes generated yet. Upload orders first.")
 
     route_dbs = await repo.get_routes_for_run(session, run.id)
+
+    if include_stops:
+        # Batch mode: return full route details (with stops) for every vehicle.
+        # Eliminates the N+1 pattern where the dashboard fetches summaries
+        # then calls GET /api/routes/{vehicle_id} for each vehicle.
+        return {
+            "assignment_id": str(run.id),
+            "routes": [
+                {
+                    "route_id": str(r.id),
+                    "vehicle_id": r.vehicle_id,
+                    "driver_name": r.driver_name,
+                    "total_stops": len(r.stops),
+                    "total_distance_km": round(r.total_distance_km, 2),
+                    "total_duration_minutes": round(r.total_duration_minutes, 1),
+                    "total_weight_kg": round(r.total_weight_kg, 1),
+                    "total_items": r.total_items,
+                    "stops": [
+                        {
+                            "sequence": stop.sequence,
+                            "order_id": stop.order_id,
+                            "address": stop.address_display,
+                            "latitude": stop.location.latitude,
+                            "longitude": stop.location.longitude,
+                            "weight_kg": stop.weight_kg,
+                            "quantity": stop.quantity,
+                            "notes": stop.notes,
+                            "distance_from_prev_km": round(stop.distance_from_prev_km, 2),
+                            "duration_from_prev_minutes": round(stop.duration_from_prev_minutes, 1),
+                            "status": stop.status,
+                        }
+                        for stop in repo.route_db_to_pydantic(r).stops
+                    ],
+                }
+                for r in route_dbs
+            ],
+            "unassigned_orders": run.orders_unassigned,
+        }
 
     return {
         "assignment_id": str(run.id),
