@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Tech Debt & Cleanup
 status: completed
-stopped_at: Completed 12-02-PLAN.md (Phase 12 complete, all v1.2 plans done)
-last_updated: "2026-03-04T16:07:00Z"
-last_activity: "2026-03-04 -- Completed 12-02 (Threshold validation against production geocode_cache)"
+stopped_at: Completed 12-02-PLAN.md
+last_updated: "2026-03-04T16:08:51.954Z"
+last_activity: 2026-03-04 -- Completed 12-02 (Threshold validation against production geocode_cache)
 progress:
   total_phases: 5
   completed_phases: 5
@@ -53,6 +53,7 @@ Progress: [██████████] 100% (17/17 v1.2 plans)
 | Phase 11 P01 | 2min | 2 tasks | 4 files |
 | Phase 11 P02 | 2 | 2 tasks | 4 files |
 | Phase 12 P01 | 3min | 1 task (TDD) | 2 files |
+| Phase 12 P02 | 2min | 1 task | 2 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,7 @@ See `.planning/milestones/v1.1-ROADMAP.md` for full v1.1 phase details.
 - [Phase 11]: StatusBadge uses exhaustive switch with never-typed default (per DASH-04 user decision)
 - [Phase 11]: Used optional query param (include_stops=true) on existing endpoint for batch route data, preserving backward compatibility
 - [Phase 12]: Called repo.save_geocode_cache directly instead of CachedGeocoder.save_driver_verified to avoid unnecessary geocoder instantiation
+- [Phase 12]: All 4 DUPLICATE_THRESHOLDS validated against production data (54 entries, 70.4% GEOMETRIC_CENTER) -- no adjustments needed
 
 ### Pending Todos
 
@@ -74,11 +76,11 @@ None.
 
 ### Blockers/Concerns
 
-- Confidence-weighted duplicate detection thresholds (10m/25m/100m) are estimates -- validate against actual geocode_cache table distribution of location_type values (Phase 12, DATA-01).
+- ~~Confidence-weighted duplicate detection thresholds are estimates~~ -- RESOLVED in 12-02: validated against 54 production entries, all 4 values confirmed appropriate.
 - Physical Android device testing required for outdoor contrast validation -- browser DevTools cannot replicate Kerala sunlight conditions.
 
 ## Session Continuity
 
-Last session: 2026-03-04T16:06:38Z
-Stopped at: Completed 12-01-PLAN.md
-Resume file: .planning/phases/12-data-wiring-validation/12-01-SUMMARY.md
+Last session: 2026-03-04T16:08:51.005Z
+Stopped at: Completed 12-02-PLAN.md
+Resume file: None

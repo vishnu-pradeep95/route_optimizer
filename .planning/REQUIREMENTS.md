@@ -45,7 +45,7 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 
 ### Data Validation
 
-- [ ] **DATA-01**: Duplicate detection thresholds validated against actual geocode_cache location_type distribution
+- [x] **DATA-01**: Duplicate detection thresholds validated against actual geocode_cache location_type distribution
 
 ## Future Requirements
 
@@ -87,7 +87,7 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 | DASH-03 | Phase 11 | Complete |
 | DASH-04 | Phase 11 | Complete |
 | DASH-05 | Phase 11 | Complete |
-| DATA-01 | Phase 12 | Pending |
+| DATA-01 | Phase 12 | Complete |
 
 **Coverage:**
 - v1.2 requirements: 22 total
