@@ -31,9 +31,9 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 
 ### Config Consistency
 
-- [ ] **CFG-01**: Depot coordinates served from API config endpoint -- frontend reads dynamically, not hardcoded
-- [ ] **CFG-02**: Safety multiplier served from API config endpoint -- frontend reads dynamically, not hardcoded
-- [ ] **CFG-03**: QR sheet duration buffer uses named constant aligned with safety multiplier
+- [x] **CFG-01**: Depot coordinates served from API config endpoint -- frontend reads dynamically, not hardcoded
+- [x] **CFG-02**: Safety multiplier served from API config endpoint -- frontend reads dynamically, not hardcoded
+- [x] **CFG-03**: QR sheet duration buffer uses named constant aligned with safety multiplier
 
 ### Dashboard Cleanup
 
@@ -79,9 +79,9 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 | API-05 | Phase 8 | Complete |
 | API-06 | Phase 8 | Complete |
 | API-07 | Phase 12 | Pending |
-| CFG-01 | Phase 9 | Pending |
-| CFG-02 | Phase 9 | Pending |
-| CFG-03 | Phase 9 | Pending |
+| CFG-01 | Phase 9 | Complete |
+| CFG-02 | Phase 9 | Complete |
+| CFG-03 | Phase 9 | Complete |
 | DASH-01 | Phase 11 | Pending |
 | DASH-02 | Phase 11 | Pending |
 | DASH-03 | Phase 11 | Pending |
@@ -96,4 +96,4 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 
 ---
 *Requirements defined: 2026-03-03*
-*Last updated: 2026-03-04 after Phase 8 completion*
+*Last updated: 2026-03-04 after Phase 9 completion*
