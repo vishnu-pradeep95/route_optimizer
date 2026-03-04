@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -56,8 +56,6 @@ from core.geocoding.google_adapter import GoogleGeocoder
 from core.licensing.license_manager import validate_license, LicenseStatus, LicenseInfo, GRACE_PERIOD_DAYS
 from core.models.location import Location
 from core.models.order import Order
-from core.models.route import Route, RouteAssignment
-from core.models.vehicle import Vehicle
 from core.optimizer.vroom_adapter import VroomAdapter
 from geoalchemy2.shape import to_shape
 
@@ -380,7 +378,6 @@ _driver_app_dir = pathlib.Path(__file__).parent.parent / "driver_app"
 # If sw.js is HTTP-cached, the browser won't notice the version change and
 # will keep serving the old app shell indefinitely.
 # This route intercepts /driver/sw.js before the StaticFiles mount handles it.
-from fastapi.responses import Response as _Response
 
 @app.get("/driver/sw.js", include_in_schema=False)
 async def serve_sw_js():
@@ -388,7 +385,7 @@ async def serve_sw_js():
     sw_path = _driver_app_dir / "sw.js"
     if not sw_path.exists():
         raise HTTPException(status_code=404, detail="sw.js not found")
-    return _Response(
+    return Response(
         content=sw_path.read_bytes(),
         media_type="application/javascript",
         headers={
@@ -639,31 +636,6 @@ class OptimizationSummary(BaseModel):
         default_factory=list,
         description="Groups of orders with suspiciously close GPS coordinates",
     )
-
-
-# =============================================================================
-# Helper: build fleet from Kerala config
-# =============================================================================
-def _build_fleet() -> list[Vehicle]:
-    """Create the vehicle fleet from Kerala-specific configuration.
-
-    All 13 vehicles are identical Piaggio Ape Xtra LDX three-wheelers
-    starting from the same depot. In Phase 2, this could read from a
-    database with per-vehicle specifics.
-    """
-    vehicles = []
-    for i in range(1, config.NUM_VEHICLES + 1):
-        vehicles.append(
-            Vehicle(
-                vehicle_id=f"VEH-{i:02d}",
-                driver_name=f"Driver {i}",  # TODO: read real names from config/DB
-                max_weight_kg=config.VEHICLE_MAX_WEIGHT_KG,
-                max_items=config.VEHICLE_MAX_CYLINDERS,
-                depot=config.DEPOT_LOCATION,
-                speed_limit_kmh=config.SPEED_LIMIT_KMH,
-            )
-        )
-    return vehicles
 
 
 # =============================================================================

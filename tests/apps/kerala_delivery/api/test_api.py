@@ -1589,8 +1589,7 @@ class TestDeliveryWindowEnforcement:
         with patch("apps.kerala_delivery.api.main.CsvImporter") as mock_importer_cls, \
              patch("apps.kerala_delivery.api.main._get_geocoder", return_value=None), \
              patch("apps.kerala_delivery.api.main.VroomAdapter") as mock_optimizer_cls, \
-             patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
-             patch("apps.kerala_delivery.api.main._build_fleet") as mock_fleet:
+             patch("apps.kerala_delivery.api.main.repo") as mock_repo:
 
             mock_importer = MagicMock()
             mock_importer.import_orders.return_value = MagicMock(orders=[mock_order], errors=[], warnings=[])
@@ -1611,7 +1610,6 @@ class TestDeliveryWindowEnforcement:
             mock_repo.get_cached_geocode = AsyncMock(return_value=None)
             mock_repo.get_active_vehicles = AsyncMock(return_value=[])
             mock_repo.save_optimization_run = AsyncMock(return_value=uuid.uuid4())
-            mock_fleet.return_value = []
 
             resp = client.post(
                 "/api/upload-orders",
@@ -1642,8 +1640,7 @@ class TestDeliveryWindowEnforcement:
         with patch("apps.kerala_delivery.api.main.CsvImporter") as mock_importer_cls, \
              patch("apps.kerala_delivery.api.main._get_geocoder", return_value=None), \
              patch("apps.kerala_delivery.api.main.VroomAdapter") as mock_optimizer_cls, \
-             patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
-             patch("apps.kerala_delivery.api.main._build_fleet") as mock_fleet:
+             patch("apps.kerala_delivery.api.main.repo") as mock_repo:
 
             mock_importer = MagicMock()
             mock_importer.import_orders.return_value = MagicMock(orders=[mock_order], errors=[], warnings=[])
@@ -1664,7 +1661,6 @@ class TestDeliveryWindowEnforcement:
             mock_repo.get_cached_geocode = AsyncMock(return_value=None)
             mock_repo.get_active_vehicles = AsyncMock(return_value=[])
             mock_repo.save_optimization_run = AsyncMock(return_value=uuid.uuid4())
-            mock_fleet.return_value = []
 
             client.post(
                 "/api/upload-orders",
