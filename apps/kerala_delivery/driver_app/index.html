@@ -885,6 +885,14 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
+// Debug mode: append ?debug=1 to URL to enable console logging.
+// Without it, console.log is silenced for clean production output.
+// console.warn and console.error are always active — those indicate real problems.
+const DEBUG = new URLSearchParams(window.location.search).has('debug');
+if (!DEBUG) {
+    console.log = () => {};
+}
+
 // ============================================================
 // State
 // ============================================================

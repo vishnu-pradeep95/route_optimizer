@@ -21,7 +21,7 @@
 // Bump this version string to force re-caching after a deploy.
 // The browser detects the byte-level change in sw.js and triggers the
 // install event, which re-caches everything.
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const CACHE_NAME = `lpg-driver-${CACHE_VERSION}`;
 
 // App shell: files needed for the app to render without network.
@@ -30,6 +30,7 @@ const APP_SHELL = [
     './',
     './index.html',
     './manifest.json',
+    './tailwind.css',
     './icon-192.png',
     './icon-512.png',
     // Leaflet library — pinned version to avoid CDN dependency at runtime
