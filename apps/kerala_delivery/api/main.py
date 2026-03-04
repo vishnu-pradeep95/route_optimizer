@@ -657,12 +657,37 @@ class OptimizationSummary(BaseModel):
 # =============================================================================
 
 
+class AppConfig(BaseModel):
+    """Public application configuration served to frontend clients."""
+
+    depot_lat: float = Field(description="Depot latitude")
+    depot_lng: float = Field(description="Depot longitude")
+    safety_multiplier: float = Field(description="Route time safety multiplier")
+    office_phone_number: str = Field(description="Office phone in E.164 format")
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
     # Use app.version so we don't have to update this string separately.
     # The version is set once in the FastAPI() constructor above.
     return {"status": "ok", "service": "kerala-lpg-optimizer", "version": app.version}
+
+
+@app.get("/api/config", response_model=AppConfig)
+async def get_app_config():
+    """Return public application configuration.
+
+    Frontend clients read depot coordinates, safety multiplier,
+    and office phone number from this endpoint instead of
+    hardcoding values.
+    """
+    return AppConfig(
+        depot_lat=config.DEPOT_LOCATION.latitude,
+        depot_lng=config.DEPOT_LOCATION.longitude,
+        safety_multiplier=config.SAFETY_MULTIPLIER,
+        office_phone_number=config.OFFICE_PHONE_NUMBER,
+    )
 
 
 @app.post("/api/upload-orders", response_model=OptimizationSummary, dependencies=[Depends(verify_api_key)])
@@ -1419,7 +1444,7 @@ async def get_qr_sheet(session: AsyncSession = SessionDep):
                     <span class="stat-label">Distance</span>
                 </div>
                 <div class="stat">
-                    <span class="stat-value">{int(card["total_duration_minutes"])}–{int(card["total_duration_minutes"] * 1.2)} min</span>
+                    <span class="stat-value">{int(card["total_duration_minutes"])}–{int(card["total_duration_minutes"] * config.QR_SHEET_DURATION_BUFFER)} min</span>
                     <span class="stat-label">Est. Route Time</span>
                 </div>
                 <div class="stat">

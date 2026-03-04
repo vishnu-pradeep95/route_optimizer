@@ -83,6 +83,11 @@ CYLINDER_WEIGHTS: dict[str, float] = {
 # Calibrate with real GPS data after Phase 1.
 SAFETY_MULTIPLIER = 1.3
 
+# Buffer multiplier for QR sheet estimated route time display.
+# Shows a range: "X–Y min" where Y = X * buffer.
+# Separate from SAFETY_MULTIPLIER (which adjusts routing estimates).
+QR_SHEET_DURATION_BUFFER = 1.2
+
 # Monsoon season adds extra delay (June–September)
 MONSOON_MONTHS = {6, 7, 8, 9}
 MONSOON_MULTIPLIER = 1.5  # 50% extra during monsoon (on top of safety multiplier)
@@ -108,6 +113,13 @@ MIN_DELIVERY_WINDOW_MINUTES = 30
 # Shifts should be configured per business needs
 DEFAULT_SHIFT_START = "06:00"
 DEFAULT_SHIFT_END = "22:00"
+
+# =============================================================================
+# OFFICE CONTACT
+# =============================================================================
+# Office phone number in E.164 format for driver "Call Office" button.
+# Replace with actual office number before production deployment.
+OFFICE_PHONE_NUMBER = "+910000000000"
 
 # =============================================================================
 # EXTERNAL SERVICES
