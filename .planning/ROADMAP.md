@@ -136,7 +136,7 @@ Recommended order: 8 -> 9 -> 10 -> 11 -> 12
 | 9. Config Consolidation | v1.2 | 0/? | Not started | - |
 | 10. Driver PWA Hardening | 2/2 | Complete    | 2026-03-04 | - |
 | 11. Dashboard Cleanup | 2/2 | Complete    | 2026-03-04 | - |
-| 12. Data Wiring & Validation | 2/2 | Complete   | 2026-03-04 | - |
+| 12. Data Wiring & Validation | 2/2 | Complete    | 2026-03-04 | - |
 
 ---
 *Full phase details for v1.0 and v1.1 archived in `.planning/milestones/`*
