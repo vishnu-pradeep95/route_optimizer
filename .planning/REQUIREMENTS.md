@@ -21,12 +21,12 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 
 ### API Cleanup
 
-- [ ] **API-01**: Dead `_build_fleet()` function removed
-- [ ] **API-02**: Unused imports removed from `main.py`
-- [ ] **API-03**: Mid-file `Response as _Response` import consolidated to top
-- [ ] **API-04**: Unused `OSRM_URL` removed from `config.py`
-- [ ] **API-05**: Stale SHA-256 docstring in `cache.py` corrected
-- [ ] **API-06**: PostGIS geometry helper replaces 6x `type: ignore` suppressions
+- [x] **API-01**: Dead `_build_fleet()` function removed
+- [x] **API-02**: Unused imports removed from `main.py`
+- [x] **API-03**: Mid-file `Response as _Response` import consolidated to top
+- [x] **API-04**: Unused `OSRM_URL` removed from `config.py`
+- [x] **API-05**: Stale SHA-256 docstring in `cache.py` corrected
+- [x] **API-06**: PostGIS geometry helper replaces 6x `type: ignore` suppressions
 - [ ] **API-07**: `save_driver_verified()` wired into delivery status update endpoint
 
 ### Config Consistency
@@ -72,12 +72,12 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 | PWA-04 | Phase 10 | Pending |
 | PWA-05 | Phase 10 | Pending |
 | PWA-06 | Phase 10 | Pending |
-| API-01 | Phase 8 | Pending |
-| API-02 | Phase 8 | Pending |
-| API-03 | Phase 8 | Pending |
-| API-04 | Phase 8 | Pending |
-| API-05 | Phase 8 | Pending |
-| API-06 | Phase 8 | Pending |
+| API-01 | Phase 8 | Complete |
+| API-02 | Phase 8 | Complete |
+| API-03 | Phase 8 | Complete |
+| API-04 | Phase 8 | Complete |
+| API-05 | Phase 8 | Complete |
+| API-06 | Phase 8 | Complete |
 | API-07 | Phase 12 | Pending |
 | CFG-01 | Phase 9 | Pending |
 | CFG-02 | Phase 9 | Pending |
@@ -96,4 +96,4 @@ Requirements for tech debt cleanup. Each maps to roadmap phases.
 
 ---
 *Requirements defined: 2026-03-03*
-*Last updated: 2026-03-03 after roadmap creation*
+*Last updated: 2026-03-04 after Phase 8 completion*
