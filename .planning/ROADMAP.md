@@ -98,11 +98,11 @@ Plans:
   3. `RouteDetail` TypeScript interface includes `total_weight_kg` and `total_items` fields, and components accessing these fields have no `as any` or `as unknown` casts
   4. `RunHistory.tsx` status handling uses proper TypeScript type narrowing (discriminated union, type guard, or exhaustive switch) with no unsafe casts
   5. LiveMap page makes one batch API call for all routes instead of N sequential calls -- network tab shows single request for route data
-**Plans**: TBD
+**Plans**: 2 plans (Wave 1 -> Wave 2, Plan 02 depends on Plan 01 for RouteDetail type)
 
 Plans:
-- [ ] 11-01: TBD
-- [ ] 11-02: TBD
+- [ ] 11-01-PLAN.md — CSS token cleanup, RouteDetail type fix, RunHistory cast removal (DASH-01, DASH-02, DASH-03, DASH-04)
+- [ ] 11-02-PLAN.md — Batch routes endpoint and LiveMap N+1 elimination (DASH-05)
 
 ### Phase 12: Data Wiring & Validation
 **Goal**: Driver-verified delivery data is persisted to the database, and duplicate detection thresholds are validated against actual production geocoding data
@@ -134,7 +134,7 @@ Recommended order: 8 -> 9 -> 10 -> 11 -> 12
 | 8. API Dead Code & Hygiene | v1.2 | 0/? | Not started | - |
 | 9. Config Consolidation | v1.2 | 0/? | Not started | - |
 | 10. Driver PWA Hardening | 2/2 | Complete    | 2026-03-04 | - |
-| 11. Dashboard Cleanup | v1.2 | 0/? | Not started | - |
+| 11. Dashboard Cleanup | v1.2 | 0/2 | Planned | - |
 | 12. Data Wiring & Validation | v1.2 | 0/? | Not started | - |
 
 ---
