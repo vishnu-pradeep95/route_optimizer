@@ -69,7 +69,7 @@
 **Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 13-01-PLAN.md -- Create bootstrap.sh with environment guards, Docker CE install, auto-start config, .env generation, and two-phase resume
+- [x] 13-01-PLAN.md -- Create bootstrap.sh with environment guards, Docker CE install, auto-start config, .env generation, and two-phase resume
 
 ### Phase 14: Daily Startup
 **Goal**: Office employee starts the system every morning with one command and zero prompts
@@ -79,10 +79,10 @@ Plans:
   1. Running `start.sh` brings up all Docker Compose services, polls the health endpoint for up to 60 seconds, and prints the dashboard URL on success
   2. Running `start.sh` when services are already running completes gracefully without errors or duplicate containers
   3. If health check times out, `start.sh` prints which service failed and a suggested next step (not a raw Docker error)
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 14-01: TBD
+- [ ] 14-01-PLAN.md -- Create scripts/start.sh with Docker daemon guard, idempotent compose up, 60s health polling, failure diagnosis, and success banner
 
 ### Phase 15: CSV Documentation
 **Goal**: Office employee can look up any CSV question -- column names, rejection reasons, address formatting -- in one document without asking IT
@@ -155,8 +155,8 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 10. Driver PWA Hardening | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 11. Dashboard Cleanup | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 12. Data Wiring & Validation | v1.2 | 2/2 | Complete | 2026-03-04 |
-| 13. Bootstrap Installation | 1/1 | Complete    | 2026-03-05 | - |
-| 14. Daily Startup | v1.3 | 0/? | Not started | - |
+| 13. Bootstrap Installation | v1.3 | 1/1 | Complete | 2026-03-05 |
+| 14. Daily Startup | v1.3 | 0/1 | Planned | - |
 | 15. CSV Documentation | v1.3 | 0/? | Not started | - |
 | 16. Documentation Corrections | v1.3 | 0/? | Not started | - |
 | 17. Error Message Humanization | v1.3 | 0/? | Not started | - |
