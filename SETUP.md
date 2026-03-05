@@ -47,6 +47,7 @@ git --version        # Should show 2.x
 
 ```bash
 git clone <REPO_URL> routing_opt
+# ^^^ Replace <REPO_URL> with the actual repository URL before customer delivery
 cd routing_opt
 ```
 
@@ -176,8 +177,8 @@ nano .env   # or: code .env
 |---|---|---|
 | `GOOGLE_MAPS_API_KEY` | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → enable "Geocoding API" | Phase 0+ |
 | `POSTGRES_PASSWORD` | Choose any strong password | **Yes** — used by Docker Compose for the PostgreSQL container |
-| `POSTGRES_USER` | Defaults to `routeopt` | No |
-| `POSTGRES_DB` | Defaults to `routeopt` | No |
+| `POSTGRES_USER` | Defaults to `routing` | No |
+| `POSTGRES_DB` | Defaults to `routing_opt` | No |
 | Other values | Defaults work for local development | — |
 
 ---
