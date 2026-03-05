@@ -50,7 +50,7 @@
 - [x] **Phase 13: Bootstrap Installation** - One-command WSL setup with Docker CE auto-install and environment guards (completed 2026-03-05)
 - [x] **Phase 14: Daily Startup** - Zero-input daily startup script with health polling and URL output (gap closure in progress) (completed 2026-03-05)
 - [x] **Phase 15: CSV Documentation** - Single-page CSV reference covering CDCMS workflow, columns, rejections, and address cleaning (completed 2026-03-05)
-- [ ] **Phase 16: Documentation Corrections** - README and DEPLOY.md accuracy fixes for non-technical audience
+- [x] **Phase 16: Documentation Corrections** - README and DEPLOY.md accuracy fixes for non-technical audience (completed 2026-03-05)
 - [ ] **Phase 17: Error Message Humanization** - Plain-English upload and geocoding errors replacing Python internals
 - [ ] **Phase 18: Distribution Build** - Licensing module compilation for customer delivery
 
@@ -108,7 +108,7 @@ Plans:
   2. README and DEPLOY.md contain no `<REPO_URL>` placeholders -- all replaced with the actual repository URL or clear instructions
   3. DEPLOY.md daily usage section references `./scripts/start.sh` instead of multi-command Docker workflows, and fits on one printed page
   4. DEPLOY.md is structured for a non-technical reader: prominent "use Ubuntu terminal, not PowerShell" warning, step numbering, and cross-links to CSV_FORMAT.md
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 16-01-PLAN.md -- Fix README.md and SETUP.md factual inaccuracies: container names, credential defaults, REPO_URL notes, automated step annotations
@@ -160,7 +160,7 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 13. Bootstrap Installation | v1.3 | 1/1 | Complete | 2026-03-05 |
 | 14. Daily Startup | v1.3 | 2/2 | Complete | 2026-03-05 |
 | 15. CSV Documentation | v1.3 | 1/1 | Complete | 2026-03-05 |
-| 16. Documentation Corrections | v1.3 | 0/2 | Not started | - |
+| 16. Documentation Corrections | 2/2 | Complete   | 2026-03-05 | - |
 | 17. Error Message Humanization | v1.3 | 0/? | Not started | - |
 | 18. Distribution Build | v1.3 | 0/? | Not started | - |
 

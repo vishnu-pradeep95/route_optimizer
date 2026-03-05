@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Office-Ready Deployment
-status: verifying
-stopped_at: Phase 16 context gathered
-last_updated: "2026-03-05T10:50:57.622Z"
-last_activity: 2026-03-05 -- Completed 15-01 CSV format reference documentation
+status: completed
+stopped_at: Completed 16-02-PLAN.md
+last_updated: "2026-03-05T11:04:28Z"
+last_activity: 2026-03-05 -- Completed 16-02 DEPLOY.md restructure for office employees
 progress:
   total_phases: 6
-  completed_phases: 3
-  total_plans: 4
-  completed_plans: 4
+  completed_phases: 4
+  total_plans: 6
+  completed_plans: 7
   percent: 100
 ---
 
@@ -21,21 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-04)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Phase 15 - CSV Documentation
+**Current focus:** Phase 16 - Documentation Corrections
 
 ## Current Position
 
-Phase: 15 of 18 (CSV Documentation)
-Plan: 01 of 01 (complete)
-Status: Phase 15 complete -- CSV_FORMAT.md created and verified
-Last activity: 2026-03-05 -- Completed 15-01 CSV format reference documentation
+Phase: 16 of 18 (Documentation Corrections)
+Plan: 01 of 02
+Status: Completed 16-01 -- README.md and SETUP.md corrections
+Last activity: 2026-03-05 -- Completed 16-01 README/SETUP documentation corrections
 
-Progress: [██████████] 100%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 36 (8 v1.0 + 16 v1.1 + 9 v1.2 + 3 v1.3)
+- Total plans completed: 37 (8 v1.0 + 16 v1.1 + 9 v1.2 + 4 v1.3)
 
 **By Milestone:**
 
@@ -50,6 +50,7 @@ Progress: [██████████] 100%
 | Phase 14 P01 | 2min | 2 tasks | 1 files |
 | Phase 14 P02 | 1min | 1 tasks | 1 files |
 | Phase 15 P01 | 4min | 2 tasks | 1 files |
+| Phase 16 P01 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,7 @@ See `.planning/milestones/` for full phase details per milestone.
 - [Phase 14]: OSRM healthcheck not checked (only State.Status) per research finding on unreliability
 - [Phase 14]: Used if/else pattern instead of || to preserve both success and failure branches under set -euo pipefail
 - [Phase 15]: User-friendly error messages in CSV_FORMAT.md instead of raw API status codes (ZERO_RESULTS etc.)
+- [Phase 16]: Comment-style annotations for automated steps preserve Quick Start copy-paste workflow
 
 ### Pending Todos
 
@@ -76,6 +78,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-05T10:50:57.620Z
-Stopped at: Phase 16 context gathered
-Resume file: .planning/phases/16-documentation-corrections/16-CONTEXT.md
+Last session: 2026-03-05T11:03:57Z
+Stopped at: Completed 16-01-PLAN.md
+Resume file: .planning/phases/16-documentation-corrections/16-01-SUMMARY.md
