@@ -75,7 +75,7 @@ If you are not using a CDCMS export, you can upload a standard CSV file. The onl
 | order_id | No | Auto-generated (ORD-0001, ORD-0002, ...) | Unique identifier for each order |
 | customer_id | No | Auto-generated (CUST-0001, CUST-0002, ...) | Customer reference |
 | weight_kg | No | 14.2 | Weight in kilograms. If blank, uses the cylinder type or defaults to 14.2 kg (domestic cylinder) |
-| cylinder_type | No | domestic | Used to look up weight. See recognized values below |
+| cylinder_type | No | (not used -- weight defaults to 14.2 kg) | Used to look up weight. See recognized values below |
 | quantity | No | 1 | Number of cylinders |
 | priority | No | 2 | 1 = high, 2 = normal, 3 = low |
 | notes | No | (empty) | Delivery instructions (e.g., "Ring bell twice") |
@@ -224,6 +224,6 @@ When you upload a CDCMS export, each address goes through these cleaning steps:
 |------------------------|------------------------|
 | KALAMASSERY HMT COLONY NEAR BUS STOP | Kalamassery Hmt Colony Near Bus Stop |
 | VALIYAPARAMBATH (H) 9847862734KURUPAL ONTHAMKAINATTY VATAKARA | Valiyaparambath House Kurupal Onthamkainatty Vatakara |
-| SREYAS - EYYAMKUTTI KUNIYILNR.EK GOPALAN MASTERVALLIKKADU / PH: 2511259 | Sreyas - Eyyamkutti Kuniyil Near Ek Gopalan Mastervallikkadu |
-| \`\`THANAL\`\`/ 513510RAYARANGOTH (PO)VATAKARA | Thanal Rayarangoth P.O. Vatakara |
-| 09/210A KUNIYIL (H)- CHEKKIPURATHPO. CHORODE EASTNR. MATHATH PALAM | 09/210A Kuniyil House Chekkipurath P.O. Chorode East Near Mathath Palam |
+| 4/146 AMINAS NR. VALLIKKADU | 4/146 Aminas Near Vallikkadu |
+| HOUSE NR; RATION SHOP | House Near Ration Shop |
+| VALIYAPARAMBATH (H) KURUPAL | Valiyaparambath House Kurupal |
