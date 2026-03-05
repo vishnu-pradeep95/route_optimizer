@@ -17,7 +17,7 @@ Requirements for v1.3 Office-Ready Deployment. Each maps to roadmap phases.
 
 ### Daily Operations
 
-- [ ] **DAILY-01**: Single `start.sh` command starts Docker, runs compose up, polls health, prints URL
+- [x] **DAILY-01**: Single `start.sh` command starts Docker, runs compose up, polls health, prints URL
 
 ### CSV Documentation
 
@@ -78,7 +78,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INST-03 | Phase 13 | Complete |
 | INST-04 | Phase 13 | Complete |
 | INST-05 | Phase 13 | Complete |
-| DAILY-01 | Phase 14 | Pending |
+| DAILY-01 | Phase 14 | Complete |
 | CSV-01 | Phase 15 | Pending |
 | CSV-02 | Phase 15 | Pending |
 | CSV-03 | Phase 15 | Pending |

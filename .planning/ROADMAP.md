@@ -48,7 +48,7 @@
 **Milestone Goal:** Make the system installable and usable by a non-technical office employee -- one-command install from WSL, one-command daily startup, comprehensive documentation of CSV formats and workflow.
 
 - [x] **Phase 13: Bootstrap Installation** - One-command WSL setup with Docker CE auto-install and environment guards (completed 2026-03-05)
-- [ ] **Phase 14: Daily Startup** - Zero-input daily startup script with health polling and URL output
+- [x] **Phase 14: Daily Startup** - Zero-input daily startup script with health polling and URL output (completed 2026-03-05)
 - [ ] **Phase 15: CSV Documentation** - Single-page CSV reference covering CDCMS workflow, columns, rejections, and address cleaning
 - [ ] **Phase 16: Documentation Corrections** - README and DEPLOY.md accuracy fixes for non-technical audience
 - [ ] **Phase 17: Error Message Humanization** - Plain-English upload and geocoding errors replacing Python internals
@@ -79,7 +79,7 @@ Plans:
   1. Running `start.sh` brings up all Docker Compose services, polls the health endpoint for up to 60 seconds, and prints the dashboard URL on success
   2. Running `start.sh` when services are already running completes gracefully without errors or duplicate containers
   3. If health check times out, `start.sh` prints which service failed and a suggested next step (not a raw Docker error)
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] 14-01-PLAN.md -- Create scripts/start.sh with Docker daemon guard, idempotent compose up, 60s health polling, failure diagnosis, and success banner
@@ -156,7 +156,7 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 11. Dashboard Cleanup | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 12. Data Wiring & Validation | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 13. Bootstrap Installation | v1.3 | 1/1 | Complete | 2026-03-05 |
-| 14. Daily Startup | v1.3 | 0/1 | Planned | - |
+| 14. Daily Startup | 1/1 | Complete   | 2026-03-05 | - |
 | 15. CSV Documentation | v1.3 | 0/? | Not started | - |
 | 16. Documentation Corrections | v1.3 | 0/? | Not started | - |
 | 17. Error Message Humanization | v1.3 | 0/? | Not started | - |

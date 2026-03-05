@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Office-Ready Deployment
 status: completed
-stopped_at: Completed 13-01-PLAN.md
-last_updated: "2026-03-05T01:30:34.847Z"
-last_activity: 2026-03-05 -- Completed 13-01 bootstrap.sh creation (all 5 INST requirements)
+stopped_at: Completed 14-01-PLAN.md
+last_updated: "2026-03-05T01:53:59.187Z"
+last_activity: 2026-03-05 -- Completed 14-01 daily startup script (scripts/start.sh)
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
   percent: 100
 ---
 
@@ -21,21 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-04)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Phase 13 - Bootstrap Installation
+**Current focus:** Phase 14 - Daily Startup
 
 ## Current Position
 
-Phase: 13 of 18 (Bootstrap Installation) -- first phase of v1.3
+Phase: 14 of 18 (Daily Startup)
 Plan: 01 of 01 (complete)
-Status: Phase 13 complete -- all plans executed
-Last activity: 2026-03-05 -- Completed 13-01 bootstrap.sh creation (all 5 INST requirements)
+Status: Phase 14 complete -- all plans executed
+Last activity: 2026-03-05 -- Completed 14-01 daily startup script (scripts/start.sh)
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 34 (8 v1.0 + 16 v1.1 + 9 v1.2 + 1 v1.3)
+- Total plans completed: 35 (8 v1.0 + 16 v1.1 + 9 v1.2 + 2 v1.3)
 
 **By Milestone:**
 
@@ -46,6 +46,8 @@ Progress: [██████████] 100%
 | v1.2 Tech Debt & Cleanup | 5 (8-12) | 9 | 2026-03-03 -> 2026-03-04 |
 | v1.3 Office-Ready Deployment | 6 (13-18) | TBD | 2026-03-04 -> ... |
 | Phase 13 P01 | 2min | 2 tasks | 1 files |
+| Phase 14 P01 | 2min | 2 tasks | 1 files |
+| Phase 14 P01 | 2min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -55,6 +57,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 See `.planning/milestones/` for full phase details per milestone.
 - [Phase 13]: Two-phase resume with MARKER_FILE variable for Docker group membership restart flow
 - [Phase 13]: Guard-first architecture: all environment checks (WSL version, filesystem, RAM) run before any installation
+- [Phase 14]: 60s health timeout for daily startup (vs 300s for install.sh first-time setup)
+- [Phase 14]: OSRM healthcheck not checked (only State.Status) per research finding on unreliability
 
 ### Pending Todos
 
@@ -68,6 +72,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-05T01:27:30.003Z
-Stopped at: Completed 13-01-PLAN.md
+Last session: 2026-03-05T01:53:54.903Z
+Stopped at: Completed 14-01-PLAN.md
 Resume file: None
