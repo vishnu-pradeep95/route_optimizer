@@ -66,11 +66,10 @@
   3. Running `bootstrap.sh` from `/mnt/c/` (Windows filesystem) aborts immediately with a clear message directing the user to clone in the Linux home directory
   4. Running `bootstrap.sh` on a machine with less than 5 GB available WSL memory prints a warning about OSRM memory requirements and `.wslconfig` instructions
   5. Running `bootstrap.sh` on WSL1 fails immediately with a clear message explaining WSL2 is required and how to upgrade
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 13-01: TBD
-- [ ] 13-02: TBD
+- [ ] 13-01-PLAN.md -- Create bootstrap.sh with environment guards, Docker CE install, auto-start config, .env generation, and two-phase resume
 
 ### Phase 14: Daily Startup
 **Goal**: Office employee starts the system every morning with one command and zero prompts
@@ -156,7 +155,7 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 10. Driver PWA Hardening | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 11. Dashboard Cleanup | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 12. Data Wiring & Validation | v1.2 | 2/2 | Complete | 2026-03-04 |
-| 13. Bootstrap Installation | v1.3 | 0/? | Not started | - |
+| 13. Bootstrap Installation | v1.3 | 0/1 | Planning | - |
 | 14. Daily Startup | v1.3 | 0/? | Not started | - |
 | 15. CSV Documentation | v1.3 | 0/? | Not started | - |
 | 16. Documentation Corrections | v1.3 | 0/? | Not started | - |
