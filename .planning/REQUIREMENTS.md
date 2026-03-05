@@ -1,7 +1,7 @@
 # Requirements: Kerala LPG Delivery Route Optimizer
 
 **Defined:** 2026-03-04
-**Core Value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route — no silent drops, no missing stops.
+**Core Value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
 
 ## v1.3 Requirements
 
@@ -30,7 +30,7 @@ Requirements for v1.3 Office-Ready Deployment. Each maps to roadmap phases.
 
 ### Documentation Fixes
 
-- [ ] **DOCS-01**: README fixes stale container names (`routing-db` → `lpg-db`)
+- [ ] **DOCS-01**: README fixes stale container names (`routing-db` -> `lpg-db`)
 - [ ] **DOCS-02**: README removes manual steps now automated by db-init
 - [ ] **DOCS-03**: README and DEPLOY.md fill `<REPO_URL>` placeholder
 - [ ] **DOCS-04**: DEPLOY.md restructured for non-technical office employee audience
@@ -73,31 +73,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INST-01 | — | Pending |
-| INST-02 | — | Pending |
-| INST-03 | — | Pending |
-| INST-04 | — | Pending |
-| INST-05 | — | Pending |
-| DAILY-01 | — | Pending |
-| CSV-01 | — | Pending |
-| CSV-02 | — | Pending |
-| CSV-03 | — | Pending |
-| CSV-04 | — | Pending |
-| CSV-05 | — | Pending |
-| CSV-06 | — | Pending |
-| DOCS-01 | — | Pending |
-| DOCS-02 | — | Pending |
-| DOCS-03 | — | Pending |
-| DOCS-04 | — | Pending |
-| ERR-01 | — | Pending |
-| ERR-02 | — | Pending |
-| DIST-01 | — | Pending |
+| INST-01 | Phase 13 | Pending |
+| INST-02 | Phase 13 | Pending |
+| INST-03 | Phase 13 | Pending |
+| INST-04 | Phase 13 | Pending |
+| INST-05 | Phase 13 | Pending |
+| DAILY-01 | Phase 14 | Pending |
+| CSV-01 | Phase 15 | Pending |
+| CSV-02 | Phase 15 | Pending |
+| CSV-03 | Phase 15 | Pending |
+| CSV-04 | Phase 15 | Pending |
+| CSV-05 | Phase 15 | Pending |
+| CSV-06 | Phase 15 | Pending |
+| DOCS-01 | Phase 16 | Pending |
+| DOCS-02 | Phase 16 | Pending |
+| DOCS-03 | Phase 16 | Pending |
+| DOCS-04 | Phase 16 | Pending |
+| ERR-01 | Phase 17 | Pending |
+| ERR-02 | Phase 17 | Pending |
+| DIST-01 | Phase 18 | Pending |
 
 **Coverage:**
 - v1.3 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19 ⚠️
+- Mapped to phases: 19
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-04*
-*Last updated: 2026-03-04 after initial definition*
+*Last updated: 2026-03-04 after roadmap creation*
