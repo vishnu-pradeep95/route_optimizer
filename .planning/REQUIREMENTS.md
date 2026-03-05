@@ -9,11 +9,11 @@ Requirements for v1.3 Office-Ready Deployment. Each maps to roadmap phases.
 
 ### Installation
 
-- [ ] **INST-01**: Bootstrap script auto-installs Docker CE in WSL if missing
-- [ ] **INST-02**: Bootstrap script configures wsl.conf for Docker auto-start on boot
-- [ ] **INST-03**: Bootstrap script detects Windows filesystem (`/mnt/c/`) and aborts with clear redirect
-- [ ] **INST-04**: Bootstrap script pre-checks available RAM and warns if OSRM may OOM
-- [ ] **INST-05**: Bootstrap script detects WSL1 vs WSL2 and fails clearly on WSL1
+- [x] **INST-01**: Bootstrap script auto-installs Docker CE in WSL if missing
+- [x] **INST-02**: Bootstrap script configures wsl.conf for Docker auto-start on boot
+- [x] **INST-03**: Bootstrap script detects Windows filesystem (`/mnt/c/`) and aborts with clear redirect
+- [x] **INST-04**: Bootstrap script pre-checks available RAM and warns if OSRM may OOM
+- [x] **INST-05**: Bootstrap script detects WSL1 vs WSL2 and fails clearly on WSL1
 
 ### Daily Operations
 
@@ -73,11 +73,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INST-01 | Phase 13 | Pending |
-| INST-02 | Phase 13 | Pending |
-| INST-03 | Phase 13 | Pending |
-| INST-04 | Phase 13 | Pending |
-| INST-05 | Phase 13 | Pending |
+| INST-01 | Phase 13 | Complete |
+| INST-02 | Phase 13 | Complete |
+| INST-03 | Phase 13 | Complete |
+| INST-04 | Phase 13 | Complete |
+| INST-05 | Phase 13 | Complete |
 | DAILY-01 | Phase 14 | Pending |
 | CSV-01 | Phase 15 | Pending |
 | CSV-02 | Phase 15 | Pending |

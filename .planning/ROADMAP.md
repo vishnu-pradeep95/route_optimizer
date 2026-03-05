@@ -47,7 +47,7 @@
 
 **Milestone Goal:** Make the system installable and usable by a non-technical office employee -- one-command install from WSL, one-command daily startup, comprehensive documentation of CSV formats and workflow.
 
-- [ ] **Phase 13: Bootstrap Installation** - One-command WSL setup with Docker CE auto-install and environment guards
+- [x] **Phase 13: Bootstrap Installation** - One-command WSL setup with Docker CE auto-install and environment guards (completed 2026-03-05)
 - [ ] **Phase 14: Daily Startup** - Zero-input daily startup script with health polling and URL output
 - [ ] **Phase 15: CSV Documentation** - Single-page CSV reference covering CDCMS workflow, columns, rejections, and address cleaning
 - [ ] **Phase 16: Documentation Corrections** - README and DEPLOY.md accuracy fixes for non-technical audience
@@ -66,7 +66,7 @@
   3. Running `bootstrap.sh` from `/mnt/c/` (Windows filesystem) aborts immediately with a clear message directing the user to clone in the Linux home directory
   4. Running `bootstrap.sh` on a machine with less than 5 GB available WSL memory prints a warning about OSRM memory requirements and `.wslconfig` instructions
   5. Running `bootstrap.sh` on WSL1 fails immediately with a clear message explaining WSL2 is required and how to upgrade
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] 13-01-PLAN.md -- Create bootstrap.sh with environment guards, Docker CE install, auto-start config, .env generation, and two-phase resume
@@ -155,7 +155,7 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 10. Driver PWA Hardening | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 11. Dashboard Cleanup | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 12. Data Wiring & Validation | v1.2 | 2/2 | Complete | 2026-03-04 |
-| 13. Bootstrap Installation | v1.3 | 0/1 | Planning | - |
+| 13. Bootstrap Installation | 1/1 | Complete   | 2026-03-05 | - |
 | 14. Daily Startup | v1.3 | 0/? | Not started | - |
 | 15. CSV Documentation | v1.3 | 0/? | Not started | - |
 | 16. Documentation Corrections | v1.3 | 0/? | Not started | - |
