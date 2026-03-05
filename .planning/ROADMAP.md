@@ -83,7 +83,7 @@ Plans:
 
 Plans:
 - [x] 14-01-PLAN.md -- Create scripts/start.sh with Docker daemon guard, idempotent compose up, 60s health polling, failure diagnosis, and success banner
-- [ ] 14-02-PLAN.md -- Fix unreachable failure path: replace bare poll_health + $? with if/else pattern for set -euo pipefail compatibility
+- [x] 14-02-PLAN.md -- Fix unreachable failure path: replace bare poll_health + $? with if/else pattern for set -euo pipefail compatibility
 
 ### Phase 15: CSV Documentation
 **Goal**: Office employee can look up any CSV question -- column names, rejection reasons, address formatting -- in one document without asking IT
@@ -94,10 +94,10 @@ Plans:
   2. CSV_FORMAT.md lists every rejection reason the system can produce alongside plain-English explanations of what went wrong and how to fix it
   3. CSV_FORMAT.md documents the address cleaning pipeline with before/after examples showing what transformations the system applies
   4. CSV_FORMAT.md includes copy-pasteable example rows for both CDCMS and standard CSV formats that pass validation when uploaded
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 15-01: TBD
+- [ ] 15-01-PLAN.md -- Create CSV_FORMAT.md with source-verified format specs, rejection reasons, address cleaning pipeline, and example rows
 
 ### Phase 16: Documentation Corrections
 **Goal**: README and DEPLOY.md are accurate, reference the correct container names and scripts, and are written for the non-technical office employee audience
@@ -157,8 +157,8 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 11. Dashboard Cleanup | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 12. Data Wiring & Validation | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 13. Bootstrap Installation | v1.3 | 1/1 | Complete | 2026-03-05 |
-| 14. Daily Startup | 2/2 | Complete    | 2026-03-05 | - |
-| 15. CSV Documentation | v1.3 | 0/? | Not started | - |
+| 14. Daily Startup | v1.3 | 2/2 | Complete | 2026-03-05 |
+| 15. CSV Documentation | v1.3 | 0/1 | Not started | - |
 | 16. Documentation Corrections | v1.3 | 0/? | Not started | - |
 | 17. Error Message Humanization | v1.3 | 0/? | Not started | - |
 | 18. Distribution Build | v1.3 | 0/? | Not started | - |
