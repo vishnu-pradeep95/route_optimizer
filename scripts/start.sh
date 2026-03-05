@@ -169,9 +169,7 @@ info "Starting containers..."
 docker compose up -d
 
 echo ""
-poll_health
-
-if [ $? -eq 0 ]; then
+if poll_health; then
     echo ""
     echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
     echo -e "${GREEN}  ✓ System is running!                                        ${NC}"
