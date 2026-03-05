@@ -97,7 +97,7 @@ Plans:
 **Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 15-01-PLAN.md -- Create CSV_FORMAT.md with source-verified format specs, rejection reasons, address cleaning pipeline, and example rows
+- [x] 15-01-PLAN.md -- Create CSV_FORMAT.md with source-verified format specs, rejection reasons, address cleaning pipeline, and example rows
 
 ### Phase 16: Documentation Corrections
 **Goal**: README and DEPLOY.md are accurate, reference the correct container names and scripts, and are written for the non-technical office employee audience
@@ -106,12 +106,13 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. README Docker Services table shows `lpg-db` (not `routing-db`) and all container names match `docker-compose.yml`
   2. README and DEPLOY.md contain no `<REPO_URL>` placeholders -- all replaced with the actual repository URL or clear instructions
-  3. DEPLOY.md daily usage section references `./start.sh` instead of multi-command Docker workflows, and fits on one printed page
+  3. DEPLOY.md daily usage section references `./scripts/start.sh` instead of multi-command Docker workflows, and fits on one printed page
   4. DEPLOY.md is structured for a non-technical reader: prominent "use Ubuntu terminal, not PowerShell" warning, step numbering, and cross-links to CSV_FORMAT.md
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 16-01: TBD
+- [ ] 16-01-PLAN.md -- Fix README.md and SETUP.md factual inaccuracies: container names, credential defaults, REPO_URL notes, automated step annotations
+- [ ] 16-02-PLAN.md -- Restructure DEPLOY.md for non-technical audience: script references, Ubuntu warning, CSV cross-link, Quick Reference Card
 
 ### Phase 17: Error Message Humanization
 **Goal**: Upload and geocoding errors speak the office employee's language -- no Python tracebacks, no set notation, no raw API error codes
@@ -158,8 +159,8 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 12. Data Wiring & Validation | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 13. Bootstrap Installation | v1.3 | 1/1 | Complete | 2026-03-05 |
 | 14. Daily Startup | v1.3 | 2/2 | Complete | 2026-03-05 |
-| 15. CSV Documentation | 1/1 | Complete    | 2026-03-05 | - |
-| 16. Documentation Corrections | v1.3 | 0/? | Not started | - |
+| 15. CSV Documentation | v1.3 | 1/1 | Complete | 2026-03-05 |
+| 16. Documentation Corrections | v1.3 | 0/2 | Not started | - |
 | 17. Error Message Humanization | v1.3 | 0/? | Not started | - |
 | 18. Distribution Build | v1.3 | 0/? | Not started | - |
 
