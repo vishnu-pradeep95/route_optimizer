@@ -151,7 +151,9 @@ diagnose_failure() {
     fi
 
     echo ""
-    echo "  If the problem persists, try: docker compose down && ./scripts/install.sh"
+    echo "  If the problem persists, try a full reinstall:"
+    echo "    docker compose down"
+    echo "    ./scripts/install.sh"
 }
 
 # =============================================================================
