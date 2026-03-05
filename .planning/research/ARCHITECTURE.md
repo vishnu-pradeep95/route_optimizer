@@ -1,534 +1,422 @@
 # Architecture Research
 
-**Domain:** Logistics SaaS UI overhaul + geocoding data integrity fixes for Kerala LPG delivery
-**Researched:** 2026-03-01
-**Confidence:** HIGH
+**Domain:** Office-ready deployment scripting for a Docker Compose–based logistics system
+**Researched:** 2026-03-04
+**Confidence:** HIGH — all findings based on direct inspection of existing codebase
 
-## System Overview -- Current State
+---
 
-```
-Dashboard (React/TS)                  Driver PWA (Vanilla JS)
-    Vite + TW4/DaisyUI                  Static HTML, inline CSS/JS
-    Port 5173 (dev)                      Served by FastAPI
-         |                                     |
-         |  /api/*                             |  /api/routes/{id}
-         v                                     v
-    +-------------------------------------------------+
-    |              FastAPI Backend (8000)               |
-    |  upload-orders | routes | telemetry | vehicles   |
-    |  geocoding pipeline | QR generation              |
-    +---------+----------+----------+------------------+
-              |          |          |
-    +---------+   +------+   +-----+--------+
-    |PostGIS  |   |OSRM  |   |Google        |
-    |DB (5432)|   |(5000) |   |Geocoding API |
-    +---------+   +------+   +-----+--------+
-                      |                |
-                  +---+---+    +-------+-------+
-                  | VROOM |    | File Cache    |
-                  | (3000)|    | (JSON on disk)|
-                  +-------+    +---------------+
-```
-
-## v1.1 Integration Architecture -- What Changes
-
-The three workstreams (dashboard UI, driver PWA, geocoding fixes) touch different layers but share common integration points. This section maps exactly what is new vs modified.
-
-### Workstream A: Dashboard UI Overhaul
-
-**Goal:** Transform prototype-feeling React pages into clean, professional logistics SaaS.
-
-**What gets modified (no new structural components needed):**
-
-| File | Change Type | What Changes |
-|------|-------------|--------------|
-| `src/index.css` | Heavy rewrite | DaisyUI theme tokens already defined. Remaining work: migrate custom CSS properties to use DaisyUI utility classes across pages. |
-| `src/App.css` | Moderate rewrite | Sidebar layout already uses CSS custom properties. Refine spacing, transitions, and polish with DaisyUI `tw:menu` and `tw:drawer` patterns. |
-| `src/App.tsx` | Minor | NAV_ITEMS icons: replace emoji with proper icon components (Lucide or Heroicons via SVG). No structural changes -- sidebar+content layout is sound. |
-| `src/pages/UploadRoutes.tsx` | Heavy rewrite (CSS) | Replace custom CSS classes with DaisyUI: `tw:card`, `tw:btn`, `tw:file-input`, `tw:alert`, `tw:progress`, `tw:table`. The logic (upload, parse response, show summary) stays. |
-| `src/pages/UploadRoutes.css` | Heavy rewrite or delete | Move styles to DaisyUI utility classes inline. |
-| `src/pages/LiveMap.tsx` + `.css` | Moderate rewrite | Map container stays. Sidebar panel for vehicle list becomes `tw:card` with `tw:badge` for status. |
-| `src/pages/RunHistory.tsx` + `.css` | Moderate rewrite | Table becomes `tw:table` with `tw:badge` for status columns. |
-| `src/pages/FleetManagement.tsx` + `.css` | Moderate rewrite | Form becomes `tw:form-control` + `tw:input`. Table becomes `tw:table`. Modal becomes `tw:modal`. |
-| `src/components/StatsBar.tsx` + `.css` | Moderate rewrite | Stat cards become `tw:stats` components. |
-| `src/components/VehicleList.tsx` + `.css` | Moderate rewrite | List items become DaisyUI cards or list components. |
-| `src/components/RouteMap.tsx` + `.css` | Light touch | Map rendering logic unchanged. Container styling updated. |
-
-**New dashboard components needed:**
-
-| Component | Purpose | Why New |
-|-----------|---------|--------|
-| `src/components/GeocodingStats.tsx` | Show cache hit vs API call counts per upload | Surfaces geocoding cost data from new API fields |
-| `src/components/DuplicateLocationAlert.tsx` | Warn about orders with same GPS coordinates | New feature: duplicate detection results display |
-
-**Architecture pattern:** The dashboard already uses page-level CSS files alongside TSX. The v1.1 approach: migrate each page from custom CSS to DaisyUI utility classes in the TSX (using `tw:` prefix), then delete the corresponding CSS file once the page is fully migrated. This avoids maintaining two styling systems.
-
-**No new API endpoints needed for dashboard UI overhaul.** The existing data shapes (`RoutesResponse`, `RouteDetail`, `UploadResponse`) are sufficient. The `UploadResponse` already includes `geocoded`, `failed_geocoding`, and `failures[]` which provide the data for geocoding stats display. New fields for cost tracking and duplicate detection are added in Workstream C.
-
-### Workstream B: Driver PWA Refresh
-
-**Goal:** Improve outdoor readability, simplify next-stop flow, strengthen offline.
-
-**What gets modified:**
-
-| File | Change Type | What Changes |
-|------|-------------|--------------|
-| `driver_app/index.html` | Heavy rewrite (CSS + JS) | Single monolithic file (~51KB). All CSS is inline `<style>`, all JS is inline `<script>`. |
-| `driver_app/sw.js` | Moderate | Enhanced offline: cache route data in Cache API (not just localStorage), add background sync for status updates. |
-| `driver_app/manifest.json` | Light | Update theme_color if design changes. Add proper icon files. |
-| `driver_app/tailwind.css` | Regenerate | Re-run `scripts/build-pwa-css.sh` after any Tailwind class changes in index.html. |
-
-**Critical constraint:** The driver PWA MUST remain a standalone HTML/JS app with no build step. Drivers install it as a PWA on their phones. The service worker caches `index.html` as a single resource. Any architectural change that introduces a build step or splits into multiple files would break the existing install flow.
-
-**New PWA features requiring no API changes:**
-
-| Feature | Implementation | Where |
-|---------|---------------|-------|
-| Simplified next-stop flow | Show only current + next stop prominently; collapse completed stops. JS state machine: `LOADING -> NAVIGATING -> AT_STOP -> NAVIGATING -> COMPLETE` | `index.html` script section |
-| High-contrast outdoor mode | Already dark-first (WCAG AAA). Increase font sizes for saffron accent text. Add `prefers-contrast: more` media query. | `index.html` style section |
-| Offline route persistence | Move route data from `localStorage` to Cache API via service worker. Cache API has larger storage quota and better eviction behavior. | `sw.js` + `index.html` |
-| Background sync | Register `sync` event for delivery status updates queued while offline. Replay when connection returns. | `sw.js` |
-
-**No PWA API changes needed for v1.1.** The current `GET /api/routes/{vehicle_id}` response has all data the PWA needs.
-
-### Workstream C: Geocoding Cache Normalization + Duplicate Detection + Cost Tracking
-
-**Goal:** Fix data integrity issues where the same address gets different cache keys in different systems, add duplicate GPS coordinate detection, and track geocoding costs.
-
-#### The Normalization Bug
-
-There are two independent caching layers with **different normalization algorithms:**
+## System Overview — Existing State
 
 ```
-GoogleGeocoder (file cache)              Repository (PostGIS cache)
------------------------------------      --------------------------
-_address_hash(address):                  get_cached_geocode(session, addr):
-  normalized = " ".join(                   normalized = addr.strip().lower()
-    address.lower().split()                # Only strips outer whitespace
-  )                                        # Inner whitespace preserved
-  # Collapses ALL whitespace
-  # "MG  Road,  Kochi"                    # "MG  Road,  Kochi"
-  #  -> "mg road, kochi"                  #  -> "mg  road,  kochi"
-  #  -> SHA-256[:16]                      # (no hashing, raw string match)
-  return hash
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         EXISTING SCRIPT LAYER                               │
+├──────────────────┬──────────────────┬──────────────────┬────────────────────┤
+│  scripts/        │  scripts/        │  scripts/        │  scripts/          │
+│  install.sh      │  deploy.sh       │  backup_db.sh    │  build-pwa-css.sh  │
+│  (dev setup)     │  (prod deploy)   │  (cron backup)   │  (CSS build tool)  │
+│                  │                  │                  │                    │
+│  Assumes Docker  │  Uses prod env   │  Auto-detects    │  Requires          │
+│  already present │  file, Caddy     │  dev vs prod     │  tailwindcss-extra │
+└────────┬─────────┴────────┬─────────┴────────┬─────────┴────────────────────┘
+         │                  │                  │
+         ▼                  ▼                  ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                     DOCKER COMPOSE LAYER (unchanged in v1.3)                 │
+├─────────────┬─────────────┬──────────────┬─────────────┬────────────────────┤
+│  osrm-init  │    osrm     │    vroom     │   db-init   │       api          │
+│  (one-shot) │  :5000      │   :3000      │  (one-shot) │     :8000          │
+│  downloads  │ (routing)   │ (optimizer)  │  alembic    │  FastAPI +         │
+│  + preproc  │             │              │  upgrade    │  static files      │
+│  Kerala OSM │             │              │  head       │  driver PWA        │
+│  Idempotent │             │              │  Idempotent │  dashboard         │
+└─────────────┴─────────────┴──────────────┴─────────────┴────────────────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │  db (PostGIS 16-3.5) │
+                         │  :5432 (dev only)    │
+                         │  pgdata named volume │
+                         └──────────────────────┘
 ```
 
-**Consequence:** The same address can be cached in the file cache but miss in the PostGIS cache (or vice versa), causing:
-1. Duplicate API calls (cost waste)
-2. Two different geocoded coordinates for the same address stored in different caches (data integrity)
-3. The upload endpoint (line 855 in main.py) checks PostGIS first, then falls back to GoogleGeocoder which has its own file cache -- these can return different results for the same address
+**Container names (actual, from docker-compose.yml):**
+- `lpg-db` (dev) / `lpg-db-prod` (prod)
+- `osrm-init` / `osrm-init-prod`
+- `osrm-kerala` / `osrm-kerala-prod`
+- `vroom-solver` / `vroom-solver-prod`
+- `lpg-db-init` / `lpg-db-init-prod`
+- `lpg-api` / `lpg-api-prod`
 
-#### Fix Architecture
+Note: README.md shows `routing-db` in its Docker Services table — this is stale and must be corrected.
 
-**New shared module:**
+---
+
+## System Overview — Target State (v1.3 additions)
 
 ```
-core/geocoding/normalize.py        # NEW -- single source of truth
-  normalize_address(address: str) -> str
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         NEW ENTRYPOINTS (v1.3)                              │
+├──────────────────────────┬──────────────────────────────────────────────────┤
+│      bootstrap.sh        │               start.sh                           │
+│      (ONE-TIME, WSL)     │               (DAILY, all platforms)             │
+│                          │                                                  │
+│  1. apt-get: git, curl,  │  1. sudo service docker start (WSL daemon)      │
+│     Docker CE, Compose   │  2. docker compose up -d                        │
+│  2. usermod docker group │  3. curl /health until 200 (60s timeout)        │
+│  3. git clone repo       │  4. print "Dashboard: http://localhost:8000/..."│
+│  4. call install.sh      │                                                  │
+└──────────────┬───────────┴────────────────┬─────────────────────────────────┘
+               │                            │
+               ▼                            ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│               EXISTING SCRIPT LAYER (install.sh gets minor update)          │
+├──────────────────┬──────────────────┬──────────────────┬────────────────────┤
+│  scripts/        │  scripts/        │  scripts/        │  scripts/          │
+│  install.sh      │  deploy.sh       │  backup_db.sh    │  build-pwa-css.sh  │
+│  (minor update)  │  NO CHANGE       │  NO CHANGE       │  NO CHANGE         │
+└──────────────────┴──────────────────┴──────────────────┴────────────────────┘
+                                    │
+                             DOCKER COMPOSE LAYER (NO CHANGE)
 ```
 
-This function becomes the ONE normalization used everywhere:
-
-| Caller | Current Normalization | After Fix |
-|--------|----------------------|-----------|
-| `GoogleGeocoder._address_hash()` | `" ".join(address.lower().split())` + SHA-256 | `normalize_address(address)` + SHA-256 |
-| `repository.get_cached_geocode()` | `address_raw.strip().lower()` | `normalize_address(address)` |
-| `repository.save_geocode_cache()` | `address_raw.strip().lower()` | `normalize_address(address)` |
-| `CachedGeocoder.geocode()` | Delegates to repo (uses repo normalization) | Uses `normalize_address()` through repo |
-
-**Migration concern:** Existing `geocode_cache` rows have `address_norm` values using the old `strip().lower()` normalization. A data migration must re-normalize all existing rows:
-
-```python
-# Alembic migration: re-normalize address_norm column
-from core.geocoding.normalize import normalize_address
-
-def upgrade():
-    # Read all rows, re-normalize, update in batch
-    connection.execute(
-        text("UPDATE geocode_cache SET address_norm = :norm WHERE id = :id"),
-        [{"id": row.id, "norm": normalize_address(row.address_raw)}
-         for row in rows]
-    )
-```
-
-**Files modified for normalization fix:**
-
-| File | Change |
-|------|--------|
-| `core/geocoding/normalize.py` | **NEW** -- `normalize_address()` function |
-| `core/geocoding/google_adapter.py` | Use `normalize_address()` in `_address_hash()` |
-| `core/database/repository.py` | Use `normalize_address()` in `get_cached_geocode()` and `save_geocode_cache()` |
-| `infra/alembic/versions/xxx_normalize_cache.py` | **NEW** -- migration to re-normalize existing data |
-
-#### Duplicate Location Detection
-
-**What:** Flag orders that geocode to the same GPS coordinates (within 50m threshold). This often indicates address normalization issues or genuinely shared locations (e.g., apartment buildings).
-
-**Architecture decision:** Use PostGIS `ST_DWithin()` -- not application-level distance math. PostGIS uses the existing GiST spatial index on `geocode_cache.location` for O(n log n) lookups vs O(n^2) in application code. At 50 orders this does not matter performance-wise, but it is the correct pattern for spatial queries and avoids reinventing distance calculations.
-
-**Implementation approach:**
-
-| Component | Change |
-|-----------|--------|
-| `core/database/repository.py` | **NEW function:** `find_duplicate_locations(session, orders, threshold_m=50) -> list[DuplicateGroup]` using ST_DWithin |
-| `apps/kerala_delivery/api/main.py` | Call `find_duplicate_locations()` after geocoding, include results in `OptimizationSummary` response |
-| `core/models/` (new file or extend route.py) | **NEW model:** `DuplicateGroup(BaseModel)` -- group of order_ids sharing a location |
-| Dashboard `UploadRoutes.tsx` | Show duplicate warnings in upload results (new `DuplicateLocationAlert` component) |
-
-#### Geocoding Cost Tracking
-
-**What:** Track which addresses hit the cache vs called the Google API, so operators can see geocoding costs per upload.
-
-**Current state:** The upload endpoint already tracks `geocoded` count and `failed_geocoding` count in `OptimizationSummary`. But it does not distinguish cache hits from API calls.
-
-**Implementation approach:**
-
-| Component | Change |
-|-----------|--------|
-| `apps/kerala_delivery/api/main.py` | Track `cache_hits` and `api_calls` counters in the geocoding loop (lines 852-898). Add to `OptimizationSummary` response model. |
-| `OptimizationSummary` Pydantic model | Add fields: `geocode_cache_hits: int`, `geocode_api_calls: int` |
-| Dashboard `UploadRoutes.tsx` | Display cache hit rate badge in the import summary UI |
-| Dashboard `types.ts` | Add `geocode_cache_hits` and `geocode_api_calls` to `UploadResponse` |
-
-**No new database tables.** Cost tracking is per-upload metadata, not persistent historical data. The `CachedGeocoder.stats` dict already tracks hits/misses -- the upload endpoint just needs to surface it in the response.
+---
 
 ## Component Responsibilities
 
-| Component | Responsibility | v1.1 Changes |
-|-----------|----------------|-------------|
-| `core/geocoding/normalize.py` | **NEW** Single normalization algorithm for all address matching | Foundation for cache fix |
-| `core/geocoding/google_adapter.py` | Google Maps API calls + file cache | Use shared normalizer |
-| `core/geocoding/cache.py` | PostGIS cache decorator around upstream geocoder | No changes (delegates to repo) |
-| `core/database/repository.py` | PostGIS cache CRUD + new duplicate detection | Use shared normalizer + new `find_duplicate_locations()` |
-| `apps/kerala_delivery/api/main.py` | Upload endpoint orchestration | Add cost tracking counters, duplicate detection call, new response fields |
-| `apps/kerala_delivery/dashboard/` | React dashboard UI | CSS overhaul with DaisyUI, new geocoding stats + duplicate alert components |
-| `apps/kerala_delivery/driver_app/` | Driver PWA | CSS refresh, simplified next-stop flow, enhanced offline |
+### New Components
 
-## Data Flow Changes
+| Component | File | Purpose | Calls Into |
+|-----------|------|---------|------------|
+| WSL bootstrap | `bootstrap.sh` (project root) | Fresh machine setup: install Docker + Git, clone repo, delegate to install.sh | `scripts/install.sh` |
+| Daily startup | `start.sh` (project root) | Every-morning startup: start Docker daemon, bring compose up, verify health | `docker compose up -d`, `curl /health` |
 
-### Current Geocoding Flow (Buggy)
+### Modified Components
 
-```
-Upload CSV
-  -> Parse orders
-  -> For each ungeooded order:
-       1. repo.get_cached_geocode(session, address)  [normalize: strip().lower()]
-          -> PostGIS cache lookup
-       2. If miss: geocoder.geocode(address)          [normalize: " ".join(lower().split()) -> SHA-256]
-          -> Check file cache (JSON)
-          -> If file miss: Google API call
-          -> Save to file cache
-       3. repo.save_geocode_cache(session, ...)       [normalize: strip().lower()]
-          -> Save to PostGIS cache
+| Component | File | Change | Scope |
+|-----------|------|--------|-------|
+| Project setup | `scripts/install.sh` | Minor: add guard checking if `.env` is missing and bootstrap context note in header | Documentation inside file only |
+| Office guide | `DEPLOY.md` Section 3.1 | Replace 4-command daily startup block with `./start.sh` | Text change, Section 3.1 only |
+| Office guide | `DEPLOY.md` Section 2.3 | Reference `bootstrap.sh` instead of manual Docker install blocks | Text change, Section 2.3 only |
+| Developer guide | `README.md` Docker Services table | Fix stale container name `routing-db` → `lpg-db`, fix `routeopt` → `routing` | Text change, one table |
 
-PROBLEM: Step 1 and Step 2 use different normalization.
-"Near SBI,  MG Road" normalizes to:
-  PostGIS: "near sbi,  mg road"  (double space preserved)
-  File:    "near sbi, mg road"   (double space collapsed -> different key)
-```
+### Unchanged Components (DO NOT TOUCH)
 
-### Fixed Geocoding Flow
+| Component | Why Frozen |
+|-----------|------------|
+| `scripts/deploy.sh` | Production deployment; any regression here breaks live system |
+| `scripts/backup_db.sh` | Container name detection logic at lines 37-46 is tightly coupled to `lpg-db`/`lpg-db-prod`; works correctly |
+| `docker-compose.yml` | Changing container names to match stale docs would break `backup_db.sh` and `deploy.sh` |
+| `docker-compose.prod.yml` | Production config; correct and stable |
+| `scripts/build-pwa-css.sh` | Build utility; no deployment relationship |
+| All API Python code | Out of scope for v1.3 |
+| All React dashboard code | Out of scope for v1.3 |
+| Driver PWA | Out of scope for v1.3 |
+
+---
+
+## Recommended Project Structure
 
 ```
-Upload CSV
-  -> Parse orders
-  -> For each ungeooded order:
-       1. normalize_address(address)               [SHARED: collapse ws, lowercase, strip]
-       2. repo.get_cached_geocode(session, norm)
-          -> PostGIS cache lookup
-       3. If miss: geocoder.geocode(address)
-          -> Check file cache (uses SAME normalize_address -> SHA-256)
-          -> If file miss: Google API call
-          -> Save to file cache
-       4. repo.save_geocode_cache(session, ...)    [uses SAME normalize_address]
-  -> Count cache_hits vs api_calls                 [NEW: cost tracking]
-  -> find_duplicate_locations(session, orders)      [NEW: duplicate detection]
-  -> Return OptimizationSummary with new fields
+routing_opt/
+├── bootstrap.sh              # NEW: zero-to-running for fresh WSL install
+├── start.sh                  # NEW: daily morning startup script
+├── scripts/
+│   ├── install.sh            # MINOR UPDATE: add bootstrap context note
+│   ├── deploy.sh             # unchanged (production)
+│   ├── backup_db.sh          # unchanged
+│   ├── build-pwa-css.sh      # unchanged
+│   └── osrm_setup.sh         # unchanged (manual OSRM rebuild)
+├── DEPLOY.md                 # UPDATE: reference start.sh, fix container names
+└── README.md                 # UPDATE: fix container name table
 ```
 
-### Dashboard UI Data Flow (Unchanged)
+**Why at project root, not in `scripts/`?**
 
-```
-User navigates to page
-  -> React component mounts
-  -> Calls api.ts fetch function
-  -> GET /api/{endpoint}
-  -> Renders data with DaisyUI components
+`bootstrap.sh` and `start.sh` are end-user entrypoints for non-technical office employees. The DEPLOY.md already directs the user to `cd routing_opt` then run commands. A root-level file means the instruction is simply `./start.sh`. Requiring `./scripts/start.sh` adds cognitive friction and a path to mistype. Developer scripts (backup, osrm setup, CSS build) belong in `scripts/` because developers know to look there.
 
-No state management library. Each page fetches its own data.
-This is correct for 4 pages with no shared state.
-```
-
-### Driver PWA Data Flow (Enhanced Offline)
-
-```
-Current:
-  Driver opens URL -> fetch /api/routes/{id} -> localStorage -> render
-  Offline: read localStorage, queue status updates
-
-Enhanced:
-  Driver opens URL -> fetch /api/routes/{id} -> Cache API + localStorage -> render
-  Offline: read Cache API (larger quota), queue status via BackgroundSync
-  Online again: BackgroundSync replays queued status updates
-```
-
-## Recommended Project Structure for New Code
-
-```
-core/
-  geocoding/
-    normalize.py              # NEW -- shared normalization function
-    google_adapter.py         # MODIFIED -- use normalize_address()
-    cache.py                  # NO CHANGE
-    interfaces.py             # NO CHANGE
-
-core/database/
-    repository.py             # MODIFIED -- use normalize_address(), add find_duplicate_locations()
-    models.py                 # NO CHANGE (schema unchanged, data migrated)
-
-apps/kerala_delivery/
-  api/
-    main.py                   # MODIFIED -- cost tracking, duplicate detection, new response fields
-  dashboard/src/
-    index.css                 # MODIFIED -- DaisyUI theme refinements
-    App.tsx                   # LIGHT TOUCH -- icon swap
-    App.css                   # MODIFIED -- DaisyUI sidebar patterns
-    pages/
-      UploadRoutes.tsx        # HEAVY REWRITE (CSS only, logic stays)
-      UploadRoutes.css        # DELETE after migration to DaisyUI utilities
-      LiveMap.tsx + .css      # MODERATE REWRITE
-      RunHistory.tsx + .css   # MODERATE REWRITE
-      FleetManagement.tsx + .css  # MODERATE REWRITE
-    components/
-      GeocodingStats.tsx      # NEW -- cache hit/API call breakdown display
-      DuplicateLocationAlert.tsx  # NEW -- duplicate GPS coordinate warning
-      StatsBar.tsx + .css     # MODERATE REWRITE
-      VehicleList.tsx + .css  # MODERATE REWRITE
-      RouteMap.tsx + .css     # LIGHT TOUCH
-  driver_app/
-    index.html                # HEAVY REWRITE (CSS + JS for UX improvements)
-    sw.js                     # MODERATE REWRITE (Cache API, BackgroundSync)
-    manifest.json             # LIGHT TOUCH
-    tailwind.css              # REGENERATE
-
-infra/alembic/versions/
-    xxx_normalize_geocode_cache.py  # NEW -- migration to re-normalize existing data
-
-tests/
-  core/geocoding/
-    test_normalize.py         # NEW -- test shared normalization
-  core/database/
-    test_duplicate_detection.py  # NEW -- test ST_DWithin duplicate logic
-```
+---
 
 ## Architectural Patterns
 
-### Pattern 1: DaisyUI with Tailwind Prefix for Collision Safety
+### Pattern 1: Bootstrap Delegates to install.sh — No Logic Duplication
 
-**What:** Tailwind 4 is configured with `prefix(tw)` in `index.css`, meaning all Tailwind utilities use `tw:` prefix (e.g., `tw:flex`, `tw:p-4`). DaisyUI component classes also use the prefix (`tw:btn`, `tw:card`). This prevents collisions with existing CSS custom properties that use `--color-*` names.
+**What:** `bootstrap.sh` is a thin system-provisioning wrapper. It installs OS-level prerequisites (Docker, Git via apt-get), then calls `scripts/install.sh` for all project-level setup. Zero duplication of credential prompts, health checks, or compose logic.
 
-**When to use:** Always when adding new styles in the dashboard. Never write raw CSS classes when a DaisyUI component exists.
+**Why not merge Docker install into install.sh:** `install.sh` is also used by developers who already have Docker. Adding system-level install logic creates two paths (`if ! docker; then apt-get install...`) that complicate the existing clean flow and risk breaking developer workflows.
 
-**Trade-off:** Slightly more verbose class names (`tw:btn tw:btn-primary` vs `btn btn-primary`), but eliminates CSS specificity wars.
-
-### Pattern 2: Single Normalization Module
-
-**What:** Extract address normalization into `core/geocoding/normalize.py` as the single source of truth. Every component that needs to match addresses imports from here.
-
-**When to use:** Any time address comparison or cache lookup occurs. Never inline normalization logic.
-
-**Trade-off:** One more import, but eliminates an entire class of cache inconsistency bugs.
-
-```python
-# core/geocoding/normalize.py
-def normalize_address(address: str) -> str:
-    """Normalize an address for cache lookup.
-
-    Rules:
-    1. Lowercase
-    2. Collapse all whitespace to single space
-    3. Strip leading/trailing whitespace
-    4. Strip trailing commas/periods
-
-    This is the ONLY normalization used for geocode cache keys.
-    If you change this, you MUST run the migration to re-normalize
-    all existing geocode_cache rows.
-    """
-    return " ".join(address.lower().split()).rstrip(",.")
+**Example:**
+```bash
+# bootstrap.sh structure (simplified)
+install_docker()  # apt-get steps — only if not already present
+clone_or_update() # git clone $REPO_URL routing_opt, or git pull if exists
+cd routing_opt
+./scripts/install.sh  # delegate — no credential or health logic here
 ```
 
-### Pattern 3: PostGIS for Spatial Queries (Not Application Code)
+### Pattern 2: Idempotent Guards — Replicate Existing Convention
 
-**What:** Use ST_DWithin for duplicate detection instead of computing haversine distances in Python.
+**What:** Every action in every script checks before acting. This is already the convention: osrm-init checks for `.osrm.mldgr`, `install.sh` checks for `.env`. New scripts must follow the same pattern without exception.
 
-**When to use:** Any spatial comparison (proximity, containment, distance).
+**Why:** The office employee will re-run these scripts when something seems broken. A script that fails with "already exists" errors destroys trust.
 
-**Trade-off:** Requires database roundtrip, but PostGIS uses spatial indexes (GiST) for efficient lookups vs O(n^2) pairwise distance calculations in application code.
+**Required guards in bootstrap.sh:**
+```bash
+# Docker guard
+if command -v docker &>/dev/null; then
+    success "Docker already installed — skipping"
+else
+    # [5-step Docker CE install from apt]
+fi
 
-```python
-# core/database/repository.py -- new function
-async def find_duplicate_locations(
-    session: AsyncSession,
-    orders: list[Order],
-    threshold_m: float = 50.0,
-) -> list[DuplicateGroup]:
-    """Find orders that resolved to the same GPS coordinates (within threshold).
-
-    Uses PostGIS ST_DWithin with the GiST spatial index on orders.location.
-    Returns groups of order_ids where all orders in a group are within
-    threshold_m meters of each other.
-    """
-    # Implementation uses ST_DWithin(a.location, b.location, threshold_m)
-    # with a self-join on geocoded orders
-    ...
+# Clone guard
+if [ -d "routing_opt/.git" ]; then
+    success "routing_opt already exists — pulling latest"
+    cd routing_opt && git pull origin main
+else
+    git clone "$REPO_URL" routing_opt && cd routing_opt
+fi
 ```
 
-### Pattern 4: Service Worker Cache Versioning for Static CSS
+**Required guards in start.sh:**
+```bash
+# .env guard (setup not complete)
+if [ ! -f ".env" ]; then
+    error ".env not found. Run ./scripts/install.sh first."
+    exit 1
+fi
 
-**What:** When the pre-compiled `tailwind.css` for the driver PWA changes, the service worker `CACHE_VERSION` constant must be bumped so browsers fetch the new file.
-
-**When to use:** Every time PWA HTML or styling changes.
-
-**Current implementation already follows this pattern:**
-```javascript
-const CACHE_VERSION = 'v3';  // bump this when tailwind.css changes
-const CACHE_NAME = `lpg-driver-${CACHE_VERSION}`;
+# Docker daemon guard (WSL-specific)
+if ! docker info &>/dev/null; then
+    sudo service docker start
+fi
 ```
 
-## Anti-Patterns to Avoid
+### Pattern 3: start.sh as a Daily Fast-Path, Not a Rebuild
 
-### Anti-Pattern 1: Splitting the Driver PWA into Multiple Files
+**What:** `start.sh` does exactly three things: (1) ensure Docker daemon is running, (2) run `docker compose up -d`, (3) poll `/health` until 200 or 60s timeout, then print dashboard URL.
 
-**What people do:** Separate CSS/JS into external files for maintainability.
-**Why it is wrong:** The service worker caches `./index.html` as the single app shell resource. Splitting files requires updating `APP_SHELL` in `sw.js`, and any cache miss on a JS/CSS file means a broken offline experience. The monolithic file IS the architecture -- it ensures atomic offline availability.
-**Do this instead:** Keep all CSS and JS inline in `index.html`. Use clear section comments for navigation. The compiled `tailwind.css` is already a separate cached file in `APP_SHELL` -- this is the ONE exception because it changes independently.
+**What it must NOT do:** prompt for input, rebuild images, run git pull, run alembic, or attempt any installation.
 
-### Anti-Pattern 2: Introducing a State Management Library for the Dashboard
+**Why:** `docker compose up -d` with cached images starts in under 10 seconds. `docker compose up -d --build` can take 3-5 minutes if pip or npm cache is cold. A non-technical user who sees the terminal sit at "Building..." for 3 minutes on a Tuesday morning will panic or close the terminal.
 
-**What people do:** Add Redux/Zustand/Jotai for "proper" state management.
-**Why it is wrong:** The dashboard has 4 pages with no shared state between them. Each page fetches its own data on mount. Adding state management adds bundle size and complexity for zero benefit at this scale.
-**Do this instead:** Keep page-level data fetching. If two pages need the same data (unlikely), lift the fetch to `App.tsx` and pass as props. The only shared state is `activePage` and `apiHealthy` -- both already in `App.tsx`.
+**Example:**
+```bash
+# start.sh — complete logic
+cd "$PROJECT_DIR"
 
-### Anti-Pattern 3: Dual Cache Writes with Different Keys
+# 1. Docker daemon (WSL-specific: daemon not auto-started on boot)
+if ! docker info &>/dev/null; then
+    info "Starting Docker daemon..."
+    sudo service docker start
+    sleep 3
+fi
 
-**What people do:** Save to both file cache and PostGIS cache using each system's own normalization.
-**Why it is wrong:** This is the current bug. Two caches with different normalization = inconsistent data, duplicate API calls, conflicting coordinates.
-**Do this instead:** Use a single normalization function everywhere. Long-term, deprecate the file cache entirely -- PostGIS is the authoritative cache in production. Keep file cache only as a development fallback when no database is available.
+# 2. Start compose stack (fast: images cached from install)
+docker compose up -d
 
-### Anti-Pattern 4: Building a Separate "Geocoding Service"
+# 3. Health check (max 60s)
+for i in $(seq 1 12); do
+    if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+        echo ""
+        echo "  System is running."
+        echo "  Dashboard: http://localhost:8000/dashboard/"
+        echo "  Driver App: http://localhost:8000/driver/"
+        exit 0
+    fi
+    sleep 5
+done
+warn "Services taking longer than expected. Check: docker compose ps"
+```
 
-**What people do:** Extract geocoding into a separate microservice for "scalability."
-**Why it is wrong:** At 40-50 deliveries/day, geocoding takes under 30 seconds per batch. A separate service adds deployment complexity, network latency, and a new failure mode -- all for no scalability benefit.
-**Do this instead:** Keep geocoding as a module within FastAPI. If batch sizes grow to 500+, add async task processing (background worker within the same codebase), not a separate service.
+### Pattern 4: Fix Docs to Match Code — Never the Reverse
 
-### Anti-Pattern 5: Big-Bang CSS Migration
+**What:** The README.md Docker Services table shows `routing-db` as the container name, but `docker-compose.yml` defines it as `lpg-db`. Fix the README.
 
-**What people do:** Delete all `.css` files in one commit, rewrite everything in Tailwind utilities.
-**Why it is wrong:** The existing 380+ tests do not cover visual output -- regression is invisible. A component-by-component migration allows visual verification at each step.
-**Do this instead:** One page per phase. Remove the page's `.css` file only after confirming the DaisyUI classes produce the correct visual. Commit each page migration separately.
+**Why not rename the container:** `backup_db.sh` auto-detects container names by literal string matching (`lpg-db` / `lpg-db-prod`) at lines 37-46. Renaming in compose would silently break the backup script. Container name changes have hidden blast radius: they also appear in `deploy.sh` health checks (`lpg-db-prod`) and in deploy.sh's backup call at line 136.
+
+**The rule:** Documentation follows code. Code does not change to match documentation.
+
+---
+
+## Data Flow — Install to Daily Use Lifecycle
+
+```
+═══════════════════════════════════════════════════════
+FIRST TIME — fresh Windows laptop with WSL (once ever)
+═══════════════════════════════════════════════════════
+
+bootstrap.sh
+ │
+ ├─► apt-get: git curl ca-certificates gnupg
+ ├─► [Docker CE official install — 5 apt commands]
+ ├─► usermod -aG docker $USER && newgrp docker
+ ├─► git clone <REPO_URL> routing_opt
+ └─► cd routing_opt && ./scripts/install.sh
+                              │
+                              ├─► create .env (prompts for DB pass, API key, GMaps key)
+                              ├─► mkdir data/osrm data/geocode_cache
+                              ├─► docker compose up -d --build
+                              │       ├── osrm-init: download + preprocess Kerala OSM (~150MB, ~10min)
+                              │       ├── db-init: alembic upgrade head (creates schema)
+                              │       └── api: start uvicorn (waits for db-init)
+                              └─► poll /health until 200 (up to 5 min)
+                              → print "Installation complete! Dashboard: http://localhost:8000/..."
+
+
+═══════════════════════════════════════════════════════
+DAILY — every morning
+═══════════════════════════════════════════════════════
+
+start.sh
+ │
+ ├─► [guard: .env exists, else error]
+ ├─► sudo service docker start  (WSL daemon not auto-started)
+ ├─► docker compose up -d       (fast: images cached, osrm data present)
+ │       ├── osrm-init: detects .osrm.mldgr → exits immediately
+ │       ├── db-init: alembic upgrade head (no-op if schema current)
+ │       └── api: starts in ~3s
+ └─► poll /health until 200 (usually <30s)
+ → print "Dashboard: http://localhost:8000/dashboard/"
+
+
+═══════════════════════════════════════════════════════
+UPDATE — when technical team pushes code changes
+═══════════════════════════════════════════════════════
+
+(manual, not a script)
+git pull origin main
+docker compose up -d --build api   # rebuild API image with new Python code
+# db-init runs automatically and applies any new Alembic migrations
+```
+
+---
 
 ## Integration Points
 
-### Internal Boundaries
+### New Components and Their Boundaries
 
-| Boundary | Communication | v1.1 Impact |
-|----------|---------------|-------------|
-| Dashboard <-> API | HTTP REST (fetch) | New response fields added to `OptimizationSummary` for cost tracking + duplicates |
-| Driver PWA <-> API | HTTP REST (fetch) | No API changes needed |
-| API <-> PostGIS Cache | SQLAlchemy async | Normalization function changes; new `find_duplicate_locations()` spatial query |
-| API <-> File Cache | Direct file I/O via GoogleGeocoder | Normalization function changes to match PostGIS |
-| API <-> Google Geocoding | httpx HTTP | No changes to integration; normalization fix reduces unnecessary API calls |
-| Dashboard <-> DaisyUI | CSS classes | Prefix `tw:` already configured in `index.css` |
-| PWA <-> Service Worker | Cache API, localStorage | Enhanced offline strategy (Cache API + BackgroundSync) |
+| New Component | Invokes | Reads | Writes | Does Not Touch |
+|---------------|---------|-------|--------|----------------|
+| `bootstrap.sh` | `scripts/install.sh` | Nothing (fresh machine) | `routing_opt/` directory | `.env`, docker-compose.yml, any Python/JS code |
+| `start.sh` | `docker compose up -d`, `curl /health` | `.env` (existence check only) | Nothing | Credentials, images, database, any source code |
 
-### External Services
+### Modification Blast Radius
 
-| Service | Integration Pattern | v1.1 Changes |
-|---------|---------------------|-------------|
-| Google Geocoding API | httpx GET, per-address | No API integration changes; normalization fix reduces duplicate calls |
-| OSRM | httpx, internal to VROOM | No changes |
-| VROOM | httpx POST | No changes |
-| PostGIS | SQLAlchemy async | New spatial query for duplicate detection via ST_DWithin |
+| Modified File | Lines Changed | Risk |
+|---------------|---------------|------|
+| `scripts/install.sh` | Header comment only | Zero — no logic change |
+| `DEPLOY.md` Section 3.1 | ~10 lines replaced | Zero — documentation only |
+| `DEPLOY.md` Section 2.3 | ~30 lines replaced | Zero — documentation only |
+| `README.md` Docker Services table | 2 rows corrected | Zero — documentation only |
 
-## Suggested Build Order
+### Critical Boundary: backup_db.sh Container Name Detection
 
-Dependencies determine ordering:
+`backup_db.sh` uses this logic (lines 37-46) to auto-detect the database container:
 
-```
-Phase 1: Geocoding Normalization Fix (foundation -- MUST be first)
-  1a. Create core/geocoding/normalize.py
-  1b. Update repository.py to use normalize_address()
-  1c. Update google_adapter.py to use normalize_address()
-  1d. Write Alembic migration for existing data
-  1e. Add tests for normalize_address()
-  WHY FIRST: Other geocoding features depend on consistent normalization.
-  Building UI on inconsistent data wastes effort.
-
-Phase 2: Geocoding Enhancements (builds on normalization fix)
-  2a. Add cost tracking counters to upload endpoint
-  2b. Add geocode_cache_hits/geocode_api_calls to OptimizationSummary model
-  2c. Add find_duplicate_locations() to repository.py
-  2d. Add DuplicateGroup model
-  2e. Wire duplicate detection into upload endpoint
-  2f. Update dashboard types.ts with new response fields
-  DEPENDS ON: Phase 1 (consistent cache behavior)
-
-Phase 3: Dashboard UI Overhaul (needs Phase 2 response fields)
-  3a. Migrate UploadRoutes page to DaisyUI (needs 2b/2f for new fields)
-  3b. Add GeocodingStats component
-  3c. Add DuplicateLocationAlert component
-  3d. Migrate LiveMap page (independent of geocoding)
-  3e. Migrate RunHistory page (independent)
-  3f. Migrate FleetManagement page (independent)
-  3g. Polish App sidebar with DaisyUI drawer/menu
-  3h. Clean up: delete fully-migrated per-page CSS files
-  DEPENDS ON: Phase 2 for 3a-3c; 3d-3h independent
-
-Phase 4: Driver PWA Refresh (fully independent -- can parallel Phase 3)
-  4a. Redesign next-stop UX flow (JS state machine)
-  4b. Improve outdoor readability CSS
-  4c. Enhance sw.js with Cache API + BackgroundSync
-  4d. Update manifest.json
-  4e. Regenerate tailwind.css
-  NO DEPENDENCIES: Different tech stack, no shared code, no shared API changes
+```bash
+if [[ "$COMPOSE_FILE" == *prod* ]]; then
+    DB_CONTAINER="lpg-db-prod"
+else
+    DB_CONTAINER="lpg-db"
+fi
 ```
 
-**Phase ordering rationale:**
-- Normalization fix FIRST because it is a data integrity issue. Building UI on top of inconsistent geocode data wastes effort.
-- Geocoding enhancements SECOND because they produce the new API fields the dashboard needs to display.
-- Dashboard UI THIRD because it consumes the new response fields from Phase 2 for geocoding stats and duplicate warnings.
-- Driver PWA FOURTH or parallel with Phase 3 because it is completely independent: different tech stack (vanilla JS), different frontend (mobile), different styling (dark theme), no shared API changes.
+This is hardcoded to current container names. Any change to container names in `docker-compose.yml` silently breaks database backups. This is why we fix docs to match compose, not the reverse.
+
+---
 
 ## Scaling Considerations
 
-| Scale | Architecture Adjustments |
-|-------|--------------------------|
-| Current (13 vehicles, 50 orders/day) | Current architecture is correct. No scaling changes needed. |
-| 50 vehicles, 200 orders/day | Add batch endpoint for LiveMap (already in CONCERNS.md). Consider in-memory cache for routes (30s TTL). |
-| 100+ vehicles | Geocoding batch should be async (background worker). Consider WebSocket for live map instead of polling. |
+This is a single-office deployment for one LPG distributor. The only meaningful "scale" for v1.3 is operational: can a non-technical person use these scripts reliably over 12 months?
 
-### First bottleneck: geocoding latency on large uploads
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| `bootstrap.sh` re-run on same machine | Idempotent guards skip all completed steps; re-runs in under 30 seconds |
+| `start.sh` when Docker already running | `docker compose up -d` is a no-op for running containers; health check passes immediately |
+| `start.sh` after laptop reboot | WSL Docker daemon start + container up takes ~30-60s; stays within 60s health timeout |
+| OSRM data present, `install.sh` re-run | osrm-init detects `.osrm.mldgr`, exits in 1s; total startup under 60s |
+| New laptop, repo already cloned | `bootstrap.sh` skips clone, installs Docker, calls `install.sh` |
+| Internet outage on daily startup | `start.sh` succeeds (all data already present locally; geocoding caches hits) |
 
-At 500+ orders with 50% cache miss, geocoding takes 4+ minutes (1 req/sec Google API rate). The frontend HTTP request will timeout. Fix: make geocoding async with a progress polling endpoint. NOT a concern for v1.1 (50 orders/day scale).
+---
 
-### Second bottleneck: LiveMap N+1 queries
+## Anti-Patterns
 
-Already identified in CONCERNS.md -- at 50+ vehicles, serial route detail fetches cause visible lag. Fix: batch endpoint returning all vehicle positions in one response. NOT a concern for v1.1 (13 vehicles).
+### Anti-Pattern 1: Docker Install Logic Inside install.sh
+
+**What people do:** Add `if ! command -v docker; then apt-get install docker-ce; fi` inside `install.sh`.
+
+**Why it's wrong:** `install.sh` is used by developers who already have Docker. Adding system-level package installation creates two execution paths. If the apt-get steps fail (network issue, wrong Ubuntu version, GPG key error), the error lands inside a script that previously "just worked" for developers. Debugging becomes harder for both audiences.
+
+**Do this instead:** Keep `bootstrap.sh` as the system-provisioning layer. `install.sh` documents that it assumes Docker is present ("Requirements: Ubuntu 22.04+ or WSL2 with Ubuntu"). Separation of concerns between system setup and project setup.
+
+### Anti-Pattern 2: start.sh That Rebuilds Images
+
+**What people do:** Use `docker compose up -d --build` in `start.sh` to "keep things current."
+
+**Why it's wrong:** `--build` triggers Docker image rebuilds. On a warm machine after a `git pull`, rebuilding the API image reinstalls all pip packages from the layer cache — but if `requirements.txt` has changed or the Docker build cache is cold (e.g., after disk cleanup), this takes 3-5 minutes. A non-technical user who sees the terminal sit at "Building..." for 3 minutes on a weekday morning will not know if it's working or broken.
+
+**Do this instead:** `start.sh` uses `docker compose up -d` only. Updates (after `git pull`) are a separate manual step. Daily startup never rebuilds.
+
+### Anti-Pattern 3: Renaming Container Names to Match Stale Docs
+
+**What people do:** Change `container_name: lpg-db` to `container_name: routing-db` in `docker-compose.yml` to match the README.
+
+**Why it's wrong:** `backup_db.sh` has hardcoded `lpg-db`/`lpg-db-prod` strings for container auto-detection. `deploy.sh` references `lpg-db-prod` by name in its health check loop (line 173). The blast radius of a container rename spans three scripts. A rename that silently breaks backups is worse than a stale README.
+
+**Do this instead:** Fix the README table to show `lpg-db`. Docs follow code.
+
+### Anti-Pattern 4: Prompting for Credentials in start.sh
+
+**What people do:** `start.sh` prompts "Enter your API key:" to confirm identity on each startup.
+
+**Why it's wrong:** Credentials live in `.env`, which was created during `install.sh`. `start.sh` should not handle credentials at all. Prompting creates new failure modes (user types wrong key, `.env` gets overwritten accidentally) and adds 30-60 seconds to every morning startup.
+
+**Do this instead:** `start.sh` checks that `.env` exists (existence check, no read) and errors if missing: "Run `./scripts/install.sh` first — setup is not complete."
+
+### Anti-Pattern 5: Single Monolithic Bootstrap + Install + Daily Startup Script
+
+**What people do:** Merge all three into one script with flags: `setup.sh --bootstrap`, `setup.sh --daily`, `setup.sh --install`.
+
+**Why it's wrong:** The audiences and timing are different. Bootstrap is a one-time operation with system-level side effects (apt-get, usermod). Daily startup is a quick, safe operation with no side effects. Merging them means the daily-use script carries the cognitive weight and risk surface of the bootstrap. A non-technical user who runs `./setup.sh` by accident on a Tuesday morning should not end up running `apt-get install`.
+
+**Do this instead:** Separate files for separate purposes. Use the simplest possible names: `bootstrap.sh` (self-explanatory: one-time bootstrap) and `start.sh` (self-explanatory: start the system).
+
+---
+
+## Suggested Build Order
+
+Dependencies determine ordering. Build in this sequence:
+
+**1. `start.sh`** — standalone, lowest risk. Calls only `docker compose up -d` and `curl`. Can be tested immediately on the existing running system. This also validates the script style and output format before writing the more complex `bootstrap.sh`.
+
+**2. Fix `DEPLOY.md` Section 3** — replace the 4-command daily startup block with `./start.sh`. Requires `start.sh` to exist. Unblocks the office employee from using the new script.
+
+**3. `bootstrap.sh`** — delegates to `install.sh`, so `install.sh` must be working as-is first. Writing this after `start.sh` establishes the color/output conventions. The Docker CE install steps are well-documented and can be adapted from the existing DEPLOY.md Section 2.2.
+
+**4. Fix `DEPLOY.md` Section 2** — replace the multi-block manual Docker install section with `./bootstrap.sh`. Requires `bootstrap.sh` to exist and be tested.
+
+**5. Fix `README.md`** — correct the Docker Services table container names and update Quick Start to reference `bootstrap.sh`. No code dependencies; purely documentation. Can be done at any time but naturally last since it confirms what the scripts actually do.
+
+**Why this order matters:**
+
+`start.sh` is the highest daily-impact change (office employee runs it every morning) and the lowest risk change (no system modification). Getting it right first, then building documentation on top of working scripts, prevents documentation from making promises the scripts cannot keep.
+
+---
 
 ## Sources
 
-- Direct codebase analysis of all files listed in this document (HIGH confidence)
-- `.planning/codebase/ARCHITECTURE.md` -- existing architecture patterns (analyzed 2026-03-01)
-- `.planning/codebase/STRUCTURE.md` -- file organization (analyzed 2026-03-01)
-- `.planning/codebase/INTEGRATIONS.md` -- external service contracts (analyzed 2026-03-01)
-- `.planning/codebase/CONCERNS.md` -- known issues and tech debt (analyzed 2026-03-01)
-- `core/geocoding/google_adapter.py` lines 189-196 -- file cache normalization (whitespace collapse + SHA-256)
-- `core/database/repository.py` lines 741, 789 -- PostGIS cache normalization (strip + lower only)
-- `infra/postgres/init.sql` lines 209-225 -- geocode_cache DDL with UNIQUE(address_norm, source)
-- `apps/kerala_delivery/dashboard/src/index.css` lines 1-38 -- Tailwind 4 + DaisyUI prefix(tw) config
-- `apps/kerala_delivery/driver_app/sw.js` -- current service worker caching strategy (CACHE_VERSION v3)
-- `apps/kerala_delivery/driver_app/index.html` -- PWA inline CSS/JS architecture (~51KB monolithic)
+- `scripts/install.sh` — full inspection (324 lines): prerequisite checks, `.env` creation, compose up, health wait logic
+- `scripts/deploy.sh` — full inspection: prod flow with pre-deploy backup, migrations, Caddy health check
+- `scripts/backup_db.sh` — full inspection: container name auto-detection at lines 27-46, pg_dump via docker exec
+- `docker-compose.yml` — full inspection: 6 services, actual container names, healthcheck conditions, depends_on chain
+- `docker-compose.prod.yml` — full inspection: 8 services including Caddy and dashboard-build, resource limits
+- `DEPLOY.md` — full inspection: existing office guide, Section 3.1 "Daily Use" contains the 4-command block to be replaced
+- `README.md` — full inspection: Docker Services table at line 403-408 shows stale container name `routing-db`
+- `.env.example` — full inspection: all environment variables with comments
 
 ---
-*Architecture research for: Kerala LPG Delivery v1.1 -- Dashboard UI overhaul + Driver PWA refresh + Geocoding fixes*
-*Researched: 2026-03-01*
+
+*Architecture research for: v1.3 Office-Ready Deployment — WSL bootstrap, Docker auto-install, daily startup scripts*
+*Researched: 2026-03-04*

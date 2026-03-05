@@ -1,238 +1,347 @@
 # Pitfalls Research
 
-**Domain:** Logistics delivery route optimizer -- v1.1 milestone (Dashboard UI overhaul, Driver PWA refresh, Geocoding cache normalization)
-**Researched:** 2026-03-01
-**Confidence:** HIGH (codebase-verified, official docs cross-referenced)
+**Domain:** Deployment automation and user-facing documentation for Docker Compose app — non-technical office users on WSL2/Windows
+**Researched:** 2026-03-04
+**Confidence:** HIGH (WSL/Docker issues verified against official docs and community issue trackers; CSV encoding and install script patterns verified via multiple sources)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Dual Geocoding Cache Normalization Mismatch
+### Pitfall 1: Docker Does Not Start Automatically After Windows Reboot
 
 **What goes wrong:**
-The system has two independent geocoding caches that normalize addresses differently. The `GoogleGeocoder` file cache (`core/geocoding/google_adapter.py` line 195) normalizes as `" ".join(address.lower().split())` -- which collapses all whitespace (tabs, double spaces, newlines) into single spaces. The PostGIS database cache (`core/database/repository.py` line 741) normalizes as `address_raw.strip().lower()` -- which only strips leading/trailing whitespace but preserves internal whitespace patterns. For the address `"Near SBI,  MG Road"` (two spaces), the file cache produces hash of `"near sbi, mg road"` (one space) while the DB cache stores `"near sbi,  mg road"` (two spaces). The same address gets geocoded twice via Google API (wasting money) and stored with potentially different coordinates if Google returns slightly different results on different days. Worse: the CDCMS export may have trailing tabs or inconsistent spacing, causing the same customer to appear as two separate map pins.
+WSL2 does not run systemd by default. Docker's daemon (`dockerd`) is not started on WSL launch unless explicitly configured. Every time the office employee restarts their Windows laptop, WSL opens, they `cd routing_opt`, and `docker compose up -d` fails with "Cannot connect to the Docker daemon at unix:///var/run/docker.sock". The fix is `sudo service docker start` — but this requires knowing why it failed, knowing the command, and knowing that the password prompt is coming. A non-technical user will see the cryptic error and stop.
+
+The current DEPLOY.md Quick Reference already lists `sudo service docker start` as step 2 in the daily workflow. But it requires the WSL sudo password, which the employee may have forgotten if they set it months ago during install and never typed it since.
 
 **Why it happens:**
-The file cache was built first as a development convenience (zero infrastructure). The PostGIS cache was added later with its own normalization logic. Nobody unified the normalization because both caches worked independently. The CachedGeocoder decorator checks PostGIS first, then falls through to GoogleGeocoder which checks its own file cache -- but the two caches use different keys for the same address.
+WSL2 uses a stripped-down init system. The `service` command works, but services do not persist across WSL restarts (which happen every Windows reboot). Docker Desktop avoids this problem by running as a Windows service, but this project installs Docker Engine directly in WSL (not Docker Desktop) to avoid the Docker Desktop license requirement and simplify networking.
 
 **How to avoid:**
-Extract a single `normalize_address()` function into `core/geocoding/interfaces.py` that both caches use. The correct normalization is: `" ".join(address.lower().split())` (the file cache version) because it handles all whitespace variants. Update `repository.py` lines 741 and 789 to use this shared function. Then run a one-time migration to re-normalize all existing `address_norm` values in the `geocode_cache` table. Consider deprecating the file cache entirely since the PostGIS cache is production-ready and shared across containers.
+Configure `/etc/wsl.conf` during install to auto-start Docker on WSL launch:
+```ini
+[boot]
+command="service docker start"
+```
+This eliminates the manual `sudo service docker start` step entirely. The `install.sh` script should write this config. After writing it, the startup script becomes just `docker compose up -d` — one command, no password.
+
+Alternative: add `sudo service docker start 2>/dev/null` to the user's `~/.bashrc` (already mentioned in SETUP.md but not yet in `install.sh`).
 
 **Warning signs:**
-- Same customer address appearing as two pins on the map
-- Cache hit rate lower than expected (should be 70%+ after first month)
-- `geocode_batch.py --dry-run` reports cache misses for addresses you know were geocoded before
-- `SELECT COUNT(*) FROM geocode_cache` shows more rows than unique delivery addresses
+- DEPLOY.md daily workflow requires 3 separate commands to start (service start, compose up, activate venv)
+- The install script does not write `/etc/wsl.conf`
+- Testing install on fresh WSL without rebooting Windows — the Docker auto-start issue only appears after a reboot
 
-**Phase to address:** Geocoding fixes phase -- must be the first task before duplicate detection or cost tracking, because both depend on consistent normalization.
+**Phase to address:** Install script phase — add `/etc/wsl.conf` boot command during installation. The daily startup script must work with zero prerequisite knowledge after reboot.
 
 ---
 
-### Pitfall 2: Tailwind v4 CSS Variable Collision With Existing Design Tokens
+### Pitfall 2: OSRM Init Container Silently OOM-Kills on 8 GB Laptops
 
 **What goes wrong:**
-Tailwind CSS v4 auto-generates CSS custom properties on `:root` using the `--color-*` namespace (e.g., `--color-red-500`, `--color-base-100`). The dashboard's `index.css` already defines 20+ custom properties using the same namespace: `--color-surface`, `--color-accent`, `--color-success`, `--color-danger`, `--color-border`, etc. The project already uses `prefix(tw)` in the CSS import (`@import "tailwindcss" prefix(tw)`), which namespaces Tailwind's utility classes as `tw-*`. However, there is a known Tailwind v4 bug ([tailwindlabs/tailwindcss#16441](https://github.com/tailwindlabs/tailwindcss/issues/16441)) where CSS variable references inside prefixed contexts do not get the prefix applied. For example, a DaisyUI theme variable `--color-background: var(--color-black)` in a `prefix(tw)` context generates `--tw-color-background: var(--color-black)` instead of the correct `--tw-color-background: var(--tw-color-black)`. This causes DaisyUI theme colors to silently fall back to the project's existing `--color-*` values instead of DaisyUI's intended colors, producing a confusing visual mismatch.
+OSRM `osrm-extract` preprocessing of Kerala OSM data requires approximately 3-4 GB of RAM. On a Windows laptop with 8 GB total RAM, WSL2 gets roughly 4 GB by default (half of physical RAM). Docker runs inside WSL2. When `osrm-extract` runs inside `docker compose up -d`, it may exceed available memory and get killed by the Linux OOM killer — silently. The `osrm-init` container exits with code 137 (OOM kill). `docker compose ps` shows `osrm-init` as "Exited (137)", the `osrm` service never starts (waiting on `service_completed_successfully`), the API never starts, and the health check in `install.sh` times out after 300 seconds. The error shown is the generic timeout message with "check `docker compose logs -f osrm-init`" — which requires the user to know what OOM means.
+
+The current `install.sh` has a 300-second timeout and tells users to check logs on failure. But a non-technical user cannot diagnose OOM from container exit codes.
 
 **Why it happens:**
-The `prefix()` function in Tailwind v4 adds the prefix to variable declarations but not to `var()` references within those declarations. This is a confirmed bug in the Tailwind v4 variable resolution pipeline. Developers see the prefix working on class names and assume variables are equally safe.
+WSL2's default memory allocation is 50% of physical RAM or 8 GB, whichever is lower. On 8 GB machines, that is 4 GB for WSL2 total. Docker's overhead, PostgreSQL, and the running OSRM extraction all compete for this 4 GB. The OSRM backend image's `osrm-extract` is known to be memory-hungry and does not gracefully degrade when OOM.
 
 **How to avoid:**
-The project's existing approach is correct: `@import "tailwindcss" prefix(tw)` prevents class-level collisions. For the variable reference bug, verify in DevTools that DaisyUI's oklch theme variables resolve correctly. If the custom logistics theme's `--color-primary: oklch(62% 0.17 65)` is being read instead of DaisyUI's computed value, explicitly re-declare the affected DaisyUI variables in the custom theme block. Also verify that the existing `--color-accent: #D97706` in `index.css` does not shadow the DaisyUI `--color-accent: oklch(62% 0.17 65)` from the custom theme -- both exist in the current codebase and the cascade order determines which wins.
+1. Before starting `osrm-init`, the install script must check WSL2 memory and warn if it is below 5 GB:
+   ```bash
+   WSL_MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+   WSL_MEM_GB=$((WSL_MEM_KB / 1024 / 1024))
+   if [ "$WSL_MEM_GB" -lt 5 ]; then
+       warn "Only ${WSL_MEM_GB}GB available — OSRM may fail. Configure .wslconfig first."
+       # Print .wslconfig instructions
+   fi
+   ```
+2. Print `.wslconfig` instructions at the start of the install (not buried in SETUP.md "Deploying on new laptop" section). The current SETUP.md mentions this but only in a "common issues" appendix.
+3. If `osrm-init` exits 137, the startup script should detect this specifically and print a clear OOM message, not the generic timeout message.
 
 **Warning signs:**
-- DaisyUI components render with hex colors (#D97706) instead of oklch values
-- DevTools shows two `--color-accent` declarations on `:root` from different sources
-- Alert components (`tw-alert-success`) show the wrong green shade
-- DaisyUI theme switcher has no effect because project CSS variables override theme values
+- Install tested only on 16 GB dev machine, not on the target 8 GB office laptop
+- `.wslconfig` instructions appear only in SETUP.md, not surfaced during install
+- `osrm-init` exit code not checked separately from health check timeout in `install.sh`
 
-**Phase to address:** Dashboard UI overhaul -- verify CSS variable isolation immediately after any DaisyUI theme changes, before building any new components.
+**Phase to address:** Install script phase — add memory check before OSRM init, add `.wslconfig` guidance early in the install output, and add specific OOM detection to the failure path.
 
 ---
 
-### Pitfall 3: PWA Compiled CSS Ships DaisyUI Default Theme Instead of Custom Theme
+### Pitfall 3: "One-Command Install" Breaks When Run From Windows Context
 
 **What goes wrong:**
-The driver PWA's `pwa-input.css` imports Tailwind and DaisyUI (`@import "tailwindcss" prefix(tw); @plugin "daisyui";`) but does NOT include the custom logistics theme defined in the dashboard's `index.css`. The compiled `tailwind.css` output (verified in codebase) contains DaisyUI's default light theme with blue/pink/teal colors (oklch values like `--color-primary: oklch(45% .24 277.023)`) -- not the project's amber/stone logistics theme. Additionally, the PWA's `index.html` uses zero `tw-` prefixed classes -- it uses custom CSS classes like `.header`, `.stop-list`, `.upload-btn`. This means the compiled Tailwind/DaisyUI CSS is entirely dead code shipped to every driver's phone, adding ~50KB of unused CSS to the PWA bundle while providing no visual benefit.
+A non-technical user reads `git clone <URL>` in DEPLOY.md and runs it in PowerShell or Windows Command Prompt rather than the Ubuntu terminal. The clone succeeds, creating the repository in the Windows filesystem (`C:\Users\...`). Then they open Ubuntu and follow the next steps. The project files are now at `/mnt/c/Users/.../routing_opt/` — accessible from WSL, but with three major problems:
+1. Shell scripts cloned via Windows git have CRLF line endings. `./scripts/install.sh` fails immediately: `/bin/bash^M: bad interpreter`.
+2. File permissions are wrong. Every file is 0777 (NTFS doesn't carry Unix permissions). `chmod +x scripts/install.sh` has no effect because the permission bits are fake.
+3. Performance. `docker compose up` bind-mounts `./data/osrm` — which is a Windows filesystem path. OSRM preprocessing I/O goes through the WSL-Windows translation layer, making it 10-100x slower than native ext4.
 
 **Why it happens:**
-The PWA CSS build was set up during v1.0 as infrastructure preparation but never actually integrated into the HTML. The `build-pwa-css.sh` script compiles the CSS, but since the HTML only uses hand-written CSS classes and inline styles, none of the Tailwind/DaisyUI classes are tree-shaken in. Tailwind v4 normally tree-shakes unused classes, but DaisyUI component styles are included wholesale by the plugin.
+Non-technical users do not know that "Ubuntu terminal" and "Windows PowerShell" are different environments. The DEPLOY.md section "Step 2.3" says "in the Ubuntu terminal" but this instruction is easily missed when the user is scanning for a command to copy. The git clone command looks the same in both terminals. The CRLF issue is especially subtle because the file opens fine in Windows Notepad but fails in bash.
 
 **How to avoid:**
-Two valid approaches: (1) If the PWA refresh will adopt DaisyUI classes, copy the custom logistics theme (or a dark-mode variant) from `dashboard/src/index.css` into `pwa-input.css` so both apps share the same design tokens. Migrate PWA HTML to use `tw-` prefixed DaisyUI classes alongside existing custom CSS. (2) If the PWA will remain hand-styled (likely better for the no-build-step constraint), remove the Tailwind/DaisyUI import from `pwa-input.css` entirely and delete the compiled `tailwind.css` to avoid shipping dead CSS. The PWA's existing custom CSS (saffron accent, dark background) works well for outdoor readability and does not need DaisyUI.
+1. DEPLOY.md must have a prominent warning box before the git clone step: "IMPORTANT: All commands in this guide must be run in the Ubuntu window, not in PowerShell or Windows Command Prompt."
+2. The install script should detect if it is running from `/mnt/c/` (Windows filesystem) and abort with a clear message:
+   ```bash
+   if [[ "$(pwd)" == /mnt/* ]]; then
+       error "Do not run from the Windows filesystem (/mnt/c/...)."
+       echo "  Clone the repository inside WSL: cd ~ && git clone ..."
+       exit 1
+   fi
+   ```
+3. The git clone instruction in DEPLOY.md should show the clone being run inside Ubuntu with the result landing in the Linux home directory (`~/routing_opt`), not an ambiguous `<anywhere>`.
 
 **Warning signs:**
-- Driver PWA loads two CSS files (tailwind.css + inline styles) but only the inline styles affect appearance
-- PWA file size grows without visual changes
-- Theme colors in the PWA don't match the dashboard
-- Lighthouse performance audit flags unused CSS
+- DEPLOY.md does not visually distinguish "Ubuntu terminal" steps from "Windows" steps
+- Git clone command shown without specifying which terminal to use
+- `install.sh` has no check for Windows filesystem paths
 
-**Phase to address:** Driver PWA refresh -- decide the CSS strategy (adopt DaisyUI or remove it) before any visual work begins.
+**Phase to address:** Documentation phase (DEPLOY.md rewrite) and install script phase (filesystem check). Both must land together — the doc tells users where to clone, the script catches the mistake if they ignore the doc.
 
 ---
 
-### Pitfall 4: Service Worker Caches Stale CSS After PWA Refresh
+### Pitfall 4: Interactive `read` Prompts Hang When Install Script Is Piped
 
 **What goes wrong:**
-The driver PWA's service worker (`sw.js`) uses a `CACHE_VERSION = 'v3'` constant to manage the cache lifecycle. The app shell includes `'./index.html'` in the pre-cache list. When PWA visual refresh changes are made to the inline styles in `index.html` or to `tailwind.css`, the service worker must be updated (version bumped) for drivers to receive the new styles. If `CACHE_VERSION` is not bumped, the service worker byte-check sees no change, the old cache persists, and installed PWA users see the old UI indefinitely. The `skipWaiting()` and `clients.claim()` calls in the current SW mean updates ARE applied immediately when detected -- but detection requires the SW file itself to change.
+The current `install.sh` uses `read -rp` to prompt for database password and API key. If a user follows a "one-line install" pattern (common in tutorials: `curl -s URL | bash` or `bash <(curl -s URL)`), the script hangs indefinitely at the first `read` prompt. The terminal shows nothing. Stdin is not a terminal, so `read` blocks forever. The user has to Ctrl+C and start over.
 
-Critically, this is a silent failure. Drivers do not see errors. They simply see the old UI. If the PWA refresh includes critical changes like improved outdoor readability or larger touch targets, drivers in the field continue using the old, harder-to-read interface. There is no "check for updates" button in the current PWA.
+Even in normal use, `read -rp` has a subtler problem: if the user pastes a command from DEPLOY.md that includes a trailing newline or space, the read may consume it and set the password to an empty string, falling back to the generated default — which was never shown to the user (it appears before the prompt, which they scrolled past).
 
 **Why it happens:**
-PWA cache invalidation is counterintuitive. Developers test in Chrome DevTools with "Update on reload" enabled, which bypasses the service worker lifecycle entirely. The CSS update works in dev, gets deployed, but installed PWAs don't receive it. This is the most commonly reported PWA deployment pitfall.
+`read -rp` is designed for interactive shells. It has no timeout and no non-interactive fallback. Developers test install scripts interactively and never pipe them, so they never encounter the hang.
 
 **How to avoid:**
-Create a deploy checklist: every CSS or HTML change to the driver PWA must be accompanied by a `CACHE_VERSION` bump in `sw.js`. Better yet: automate the version bump by including a build timestamp in the cache name (e.g., `const CACHE_NAME = 'lpg-driver-${BUILD_TIMESTAMP}'`). Since the PWA CSS is compiled via `scripts/build-pwa-css.sh`, add a step to that script that updates the cache version automatically. Add an in-app update indicator that checks the SW registration for waiting workers and prompts the driver to refresh.
+Two changes:
+1. Check `[ -t 0 ]` before using `read`. If stdin is not a terminal, skip all prompts and use generated defaults, then print "Running non-interactively — using auto-generated credentials."
+2. Show the generated default at the same line as the prompt (current install.sh already does this with `[$DEFAULT_DB_PASS]`), but also print the final used value clearly after prompt resolution, so users who press Enter know what was chosen:
+   ```bash
+   info "Using password: ${DB_PASS:0:4}**** (auto-generated)"
+   ```
+3. Do NOT support `curl | bash` in docs. Direct users to clone the repo and run the script from disk — this is safer (allows script inspection) and avoids the pipe stdin issue.
 
 **Warning signs:**
-- Drivers report the PWA "looks the same" after a deploy
-- Testing on a freshly installed PWA shows new styles, but existing installs show old ones
-- `navigator.serviceWorker.controller` shows old cache version in production
-- The `sw.js` file has not changed in a commit that modified `index.html`
+- Install script docs show a `curl | bash` pattern
+- `install.sh` has no `[ -t 0 ]` stdin check
+- Generated default password is not confirmed/printed after prompt
 
-**Phase to address:** Driver PWA refresh -- implement cache versioning automation before the first visual change ships to production.
+**Phase to address:** Install script phase — add stdin detection and non-interactive mode before publishing the one-command workflow.
 
 ---
 
-### Pitfall 5: Leaflet Inline Styles Require CSP unsafe-inline Permanently
+### Pitfall 5: Documentation Written for Developers, Not Read by Office Staff
 
 **What goes wrong:**
-Leaflet.js uses inline `style` attributes for positioning popups, markers, and map overlays. The CSP in `main.py` line 256 already allows `'unsafe-inline'` for `style-src`. During the UI overhaul, there is a temptation to tighten CSP by removing `'unsafe-inline'` and switching to nonce-based style injection -- especially since Tailwind/DaisyUI classes avoid inline styles. However, Leaflet will break immediately: popups stop positioning correctly, custom div markers (used for numbered route stop markers in the driver PWA, line 1050) fail to render, and the map becomes unusable. This is a confirmed open issue in Leaflet ([Leaflet/Leaflet#9168](https://github.com/Leaflet/Leaflet/issues/9168)) with no fix or workaround available.
+The current DEPLOY.md is well-written but structured like a developer guide: numbered steps, technical prerequisites, code blocks with explanations. Office staff who are the actual target user read the first two paragraphs and hand the laptop to IT. Specifically:
+- The "Quick Start (3 Steps)" at the top requires Docker and Git to already be installed — exactly what the non-technical user does not have. It sends them to "Section 2 below" which starts with PowerShell Admin commands, WSL installation, and Linux terminal concepts.
+- The troubleshooting section lists bash commands as the fix. A non-technical user who sees "Cannot connect to Docker daemon" will not know to run `sudo service docker start`. They will close the terminal and ask IT.
+- The daily startup is 3 separate commands (`cd routing_opt`, `sudo service docker start`, `docker compose up -d`) that must be remembered and typed in order every morning.
 
 **Why it happens:**
-Leaflet uses `element.style.transform`, `element.style.left/top`, and `innerHTML` with style attributes for positioning map overlays. These are core to how Leaflet works, not optional features. The Leaflet team has acknowledged this but has not implemented nonce-based style injection. The driver PWA's custom marker HTML (line 1050: `<div style="background:${color};...">`) also relies on inline styles.
+Documentation is written by developers who can read it. Non-technical users have fundamentally different mental models: they expect one button, not three commands. "Documentation pitfall: overwhelming instructions cause users to skip steps or not try at all."
 
 **How to avoid:**
-Keep `'unsafe-inline'` in `style-src` for as long as Leaflet is used. Document this as a known security trade-off with clear justification. Do NOT attempt to remove it during UI overhaul -- it is not a cleanup target. If strict CSP is required in the future, the alternative is to replace Leaflet with MapLibre GL JS (which uses WebGL canvas rendering instead of DOM manipulation), but that is a significant migration not in scope for v1.1.
+1. Create a `start.sh` daily startup script that wraps all daily operations into one command: starts Docker, brings up compose, verifies health, opens the browser URL. Users bookmark this script.
+2. Provide a Windows `.bat` file that opens Ubuntu and runs `start.sh` — double-clickable from the desktop.
+3. Structure DEPLOY.md in two clearly separated sections: "First-Time Setup (do once, needs IT help)" and "Daily Use (you do this yourself every morning)". The daily use section must fit on one printed page.
+4. Replace troubleshooting bash commands with decision trees: "Is the error on the blue screen or the black screen?" → "Black screen: type `sudo service docker start` then press Enter." Print the decision tree and tape it next to the monitor.
 
 **Warning signs:**
-- Map popups stop appearing after a CSP change
-- Console shows `Refused to apply inline style` errors
-- Route stop markers render as plain text without colored circles
-- Map panning feels broken (transforms not applied)
+- Daily startup section requires 3+ separate commands
+- No `.bat` file or desktop shortcut for Windows users
+- Troubleshooting fixes require bash commands without explaining what they do
 
-**Phase to address:** Dashboard UI overhaul -- explicitly document that `style-src 'unsafe-inline'` is required and must NOT be removed. Add a code comment at line 256 explaining why.
+**Phase to address:** Documentation phase — the daily-use guide must be redesigned for the actual user before it is published. The install guide can remain technical (IT staff does it once). The daily guide must be non-technical.
 
 ---
 
-### Pitfall 6: Dashboard UI Overhaul Creates Two Competing Design Systems
+### Pitfall 6: CSV Documentation Describes the System's Internal State, Not the User's Actual File
 
 **What goes wrong:**
-The dashboard currently has a complete, hand-crafted design system in `index.css` (20+ CSS custom properties for surfaces, accents, text, borders, spacing, radii, shadows, typography) plus 9 component-specific CSS files (`App.css`, `UploadRoutes.css`, `LiveMap.css`, etc.). DaisyUI introduces a second, overlapping design system with its own semantic color tokens (`--color-base-100`, `--color-primary`, `--color-neutral`). During the overhaul, developers mix both: some components use `var(--color-accent)` (project) while new components use `tw-bg-primary` (DaisyUI). The result is a codebase with two incompatible color systems where changing the project's `--color-accent` does not update DaisyUI components, and changing the DaisyUI theme does not update legacy components. Visual consistency becomes impossible to maintain.
+The current DEPLOY.md section "Understanding the CDCMS Export" documents the CDCMS columns with internal system names (`order_id`, `address`, `quantity`) rather than the actual column names in the exported file (`OrderNo`, `ConsumerAddress`, `OrderQuantity`). It shows "after preprocessing" output but not what happens when a column is missing, renamed, or has unexpected values. The "Sample CDCMS Row" shows a manually formatted example, not a copy-pasteable real row from the export.
+
+Non-technical users hit three predictable CSV problems:
+1. They export from a different CDCMS page (e.g., "all orders" instead of "allocated orders") and get a different column set. The system fails with "missing required columns" — a technical error they do not understand.
+2. They save the CDCMS export as `.xlsx` (default when they open it in Excel to "check it"). The upload rejects it or silently misparses it.
+3. They use the wrong delivery status filter. CDCMS has multiple status values ("Allocated", "Allocated-Printed", "Delivered", "Cancelled"). The system only processes "Allocated-Printed". If they export before printing allocation slips, zero orders come through.
 
 **Why it happens:**
-Incremental migration is natural: you start using DaisyUI classes for new features while leaving existing components alone. The custom logistics theme in `index.css` maps DaisyUI's semantic colors to the project's palette (e.g., `--color-primary: oklch(62% 0.17 65)` maps to the project's amber), which creates an illusion that both systems are synchronized. But the mapping is one-directional: DaisyUI reads from its variables, the existing CSS reads from its variables, and the connection is maintained only by manual synchronization.
+Documentation written after the system was built describes how the code processes the file. The user's actual question is "what do I export and how do I know it's right?" — a workflow question, not a schema description.
 
 **How to avoid:**
-Choose one authoritative color system and make the other an alias. The correct choice is DaisyUI's semantic tokens as the source of truth, because new components will use them. Refactor the existing CSS custom properties to reference DaisyUI's variables: `--color-accent: var(--color-primary)` instead of a hardcoded hex value. This way, changing the DaisyUI theme automatically updates legacy components. Migrate one component CSS file at a time (start with `App.css` since it's the layout shell) rather than attempting a full rewrite.
+1. CSV documentation must show the exact CDCMS export steps with screenshots, not just the file format.
+2. Document the exact failure messages and what they mean: "Missing required columns: OrderNo" means you exported from the wrong page. "No orders remain after filtering" means no "Allocated-Printed" orders exist — check the Status column.
+3. Explicitly warn: do NOT open the CSV in Excel before uploading. If you opened it, save it as CSV (UTF-8) not XLSX.
+4. Show a minimal example using actual CDCMS column names as headers: `OrderNo\tOrderStatus\tConsumerAddress\t...` (tab-separated, as it actually exports).
+5. Add a "Pre-upload checklist" to the docs: (1) Did you export from the Delivery Allocation page? (2) Is the file named `.csv` not `.xlsx`? (3) Does it have "Allocated-Printed" in the OrderStatus column?
 
 **Warning signs:**
-- Two different amber shades appearing on the same page (hex vs oklch rounding)
-- Changing the DaisyUI theme has no effect on the sidebar or stats bar
-- New components look "off" compared to existing ones despite using the same color name
-- `grep --count` shows both `var(--color-accent)` and `tw-bg-primary` in the same component
+- Documentation shows "after preprocessing" column names without showing the original CDCMS column names
+- No warning about not opening in Excel before uploading
+- No mention of what "Allocated-Printed" status means or how to verify the export has it
 
-**Phase to address:** Dashboard UI overhaul -- first task should be unifying the color token system before building any new components.
+**Phase to address:** CSV documentation phase — write documentation from the CDCMS export workflow backward to the system's expectations, not forward from the system's schema.
+
+---
+
+### Pitfall 7: `osrm/osrm-backend:latest` Image Tag Causes Silent Version Drift
+
+**What goes wrong:**
+The `docker-compose.yml` uses `osrm/osrm-backend:latest` for both `osrm-init` and `osrm`. When OSRM releases a new major version that changes the preprocessing pipeline or data format, `docker compose pull` (run during updates) fetches the new version. The newly pulled image may be incompatible with the already-preprocessed data in `data/osrm/`. Result: `osrm-init` skips preprocessing (data exists), but `osrm` fails to start because the `.osrm` files were preprocessed with an older version. The error is "invalid MLD graph data" or similar — incomprehensible to a non-technical user. Worse, this happens silently on the next update, weeks or months after initial install.
+
+**Why it happens:**
+`latest` means "most recently pushed tag" not "most stable release." Using `latest` is universally flagged as a bad practice in production Docker deployments. Developers use `latest` during development to avoid specifying versions, but never pin before shipping. The OSRM project regularly breaks backward compatibility in data format between major versions.
+
+**How to avoid:**
+Pin both `osrm-init` and `osrm` to a specific version tag (e.g., `osrm/osrm-backend:v5.27.1`). When upgrading OSRM, explicitly bump the version in `docker-compose.yml` AND delete the preprocessed data directory to force re-preprocessing with the new version. Document the upgrade procedure in DEPLOY.md.
+
+Additionally, the `osrm-init` idempotency check (`if [ -f /data/kerala-latest.osrm.mldgr ]`) does not verify that the existing data is compatible with the current OSRM version. Add a version marker file during preprocessing that records the OSRM version used.
+
+**Warning signs:**
+- `docker-compose.yml` uses `:latest` for any OSRM image
+- No documented OSRM version upgrade procedure
+- `osrm-init` idempotency check is file-existence only, not version-verified
+
+**Phase to address:** Install script / Docker Compose hardening phase — pin image versions before v1.3 ships. This affects long-term maintenance, not just initial install.
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 7: PWA No-Build-Step Constraint Limits Tailwind v4 Usage
+### Pitfall 8: WSL Sudo Password Required Daily — Users Forget It
 
 **What goes wrong:**
-The driver PWA must remain a standalone HTML/JS app with no build step (per project constraints). Tailwind v4's JIT compiler requires a build step to scan HTML for class names and generate only used utilities. The current workaround (`scripts/build-pwa-css.sh` using `tailwindcss-extra` binary) pre-compiles CSS from `pwa-input.css`. But this means every CSS class used in the PWA must exist at compile time -- dynamic class names constructed in JavaScript (e.g., `element.className = 'tw-bg-' + statusColor`) will not be included in the compiled output. Developers adding new DaisyUI components or utility classes to the PWA's JavaScript must remember to re-run the build script, which is not automated and is easy to forget.
+If `/etc/wsl.conf` auto-start is not configured (see Pitfall 1), the daily workflow requires `sudo service docker start`, which prompts for the WSL sudo password. The office employee set this password during WSL installation (DEPLOY.md Step 2.1) and may not have typed it since. Forgotten sudo passwords require WSL user reset — a technical procedure. In the interim, the system is unusable.
 
 **How to avoid:**
-If adopting Tailwind classes in the PWA, add a CI step that runs `build-pwa-css.sh` and fails if the output differs from the committed `tailwind.css` (staleness check). Alternatively, if the PWA will use primarily hand-crafted CSS (which it currently does), document that `tailwind.css` is a pre-compiled asset and list all used utility classes in a comment block at the top of `pwa-input.css` for discoverability. Never use dynamic class name construction with Tailwind utilities in the PWA.
+1. Primary fix: configure `/etc/wsl.conf` boot command so Docker starts automatically, eliminating the sudo requirement entirely.
+2. Secondary fix: during install, configure passwordless sudo for `service docker start` specifically:
+   ```bash
+   echo "$USER ALL=(ALL) NOPASSWD: /usr/sbin/service docker start" | sudo tee /etc/sudoers.d/docker-start
+   ```
+   This scopes the passwordless access to exactly one command, avoiding broad passwordless sudo.
+3. DEPLOY.md must include a "Forgot your password?" recovery procedure (WSL user reset instructions for non-technical users).
 
 **Warning signs:**
-- New DaisyUI components in the PWA appear unstyled
-- `tailwind.css` has not been regenerated after HTML changes
-- Developer adds a class in JS, it works in the dashboard (Vite JIT), but not in the PWA (pre-compiled)
+- `install.sh` does not configure `/etc/wsl.conf` auto-start
+- No passwordless sudo for the specific docker start command
+- DEPLOY.md has no password recovery instructions
 
-**Phase to address:** Driver PWA refresh -- establish the CSS build workflow before starting visual changes.
+**Phase to address:** Install script phase — configure auto-start during install, with passwordless sudo as backup.
 
 ---
 
-### Pitfall 8: Geocoding Duplicate Detection False Positives From Low-Confidence Results
+### Pitfall 9: Google Maps API Key Prompts Blocked by IT Security Policy
 
 **What goes wrong:**
-The v1.1 milestone includes "duplicate location detection -- flag orders resolving to same GPS coordinates." If duplicate detection uses exact coordinate matching, it will miss true duplicates (same address, slightly different geocode results on different days). If it uses proximity matching (e.g., within 50 meters), it will produce false positives in dense urban areas where different buildings share a nearby GPS point. Vatakara has narrow streets where houses 10 meters apart have legitimately different delivery stops -- flagging these as duplicates causes drivers to skip deliveries.
+The install script prompts for a Google Maps API key. In a corporate environment (which this is — an HPCL-affiliated office), IT security policies may restrict who can create Google Cloud accounts and API keys, or may require billing account approval. The office employee running the install cannot create the key themselves and must escalate to IT or management — but the install script is blocked waiting for their answer.
 
-**Why it happens:**
-Geocoding confidence varies by location type. Google returns `ROOFTOP` (0.95 confidence, ~5m accuracy) for well-mapped buildings, but `GEOMETRIC_CENTER` (0.60 confidence, ~200m accuracy) for area matches. Two orders at the same `GEOMETRIC_CENTER` point may be genuinely different addresses within a 200m radius. The current confidence mapping in `google_adapter.py` (lines 158-165) provides this data but it is not used in duplicate detection.
+Additionally, the DEPLOY.md documents obtaining the API key in one line: "ask technical team." There is no documentation of what the key must be authorized for (Geocoding API specifically, not Maps JavaScript API), what quota limits to set, or what a suspicious usage spike looks like (could indicate key leak or unexpected billing).
 
 **How to avoid:**
-Use confidence-weighted proximity thresholds for duplicate detection: `ROOFTOP` results should flag duplicates within 10m, `RANGE_INTERPOLATED` within 25m, `GEOMETRIC_CENTER` within 100m, and `APPROXIMATE` should never flag duplicates (too imprecise). Also check the `address_raw` text similarity alongside GPS proximity -- two orders at the same coordinates with different address text are likely genuine (e.g., ground floor vs. first floor of the same building). Present flagged duplicates as warnings, not automatic removals.
+1. The install script must handle the case where no Google Maps API key is provided at install time. The system should start and be functional without geocoding — the dashboard should show a clear "Geocoding not configured" warning rather than failing to start.
+2. Provide a dedicated "Google Maps API Key Setup" section in DEPLOY.md with screenshots: Google Cloud Console → APIs & Services → Credentials → Create API Key → Restrict to Geocoding API → Set daily quota to 500 requests (well within free tier).
+3. Document the API key quota: Geocoding API free tier is 40,000 requests/month ($200 credit). At ~50 new addresses per day, this system will never exceed the free tier. Document this explicitly so management understands there is no ongoing cost.
+4. Warn to set a max daily quota (500 requests) in Google Cloud Console to protect against accidental runaway geocoding or key leaks.
 
 **Warning signs:**
-- Duplicate detection flags 30%+ of orders as duplicates in a Vatakara batch (far too many)
-- Drivers report missing deliveries because "duplicate" orders were auto-removed
-- Orders at bus stops or landmarks (low-precision geocoding) are always flagged
+- Install script exits/fails if Google Maps API key is not provided
+- No standalone Google Maps setup documentation separate from the install guide
+- No mention of quota limits or billing protection in the docs
 
-**Phase to address:** Geocoding fixes phase -- implement after cache normalization, using confidence data from the cache.
+**Phase to address:** Documentation phase — write the Google Maps setup section as a standalone procedure. Install script phase — make the API key optional at install time.
 
 ---
 
-### Pitfall 9: Tailwind Preflight CSS Resets Breaking Existing Dashboard Components
+### Pitfall 10: `/mnt/c/Users/.../Downloads` Path in DEPLOY.md Requires Username Substitution
 
 **What goes wrong:**
-Tailwind's Preflight layer (included by `@import "tailwindcss"`) resets all elements: removes default margins, sets `border-style: solid` on everything, changes button appearance, and normalizes line-height. The dashboard's existing 9 CSS files rely on some of these browser defaults. After installing Tailwind, components that were not explicitly styled for these properties shift subtly: table rows lose their default spacing, buttons change appearance, headings collapse margins. These are not dramatic breaks -- they are subtle visual regressions that make the dashboard look "slightly wrong" without any obvious cause.
+DEPLOY.md Step 3.2 shows:
+```bash
+cp /mnt/c/Users/YOUR_USERNAME/Downloads/cdcms_export.csv data/cdcms_export.csv
+```
+Non-technical users copy this literally, including `YOUR_USERNAME`. The command fails with "No such file or directory." They do not understand what "replace with your Windows username" means — they may not know their Windows username, or may not know it differs from their Ubuntu username.
 
-**Why it happens:**
-The dashboard's `index.css` already includes explicit resets for `box-sizing`, `button`, `table`, and headings (lines 54-166). But it does not reset every property that Preflight touches. The gap between "what the project resets" and "what Preflight resets" creates the regressions.
+This is a predictable copy-paste failure. The documentation pattern of `YOUR_VARIABLE` substitution is understood by developers but not by non-technical users.
 
 **How to avoid:**
-After Tailwind installation (which is already done), visually compare every dashboard page before writing any new utility classes. The comparison should be done with screenshots, not by eye -- take before/after screenshots of: (1) Upload page empty state, (2) Upload page with results, (3) LiveMap, (4) Fleet Management, (5) Run History. Any visual difference is a Preflight regression. Fix by adding explicit CSS declarations to override Preflight rather than disabling Preflight entirely.
+1. Provide the command with automatic substitution using the Windows username from the environment:
+   ```bash
+   # First, find your Windows username:
+   ls /mnt/c/Users/
+   # Then copy the file (replace USERNAME with what you see above):
+   cp /mnt/c/Users/USERNAME/Downloads/cdcms_export.csv data/cdcms_export.csv
+   ```
+2. Better: include a utility function in `start.sh` or a separate `import.sh` that auto-detects the Windows Downloads folder:
+   ```bash
+   WIN_USER=$(ls /mnt/c/Users/ | grep -v 'Public\|Default\|All Users' | head -1)
+   cp "/mnt/c/Users/$WIN_USER/Downloads/cdcms_export.csv" data/cdcms_export.csv
+   ```
+3. Consider: document the drag-and-drop upload workflow in the dashboard as the primary method (avoids the path issue entirely). The CLI copy command should be secondary/troubleshooting.
 
 **Warning signs:**
-- Table rows appear tighter than before without any CSS changes
-- Buttons look flatter or lose rounded corners
-- Sidebar navigation items shift by 1-2px
-- Form inputs lose their default browser styling
+- DEPLOY.md uses `YOUR_USERNAME` placeholder in bash commands
+- No helper script for the Windows → WSL file copy operation
+- Dashboard drag-and-drop upload is not documented as the primary daily workflow
 
-**Phase to address:** Dashboard UI overhaul -- visual diff as the first step before any component work.
+**Phase to address:** Documentation phase and daily-startup-scripts phase — the file copy helper should be in the daily startup toolkit, not just documented as a bare bash command.
 
 ---
 
-### Pitfall 10: File Cache Not Cleared During Geocoding Normalization Migration
+### Pitfall 11: README.md Stale Container Names Break Copy-Paste Troubleshooting
 
 **What goes wrong:**
-The geocoding fix phase will unify normalization logic between the file cache and DB cache. If only the DB cache normalization is updated (in `repository.py`) but the file cache (`data/geocode_cache/google_cache.json`) is not migrated or cleared, the GoogleGeocoder will continue serving results from the old file cache with the old normalization. Since CachedGeocoder checks the DB first and falls through to GoogleGeocoder on miss, this creates a scenario where: (1) DB cache miss (new normalization), (2) file cache hit (old normalization, possibly stale coordinates), (3) result used but NOT saved back to DB cache. The two caches drift further apart over time.
+The current README.md (and possibly DEPLOY.md) references container names that do not match `docker-compose.yml`. Example: if documentation says `docker logs api` but the container is named `lpg-api` (as in `container_name: lpg-api`), users trying to diagnose problems by copying from the docs get "Error: No such container: api." Stale container names are a common documentation debt that accumulates silently.
 
-**Why it happens:**
-The file cache is a JSON file on disk (`data/geocode_cache/google_cache.json`) that is easy to forget about. It is not managed by Alembic migrations. The GoogleGeocoder is initialized lazily (`_get_geocoder()` in `main.py` line 637) and reads the file cache on startup. Developers fixing the DB normalization in `repository.py` may not realize the file cache exists as a separate system.
+In this project specifically, the milestone goal explicitly includes "fix stale container names" — confirming this problem exists.
 
 **How to avoid:**
-The cleanest solution: deprecate the file cache entirely. The PostGIS cache is production-ready, shared across containers, and has superior features (hit tracking, spatial queries, driver-verified entries). Change GoogleGeocoder to accept an optional `cache_dir=None` parameter, and when `None`, skip file cache entirely. Delete `data/geocode_cache/google_cache.json` after migrating any entries not already in the DB cache. If the file cache must be kept for offline development: run a one-time migration that imports all file cache entries into the DB cache using the unified normalization function.
+1. Audit every occurrence of container names in all documentation files against `docker-compose.yml`'s `container_name:` fields.
+2. Add a documentation validation step: a script that extracts container names from `docker-compose.yml` and searches for mismatches in `*.md` files.
+3. In documentation, prefer `docker compose logs -f <service-name>` (compose service name, e.g., `api`) over `docker logs <container-name>` (e.g., `lpg-api`). The compose service name is stable and defined in the docs; the container name is a deployment detail.
 
 **Warning signs:**
-- After normalization fix, cache hit rate drops temporarily then recovers (file cache being consulted instead of DB)
-- `data/geocode_cache/google_cache.json` continues growing after normalization fix
-- Same address has different coordinates in file cache vs. DB cache
+- `README.md` contains any `docker logs` commands using plain names (`api`, `osrm`, `db`) that differ from `container_name:` in `docker-compose.yml`
+- No automated check for documentation/config alignment
 
-**Phase to address:** Geocoding fixes phase -- handle file cache migration/deprecation as part of normalization unification.
+**Phase to address:** Documentation phase — must be fixed before publishing v1.3 docs. Container name audit should be the first documentation task.
 
 ---
 
-### Pitfall 11: Cost Tracking Counts Cache Hits From Wrong Cache Layer
+### Pitfall 12: Health Check Timeout Hides Which Service is Actually Stuck
 
 **What goes wrong:**
-The v1.1 milestone includes "geocoding cost tracking -- cache hit vs API call indicator per address." The CachedGeocoder already tracks stats (`self.stats = {"hits": 0, "misses": 0, "errors": 0}`). But a "miss" in the CachedGeocoder (DB cache miss) may still be a "hit" in the GoogleGeocoder (file cache hit) -- which costs $0 but is counted as an API call. If cost tracking reports based on CachedGeocoder misses, it will overstate API costs. Conversely, if it reports based on actual `httpx.get()` calls to Google, it will undercount because the file cache intercepts.
+`install.sh` polls `http://localhost:8000/health` for up to 300 seconds. If any upstream service fails (OSRM, VROOM, PostgreSQL, the API itself), the health endpoint never responds and the script exits with the generic timeout message:
+```
+System did not become healthy within 300 seconds.
+Check progress with:
+  docker compose logs -f osrm-init
+  docker compose logs -f db-init
+```
+A non-technical user has no way to know which of four services is stuck, or what to look for in the logs. They will see one of: OOM kill (OSRM), PostgreSQL password mismatch, VROOM config error, or API startup crash — all producing different log output.
 
 **Why it happens:**
-The two-layer cache architecture (DB cache wrapping file cache wrapping API) means "cache hit" has three possible meanings: (1) DB cache hit -- free, (2) file cache hit -- free, (3) API call -- $0.005. Cost tracking must distinguish all three, but the current stats only track two layers.
+The health check is a single endpoint poll. It gives no intermediate feedback about which services started successfully. The user waits 5 minutes then sees a failure message with no diagnosis.
 
 **How to avoid:**
-After unifying/deprecating the file cache (Pitfall 10), cost tracking simplifies to: DB cache hit = free, API call = $0.005. If the file cache is retained, add a `file_hits` counter to GoogleGeocoder alongside its existing cache check logic. The cost tracking indicator per address should show one of three states: "cached" (DB hit), "cached-local" (file hit), or "API" (actual Google call with cost).
+During the wait loop, poll individual service statuses and report progress:
+```bash
+# Every 30 seconds during the wait:
+echo "  DB: $(docker inspect --format='{{.State.Status}}' lpg-db 2>/dev/null || echo 'not started')"
+echo "  OSRM init: $(docker inspect --format='{{.State.Status}}' osrm-init 2>/dev/null || echo 'not started')"
+echo "  API: $(docker inspect --format='{{.State.Status}}' lpg-api 2>/dev/null || echo 'not started')"
+```
+On timeout, automatically check exit codes and show targeted diagnostics:
+- `osrm-init` exit 137 → "OSRM ran out of memory. Add more RAM in .wslconfig."
+- `db-init` non-zero → "Database migration failed." + last 10 lines of db-init logs
+- `lpg-api` not started → "API failed to start." + last 10 lines of api logs
 
 **Warning signs:**
-- Cost report shows 50 API calls but Google Cloud Console shows only 20 billable requests
-- Cost tracking and `geocode_batch.py` statistics disagree on cache hit rates
-- CachedGeocoder reports 0% hit rate on first run even though file cache has entries
+- `install.sh` wait loop only polls the final health endpoint
+- On timeout, user is told to manually check logs with no guidance on what to look for
+- No per-service status reporting during the 5-minute wait
 
-**Phase to address:** Geocoding fixes phase -- implement after cache normalization and file cache decision.
+**Phase to address:** Install script phase — add intermediate progress reporting and automatic failure diagnosis.
 
 ---
 
@@ -242,23 +351,25 @@ Shortcuts that seem reasonable but create long-term problems.
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Using Tailwind utility classes inline without component abstraction | Fast styling during overhaul | Hundreds of `tw-bg-base-200 tw-p-4 tw-rounded-box` strings scattered through TSX -- impossible to maintain visual consistency | Only for one-off layouts; create `.card`, `.data-row` abstractions for repeated patterns |
-| Keeping both file cache and DB cache during normalization fix | Lower risk -- less code changes | Two caches drift over time; debugging geocode issues requires checking both; cost tracking inaccurate | Acceptable only temporarily during migration; deprecate file cache within the same phase |
-| Adding DaisyUI theme at `<html>` level for quick dark/light toggle | Quick theming | DaisyUI styles leak into Leaflet map containers, affecting tile contrast and popup readability | Never for this project -- scope theme to `.app` container, not `<html>` |
-| Hardcoding driver PWA colors instead of using CSS custom properties | Works immediately for dark theme | When outdoor readability testing reveals needed color tweaks, every color must be found and changed individually across 600+ lines of inline CSS | Never -- extract colors to CSS custom properties at the top of the `<style>` block |
+| Using `osrm/osrm-backend:latest` image tag | No version pinning maintenance | OSRM major version breaks existing preprocessed data silently on `docker compose pull` | Never for production/office use — pin to specific version |
+| Hardcoding `/mnt/c/Users/YOUR_USERNAME/` in docs | Simple to write | Every user fails the copy command; generates IT support requests | Never — provide auto-detection or use dashboard upload |
+| Documenting `sudo service docker start` as daily step | Covers WSL Docker startup | Users forget the sudo password; system unusable until IT reset | Only as fallback — primary path should be auto-start |
+| Interactive `read` prompts in install script | Familiar UX for developers | Breaks when piped, blocks CI, hangs on passwordless stdin | Acceptable if stdin-detection is added |
+| Combining first-time setup and daily use in one DEPLOY.md | Single document to maintain | Non-technical users must re-read all the install steps to find the daily workflow | Never — split into INSTALL.md (IT, once) and DAILY.md (office, every day) |
 
 ---
 
 ## Integration Gotchas
 
-Common mistakes when connecting to external services or internal subsystems.
+Common mistakes when connecting to external services or subsystems.
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| DaisyUI oklch theme + existing hex CSS variables | Assuming oklch and hex values for the "same" color are visually identical -- they are not due to different color spaces | Use oklch throughout; convert existing hex values (`#D97706`) to oklch equivalents; verify visually in browser, not by color math |
-| Leaflet map in DaisyUI-themed container | DaisyUI's base styles (font, color, background) leak into `.leaflet-container` and `.leaflet-popup-content` | Scope DaisyUI theme to content area; add explicit CSS reset for `.leaflet-container` preserving Leaflet's own defaults |
-| Google Geocoding API rate limits during batch import | Assuming 1 req/sec rate limit -- Google's actual QPS limit is 50, but the project uses 0.05s delay (20 QPS) | The existing 20 QPS rate in `geocode_batch.py` is appropriate; do not "optimize" by removing the delay -- Google will throttle with 429s |
-| Service worker + compiled Tailwind CSS | Changing CSS classes in `index.html` without re-running `build-pwa-css.sh` AND bumping `CACHE_VERSION` | Add a pre-deploy checklist or CI step that validates both the CSS compilation and SW version are current |
+| OSRM data + Docker image versioning | Checking data existence but not version compatibility during `osrm-init` idempotency | Write a version marker file during preprocessing; `osrm-init` checks the marker matches current image version |
+| Google Geocoding API + `.env` setup | Telling users to "paste the key" without explaining which APIs to enable or how to restrict the key | Document exact Google Cloud Console steps: enable "Geocoding API" (not "Maps JavaScript API"), restrict key to Geocoding API only, set daily quota to 500 |
+| WSL2 `/mnt/c/` filesystem + Docker bind mounts | Bind-mounting `./data/osrm` when the project lives in `/mnt/c/...` | Project must live in WSL Linux filesystem (`~/routing_opt`), not Windows filesystem — I/O through translation layer makes OSRM preprocessing 10x slower |
+| Docker Compose `service_completed_successfully` + `--wait-timeout` | Assuming `docker compose up --wait` correctly waits for init containers | Known bug (docker/compose#12134): `--wait-timeout` hangs when `service_completed_successfully` conditions are involved — use manual health polling instead |
+| CDCMS CSV + Excel | Users opening CSV in Excel before uploading | Excel resaves as XLSX or adds BOM, breaking tab-detection. Warn explicitly: do not open in Excel, upload the file directly from the Downloads folder |
 
 ---
 
@@ -268,9 +379,10 @@ Patterns that work at small scale but fail as usage grows.
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| PWA shipping 50KB+ of unused DaisyUI CSS | Slow initial PWA load on 3G mobile networks in rural Kerala | Either use DaisyUI classes (making the CSS useful) or remove the import entirely | Immediately visible on first load over slow mobile data |
-| Re-normalizing all geocode cache entries on every query | Calling `.strip().lower()` on every cache lookup is fine; but if normalization grows to include transliteration or abbreviation expansion, N queries * normalization overhead adds up | Cache the normalized form in `address_norm` column (already done); never re-normalize at query time | If normalization includes expensive operations like Malayalam transliteration |
-| Geocoding duplicate detection scanning all pairs | O(n^2) comparison of all order coordinates for duplicate detection | Use PostGIS `ST_DWithin()` spatial query for proximity matching instead of Python loops; the spatial index on `geocode_cache.location` makes this O(n log n) | At 200+ orders per batch |
+| OSRM preprocessing on Windows filesystem | `osrm-extract` takes 60+ minutes instead of 10 | Ensure project is cloned inside WSL Linux filesystem (`~/routing_opt`), not `/mnt/c/...` | Always on Windows filesystem; 10x slower regardless of machine specs |
+| `docker compose up -d --build` in daily startup | Rebuilds API image every morning (slow) | Daily startup script should use `docker compose up -d` without `--build`; only rebuild after git pull | Adds 2-3 minutes to daily startup if API image rebuilds every time |
+| No WSL memory limit configured | `VmmemWSL` process consumes all Windows RAM, laptop slows to crawl | Add `memory=6GB` to `%USERPROFILE%\.wslconfig`; leave 2GB for Windows | On 8 GB laptops immediately; on 16 GB laptops only under heavy Docker load |
+| Health check polling every 5 seconds for 300 seconds | 60 curl calls during startup; excessive noise in logs | Poll less frequently (15s intervals) with clear progress output; total wait can be 300s but polling less aggressively | Not a scaling issue — a UX issue visible immediately on every install |
 
 ---
 
@@ -280,9 +392,10 @@ Domain-specific security issues beyond general web security.
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Removing `'unsafe-inline'` from CSP `style-src` to "improve security" | Leaflet maps break completely -- popups, markers, and overlays stop working | Document why `'unsafe-inline'` is required; add code comment at CSP config line; do NOT remove during UI hardening |
-| DaisyUI theme `data-theme` attribute exposing dark/light preference | Not a direct security risk, but if theme includes high-contrast mode for accessibility, the theme attribute on `<html>` is visible to any JavaScript including third-party CDN scripts | Scope theme attribute to app container div, not document root |
-| Geocoding API key visible in Docker Compose environment | `GOOGLE_MAPS_API_KEY` in `.env` is bind-mounted into containers and visible via `docker inspect` | Restrict API key in Google Cloud Console to Geocoding API only + IP restriction; set daily quota limit of 1000 requests |
+| Printing API key in install script terminal output ("Save this API key") | Key visible in terminal scrollback, shared screenshots, copy-paste to wrong chat | Print key once, immediately instruct user to save it, offer to write it to a `credentials.txt` file; never log it in a file automatically |
+| Google Maps API key with no quota limit | If key is leaked (e.g., committed to git), unlimited billing accumulates | Always configure `500 requests/day` hard cap in Google Cloud Console during setup; document this as mandatory |
+| `.env` file not in `.gitignore` | Passwords and API keys committed to git repo | Verify `.env` is in `.gitignore` before first commit; `install.sh` should check this after creating `.env` |
+| Passwordless sudo for `service docker start` too broadly scoped | `NOPASSWD: ALL` for convenience gives full root access | Scope sudoers rule to `/usr/sbin/service docker start` only — one command |
 
 ---
 
@@ -292,11 +405,11 @@ Common user experience mistakes in this domain.
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Redesigning dashboard layout during overhaul | Dispatchers who use the system daily lose muscle memory; "where did the upload button go?" | Keep navigation structure identical; change colors, typography, spacing, and visual polish -- not information architecture |
-| PWA outdoor readability optimized on laptop screen | Colors that pass WCAG contrast checks on an LCD monitor fail in direct Kerala sunlight on a phone | Test all PWA color changes on a physical Android device outdoors; the current saffron-on-dark palette was chosen specifically for sun readability |
-| Showing geocoding cost as dollar amounts | Indian office staff think in rupees; $0.005 per request is abstract | Show costs in INR (multiply by ~83) and as percentage of the $200 monthly free tier used |
-| Flagging duplicate locations without showing which orders are affected | Dispatcher sees "5 duplicates detected" but cannot tell which orders to check | Show duplicate pairs/groups with order IDs, addresses, and GPS distance between them; link each to the map view |
-| DaisyUI modal for confirmation dialogs in driver PWA | Modals are hard to dismiss on small mobile screens with gloves; driver may accidentally confirm wrong action | Use inline expandable confirmation (current pattern) instead of overlay modals; keep 60px minimum touch targets |
+| Daily workflow requires 3 typed commands | User forgets one; system in bad state; blamed on "the software" | Single `./start.sh` that handles all startup steps and opens browser; Windows `.bat` shortcut |
+| Success output shows localhost URLs without explaining that Chrome must be used | User opens URL in Edge or Firefox; minor layout differences cause confusion | DEPLOY.md and startup output say explicitly "Open Chrome" not just "open in a browser" |
+| Troubleshooting section uses bash jargon ("check the logs", "inspect the container") | Non-technical user cannot act on this; escalates every error to IT | Decision tree format: "Does the black screen show 'error'? Yes → type X. No → try Y." |
+| "Installation complete!" shown before verifying the dashboard actually loads | User thinks it worked; first actual use fails because VROOM is not ready | Health check must include a VROOM and OSRM check, not just the API `/health` endpoint |
+| CSV format documentation buried in Section 4 of DEPLOY.md | User uploads wrong file, gets cryptic error, gives up | Put a "Quick CSV Check" at the top of the daily workflow section, before the upload step |
 
 ---
 
@@ -304,18 +417,23 @@ Common user experience mistakes in this domain.
 
 Things that appear complete but are missing critical pieces.
 
-- [ ] **Geocoding normalization:** Both file cache (`google_adapter.py`) AND DB cache (`repository.py`) use the same normalization function -- not just one of them
-- [ ] **Geocoding normalization:** Existing `address_norm` values in the DB have been re-normalized with the unified function (migration script run)
-- [ ] **Geocoding normalization:** File cache (`data/geocode_cache/google_cache.json`) has been migrated or deprecated -- not silently ignored
-- [ ] **Dashboard CSS:** After overhaul, verify no page has two competing `--color-accent` values in DevTools `:root` inspector
-- [ ] **Dashboard CSS:** DaisyUI alert/badge/table components use the custom logistics theme colors, not DaisyUI defaults
-- [ ] **Driver PWA CSS:** The compiled `tailwind.css` either contains classes actually used by the HTML, or has been removed entirely
-- [ ] **Driver PWA cache:** Every visual change to `index.html` or `tailwind.css` is accompanied by a `CACHE_VERSION` bump in `sw.js`
-- [ ] **Driver PWA readability:** Color changes tested on physical mobile device in bright outdoor light, not just browser DevTools
-- [ ] **Duplicate detection:** Uses confidence-weighted proximity thresholds, not flat distance matching
-- [ ] **Cost tracking:** Distinguishes DB cache hits, file cache hits, and actual API calls -- not just "cached" vs "not cached"
-- [ ] **CSP:** `style-src 'unsafe-inline'` remains in place after UI overhaul (required by Leaflet)
-- [ ] **Leaflet map:** DaisyUI theme colors do not leak into `.leaflet-container`, `.leaflet-popup-content`, or marker popups
+- [ ] **install.sh:** Configures `/etc/wsl.conf` boot command so Docker starts automatically after Windows reboot
+- [ ] **install.sh:** Checks available WSL2 memory before starting OSRM init and warns if below 5 GB
+- [ ] **install.sh:** Detects if running from `/mnt/c/` and aborts with clear message
+- [ ] **install.sh:** Handles `osrm-init` exit code 137 (OOM kill) with a specific, actionable error message
+- [ ] **install.sh:** Checks that stdin is a terminal before using `read` prompts
+- [ ] **install.sh:** Pins OSRM image tag to a specific version, not `:latest`
+- [ ] **start.sh:** Exists as a single daily-startup script wrapping all required steps
+- [ ] **start.sh:** Opens the dashboard URL in Chrome as its final step
+- [ ] **DEPLOY.md:** Prominently warns that all commands must be run in the Ubuntu terminal, not PowerShell
+- [ ] **DEPLOY.md:** Shows git clone landing in `~/routing_opt` (Linux home), not an ambiguous path
+- [ ] **DEPLOY.md:** Has a "Daily Use" section that fits on one printed page
+- [ ] **DEPLOY.md:** Documents exact CDCMS export steps (which page, which filters) not just the CSV column schema
+- [ ] **DEPLOY.md:** Warns not to open the CSV in Excel before uploading
+- [ ] **DEPLOY.md:** Includes Google Maps API key setup with screenshots/steps for each click in Google Cloud Console
+- [ ] **DEPLOY.md:** All `docker logs` commands use compose service names, not container names (verified against docker-compose.yml)
+- [ ] **README.md:** All container names match `container_name:` in `docker-compose.yml`
+- [ ] **Troubleshooting:** Each error message has a matched entry with human-readable explanation and exact command to run
 
 ---
 
@@ -325,12 +443,13 @@ When pitfalls occur despite prevention, how to recover.
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Geocoding cache normalization mismatch discovered after weeks of operation | MEDIUM | Run migration script to re-normalize all `address_norm` values in DB; clear file cache; re-geocode addresses with no DB cache entry; ~2 hours of work + potential duplicate order investigation |
-| DaisyUI theme colors wrong due to CSS variable collision | LOW | Inspect DevTools `:root`, identify shadowed variables, add explicit overrides in the custom theme block; no architectural changes needed |
-| PWA CSS update not reaching drivers | LOW | Bump `CACHE_VERSION` in `sw.js` and redeploy; drivers receive update within 24h on next app open; for urgent fixes, add manual "check for updates" button that calls `registration.update()` |
-| Duplicate detection removed valid orders | HIGH | Restore from database (orders are persisted before duplicate flagging); change duplicate detection from auto-removal to warning-only; audit all "duplicate" removals from the affected batch |
-| Two design systems in dashboard (mixed hex/oklch) | MEDIUM | Consolidate in a single focused PR: make DaisyUI tokens authoritative, convert all `var(--color-*)` references in component CSS to use DaisyUI equivalents; ~3-4 hours for 9 CSS files |
-| Leaflet broken after CSP tightening | LOW | Re-add `'unsafe-inline'` to `style-src` in CSP config; immediate fix, no data loss |
+| Docker not starting after reboot | LOW | User types `sudo service docker start` then `docker compose up -d`; if password forgotten, IT resets WSL user password via `wsl --user root passwd username` |
+| OSRM OOM kill during install | MEDIUM | Add `memory=6GB` to `%USERPROFILE%\.wslconfig`, run `wsl --shutdown`, re-run `./scripts/install.sh` (OSRM init is idempotent — will retry preprocessing) |
+| Project cloned on Windows filesystem | MEDIUM | `cd ~ && git clone <URL> routing_opt`, then re-run `./scripts/install.sh`; the original Windows-path clone can be deleted from Windows Explorer |
+| Google Maps API key not available | LOW | System runs without geocoding; new addresses fail with a visible error in the dashboard; install proceeds; key can be added to `.env` later and services restarted |
+| User opened CSV in Excel and saved as XLSX | LOW | Re-export from CDCMS, upload the `.csv` directly without opening in Excel |
+| Forgotten WSL sudo password | MEDIUM | From Windows: `wsl --user root` then `passwd username`; document this recovery in DEPLOY.md with step-by-step instructions |
+| OSRM data format incompatible after image version drift | HIGH | Delete `data/osrm/` directory, pin the correct image version in `docker-compose.yml`, re-run `docker compose up -d` to re-preprocess (10-20 minutes) |
 
 ---
 
@@ -340,33 +459,35 @@ How roadmap phases should address these pitfalls.
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| Dual cache normalization mismatch | Geocoding fixes (first task) | Single `normalize_address()` function used by both caches; `address_norm` migration completed; unit test verifies normalization consistency |
-| CSS variable collision | Dashboard UI overhaul (first task) | DevTools `:root` shows no duplicate `--color-*` variables from competing sources |
-| PWA dead CSS / wrong theme | Driver PWA refresh (first task) | PWA either uses DaisyUI classes with correct theme or has Tailwind import removed |
-| Service worker cache staleness | Driver PWA refresh (automation) | CI step validates `CACHE_VERSION` changes when `index.html` or `tailwind.css` change |
-| Leaflet CSP requirement | Dashboard UI overhaul (documentation) | Code comment at CSP config explains `'unsafe-inline'` requirement |
-| Two competing design systems | Dashboard UI overhaul (first task) | All CSS files reference DaisyUI tokens as source of truth; legacy variables are aliases |
-| PWA no-build-step + Tailwind | Driver PWA refresh (workflow) | CI step validates compiled CSS matches source |
-| Duplicate detection false positives | Geocoding fixes (after normalization) | Confidence-weighted thresholds documented; manual review of flagged duplicates in test batch |
-| Preflight CSS regressions | Dashboard UI overhaul (visual diff) | Before/after screenshots of all 5 pages show no unintended changes |
-| File cache not cleared | Geocoding fixes (migration task) | File cache deprecated or migrated; no entries in file cache missing from DB cache |
-| Cost tracking layer confusion | Geocoding fixes (after cache unification) | Cost report matches Google Cloud Console billable request count within 5% |
+| Docker not auto-starting after reboot | Install script | Test: install, restart Windows, open Ubuntu, run `docker compose up -d` without any prior commands — must succeed |
+| OSRM OOM kill on 8 GB laptop | Install script | Test on machine with 4 GB WSL2 allocation; script must detect and warn before attempting preprocessing |
+| Install run from Windows filesystem | Install script | Test: clone to `/mnt/c/Users/test/routing_opt`, run `./scripts/install.sh` — must abort with clear message |
+| Interactive `read` hangs when piped | Install script | Test: `echo "" \| ./scripts/install.sh` — must not hang |
+| Documentation not readable by non-technical users | Documentation phase | Hand DEPLOY.md to someone who has never used a terminal; measure how far they get unassisted |
+| CSV docs describe internals not workflow | Documentation phase | Office employee uses only the CSV docs section to diagnose a "missing columns" error — can they self-recover? |
+| OSRM image version drift | Docker Compose hardening | `docker-compose.yml` contains no `:latest` tags for OSRM; version pinning documented in DEPLOY.md |
+| Path substitution in docs (`YOUR_USERNAME`) | Documentation + daily scripts | `import.sh` script tested by running it with zero knowledge of Windows username |
+| Stale container names in docs | Documentation phase | Automated grep of all `.md` files for container names cross-checked against `docker-compose.yml` |
+| Unclear which service is stuck during install | Install script | Timeout path prints per-service status and specific OOM/crash diagnosis |
 
 ---
 
 ## Sources
 
-- [Tailwind CSS v4 CSS variable collision -- tailwindlabs/tailwindcss#15754](https://github.com/tailwindlabs/tailwindcss/issues/15754)
-- [Tailwind v4 prefixed CSS variable references bug -- tailwindlabs/tailwindcss#16441](https://github.com/tailwindlabs/tailwindcss/issues/16441)
-- [DaisyUI 5 release notes and theme configuration](https://daisyui.com/docs/v5/)
-- [DaisyUI prefix configuration](https://daisyui.com/docs/config/)
-- [Leaflet CSP unsafe-inline requirement -- Leaflet/Leaflet#9168](https://github.com/Leaflet/Leaflet/issues/9168)
-- [MDN: Content-Security-Policy style-src directive](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src)
-- [PWA service worker cache invalidation -- MDN](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Caching)
-- [PWA cache staleness patterns](https://iinteractive.com/resources/blog/taming-pwa-cache-behavior)
-- [Geocoding cache normalization strategies](https://address-hub.com/address-intelligence/caching/)
-- Codebase inspection: `core/geocoding/google_adapter.py` (line 195 normalization), `core/database/repository.py` (line 741 normalization), `apps/kerala_delivery/driver_app/pwa-input.css`, `apps/kerala_delivery/driver_app/sw.js`, `apps/kerala_delivery/driver_app/tailwind.css` (compiled output), `apps/kerala_delivery/dashboard/src/index.css` (design tokens + DaisyUI theme), `apps/kerala_delivery/api/main.py` (line 256 CSP config)
+- [Docker Docs: WSL2 best practices](https://docs.docker.com/desktop/features/wsl/best-practices/)
+- [Docker Docs: WSL2 containers tutorial (Microsoft Learn)](https://learn.microsoft.com/en-us/windows/wsl/tutorials/wsl-containers)
+- [Docker service not auto-starting in WSL — microsoft/WSL#13106](https://github.com/microsoft/WSL/issues/13106)
+- [Docker compose --wait-timeout bug with service_completed_successfully — docker/compose#12134](https://github.com/docker/compose/issues/12134)
+- [WSL2 file permissions and /mnt/c gotchas](https://www.turek.dev/posts/fix-wsl-file-permissions/)
+- [CRLF line endings breaking bash scripts cloned on Windows — desktop/desktop#10461](https://github.com/desktop/desktop/issues/10461)
+- [Docker latest tag pitfalls — vsupalov.com](https://vsupalov.com/docker-latest-tag/)
+- [WSL2 memory configuration — ITNEXT](https://itnext.io/wsl2-tips-limit-cpu-memory-when-using-docker-c022535faf6f)
+- [Google Maps Geocoding API billing and quotas](https://developers.google.com/maps/documentation/geocoding/usage-and-billing)
+- [CSV/Excel encoding pitfalls (BOM, CRLF, XLSX)](https://hilton.org.uk/blog/csv-excel)
+- [Bash pitfalls — Greg's Wiki](https://mywiki.wooledge.org/BashPitfalls)
+- [Documentation for non-technical users — welcometothejungle.com](https://www.welcometothejungle.com/en/articles/btc-readme-documentation-best-practices)
+- Codebase inspection: `scripts/install.sh` (interactive prompts, health check, OSRM init), `docker-compose.yml` (container names, `:latest` tags, `service_completed_successfully` conditions), `DEPLOY.md` (daily workflow, CSV docs, path substitution), `SETUP.md` (WSL memory hint buried in appendix)
 
 ---
-*Pitfalls research for: Kerala LPG delivery route optimizer -- v1.1 Polish & Reliability*
-*Researched: 2026-03-01*
+*Pitfalls research for: Kerala LPG Delivery Route Optimizer — v1.3 Office-Ready Deployment*
+*Researched: 2026-03-04*
