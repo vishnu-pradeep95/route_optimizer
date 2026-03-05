@@ -13,30 +13,62 @@ The architecture is designed to be **reusable across any delivery business** —
 ```bash
 # 1. Clone & setup Python
 git clone <REPO_URL> routing_opt && cd routing_opt
+# ^^^ Replace <REPO_URL> with the actual repository URL before customer delivery
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # 2. Environment config
 cp .env.example .env
-# Edit .env → add your GOOGLE_MAPS_API_KEY
+# Edit .env — minimum required changes:
+#   POSTGRES_PASSWORD=any-strong-password-you-choose
+#   GOOGLE_MAPS_API_KEY=your-key-here       (only needed for geocoding)
+#   CORS_ALLOWED_ORIGINS=http://localhost:8000,http://localhost:5173
+#   (add :5173 so the React dashboard dev server can talk to the API)
 
-# 3. Start infrastructure (OSRM + VROOM + API)
-sudo service docker start          # WSL2 only
+# 3. Start infrastructure (OSRM + VROOM + PostgreSQL + API)
+sudo service docker start          # WSL2 only — skip on native Linux/Mac
 docker compose up -d
 
-# 4. Apply database migrations
+# 4. Wait for services to be healthy, then verify
+# start.sh handles health polling -- only needed if running outside Docker
+sleep 5
+curl http://localhost:8000/health   # should return {"status":"ok"}
+docker compose ps                   # all services should show "running"
+
+# 5. Apply database migrations
+# Automated by db-init container -- only needed if running outside Docker
 alembic upgrade head
 
-# 5. Run tests
+# 6. Run tests (no Docker needed — all external services are mocked)
 pytest tests/ -v
 
-# 6. Open the driver app / dashboard
-# Driver PWA:     http://localhost:8000/driver/
-# Ops dashboard:  cd apps/kerala_delivery/dashboard && npm run dev
-#                 → http://localhost:5173
+# 7. Open the app
+# Driver PWA:   http://localhost:8000/driver/
+# API docs:     http://localhost:8000/docs
+#
+# Ops dashboard (React dev server with hot reload):
+cd apps/kerala_delivery/dashboard
+npm install          # first time only
+npm run dev          # → http://localhost:5173
 ```
 
 > **Full setup guide** (first-time, including Docker install, OSRM data prep): see [SETUP.md](SETUP.md)
+
+### Stopping & Restarting
+
+```bash
+# Stop everything
+docker compose down
+
+# Restart after Python/config changes
+docker compose restart api
+
+# Rebuild API image after adding pip packages
+docker compose up -d --build api
+
+# Hard-refresh the dashboard after frontend changes
+# Browser: Ctrl+Shift+R  (bypasses service worker cache)
+```
 
 ---
 
@@ -360,18 +392,24 @@ docker compose ps
 # View logs
 docker compose logs -f api
 
-# Stop
+# Stop all services
 docker compose down
+
+# Restart API after Python/config changes (fast — no rebuild)
+docker compose restart api
+
+# Rebuild + restart API after adding pip packages to requirements.txt
+docker compose up -d --build api
 ```
 
 | Service | Container | Port | Health Check |
 |---------|-----------|------|-------------|
-| PostgreSQL + PostGIS | `routing-db` | 5432 | `pg_isready -U routeopt` |
+| PostgreSQL + PostGIS | `lpg-db` | 5432 | `pg_isready -U routing -d routing_opt` |
 | OSRM | `osrm-kerala` | 5000 | `curl http://localhost:5000/health` |
 | VROOM | `vroom-solver` | 3000 | — |
 | API | `lpg-api` | 8000 | `curl http://localhost:8000/health` |
 
-> **Note:** OSRM requires preprocessed Kerala map data in `data/osrm/`. See [SETUP.md](SETUP.md) for download and preprocessing steps.
+> **Note:** OSRM requires preprocessed Kerala map data in `data/osrm/`. This is downloaded automatically on first `docker compose up`. See [SETUP.md](SETUP.md) for manual download steps if running OSRM outside Docker.
 
 ---
 
@@ -380,15 +418,18 @@ docker compose down
 Copy `.env.example` → `.env` and configure:
 
 | Variable | Required | Description |
-|----------|----------|-------------|
+|----------|----------|--------------|
+| `POSTGRES_PASSWORD` | **Yes** | Database password — set any strong value |
 | `GOOGLE_MAPS_API_KEY` | Yes (for geocoding) | Google Cloud API key with Geocoding API enabled |
-| `API_KEY` | Yes (for write endpoints) | API key for authenticated `POST`/`PUT`/`DELETE` requests |
+| `API_KEY` | No (dev) / Yes (prod) | Header `X-API-Key` required for write endpoints. Leave empty in dev. |
+| `CORS_ALLOWED_ORIGINS` | **Yes** | Comma-separated frontend origins. **Must include `http://localhost:5173`** when running the React dashboard via `npm run dev`. |
 | `OSRM_URL` | No | Defaults to `http://localhost:5000` |
 | `VROOM_URL` | No | Defaults to `http://localhost:3000` |
 | `POSTGRES_USER` | No | Defaults to `routing` |
-| `POSTGRES_PASSWORD` | **Yes** | Database password — set any strong value |
-| `POSTGRES_DB` | No | Defaults to `routeopt` |
+| `POSTGRES_DB` | No | Defaults to `routing_opt` |
 | `DATABASE_URL` | No | Auto-built from above; override for remote DB |
+
+> **Common issue:** Dashboard shows network errors or blank data? Check `CORS_ALLOWED_ORIGINS` includes the correct port (`:5173` for Vite dev, `:8000` for production).
 
 ---
 
