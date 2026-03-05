@@ -21,12 +21,12 @@ Requirements for v1.3 Office-Ready Deployment. Each maps to roadmap phases.
 
 ### CSV Documentation
 
-- [ ] **CSV-01**: CSV_FORMAT.md documents all accepted file formats (.csv, .xlsx, .xls)
-- [ ] **CSV-02**: CSV_FORMAT.md documents CDCMS columns (required/optional, status filter)
-- [ ] **CSV-03**: CSV_FORMAT.md documents standard CSV columns with defaults and constraints
-- [ ] **CSV-04**: CSV_FORMAT.md documents rejection reasons and what causes rows to fail
-- [ ] **CSV-05**: CSV_FORMAT.md documents address cleaning pipeline with examples
-- [ ] **CSV-06**: CSV_FORMAT.md includes example rows for both CDCMS and standard CSV
+- [x] **CSV-01**: CSV_FORMAT.md documents all accepted file formats (.csv, .xlsx, .xls)
+- [x] **CSV-02**: CSV_FORMAT.md documents CDCMS columns (required/optional, status filter)
+- [x] **CSV-03**: CSV_FORMAT.md documents standard CSV columns with defaults and constraints
+- [x] **CSV-04**: CSV_FORMAT.md documents rejection reasons and what causes rows to fail
+- [x] **CSV-05**: CSV_FORMAT.md documents address cleaning pipeline with examples
+- [x] **CSV-06**: CSV_FORMAT.md includes example rows for both CDCMS and standard CSV
 
 ### Documentation Fixes
 
@@ -79,12 +79,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INST-04 | Phase 13 | Complete |
 | INST-05 | Phase 13 | Complete |
 | DAILY-01 | Phase 14 | Complete |
-| CSV-01 | Phase 15 | Pending |
-| CSV-02 | Phase 15 | Pending |
-| CSV-03 | Phase 15 | Pending |
-| CSV-04 | Phase 15 | Pending |
-| CSV-05 | Phase 15 | Pending |
-| CSV-06 | Phase 15 | Pending |
+| CSV-01 | Phase 15 | Complete |
+| CSV-02 | Phase 15 | Complete |
+| CSV-03 | Phase 15 | Complete |
+| CSV-04 | Phase 15 | Complete |
+| CSV-05 | Phase 15 | Complete |
+| CSV-06 | Phase 15 | Complete |
 | DOCS-01 | Phase 16 | Pending |
 | DOCS-02 | Phase 16 | Pending |
 | DOCS-03 | Phase 16 | Pending |
