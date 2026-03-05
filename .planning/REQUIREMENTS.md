@@ -33,7 +33,7 @@ Requirements for v1.3 Office-Ready Deployment. Each maps to roadmap phases.
 - [x] **DOCS-01**: README fixes stale container names (`routing-db` -> `lpg-db`)
 - [x] **DOCS-02**: README removes manual steps now automated by db-init
 - [x] **DOCS-03**: README and DEPLOY.md fill `<REPO_URL>` placeholder
-- [ ] **DOCS-04**: DEPLOY.md restructured for non-technical office employee audience
+- [x] **DOCS-04**: DEPLOY.md restructured for non-technical office employee audience
 
 ### Error Messages
 
@@ -88,7 +88,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOCS-01 | Phase 16 | Complete |
 | DOCS-02 | Phase 16 | Complete |
 | DOCS-03 | Phase 16 | Complete |
-| DOCS-04 | Phase 16 | Pending |
+| DOCS-04 | Phase 16 | Complete |
 | ERR-01 | Phase 17 | Pending |
 | ERR-02 | Phase 17 | Pending |
 | DIST-01 | Phase 18 | Pending |

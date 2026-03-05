@@ -4,12 +4,12 @@ milestone: v1.3
 milestone_name: Office-Ready Deployment
 status: completed
 stopped_at: Completed 16-02-PLAN.md
-last_updated: "2026-03-05T11:04:28Z"
+last_updated: "2026-03-05T11:06:00.628Z"
 last_activity: 2026-03-05 -- Completed 16-02 DEPLOY.md restructure for office employees
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 6
+  total_plans: 7
   completed_plans: 7
   percent: 100
 ---
@@ -26,16 +26,16 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Phase: 16 of 18 (Documentation Corrections)
-Plan: 01 of 02
-Status: Completed 16-01 -- README.md and SETUP.md corrections
-Last activity: 2026-03-05 -- Completed 16-01 README/SETUP documentation corrections
+Plan: 02 of 02 (complete)
+Status: Phase 16 complete -- all documentation corrections applied
+Last activity: 2026-03-05 -- Completed 16-02 DEPLOY.md restructure for office employees
 
-Progress: [█████████░] 93%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 37 (8 v1.0 + 16 v1.1 + 9 v1.2 + 4 v1.3)
+- Total plans completed: 38 (8 v1.0 + 16 v1.1 + 9 v1.2 + 5 v1.3)
 
 **By Milestone:**
 
@@ -51,6 +51,7 @@ Progress: [█████████░] 93%
 | Phase 14 P02 | 1min | 1 tasks | 1 files |
 | Phase 15 P01 | 4min | 2 tasks | 1 files |
 | Phase 16 P01 | 2min | 2 tasks | 2 files |
+| Phase 16 P02 | 2min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,8 @@ See `.planning/milestones/` for full phase details per milestone.
 - [Phase 14]: Used if/else pattern instead of || to preserve both success and failure branches under set -euo pipefail
 - [Phase 15]: User-friendly error messages in CSV_FORMAT.md instead of raw API status codes (ZERO_RESULTS etc.)
 - [Phase 16]: Comment-style annotations for automated steps preserve Quick Start copy-paste workflow
+- [Phase 16]: Removed git clone from DEPLOY.md entirely -- project pre-installed by developer before handoff
+- [Phase 16]: Employee docs reference scripts (bootstrap.sh, start.sh), never raw Docker/compose commands
 
 ### Pending Todos
 
@@ -78,6 +81,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-05T11:03:57Z
-Stopped at: Completed 16-01-PLAN.md
-Resume file: .planning/phases/16-documentation-corrections/16-01-SUMMARY.md
+Last session: 2026-03-05T11:04:28Z
+Stopped at: Completed 16-02-PLAN.md
+Resume file: .planning/phases/16-documentation-corrections/16-02-SUMMARY.md
