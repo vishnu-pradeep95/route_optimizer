@@ -366,10 +366,28 @@ class TestValidation:
     """Tests for CDCMS column validation."""
 
     def test_missing_required_columns_raises(self):
-        """DataFrame without OrderNo or ConsumerAddress should raise ValueError."""
+        """DataFrame without OrderNo or ConsumerAddress should raise ValueError.
+
+        Error message must:
+        - Start with "Required columns missing:" (capital R)
+        - List missing columns sorted, comma-separated (not Python set notation)
+        - End with a fix action after " -- "
+        - NOT contain "Found columns" (that goes to logger only)
+        """
         df = pd.DataFrame({"SomeColumn": ["test"], "AnotherColumn": ["test"]})
-        with pytest.raises(ValueError, match="missing required columns"):
+        with pytest.raises(ValueError, match="Required columns missing") as exc_info:
             _validate_cdcms_columns(df)
+
+        msg = str(exc_info.value)
+        # No Python set notation
+        assert "{" not in msg, f"Error message contains set notation: {msg}"
+        assert "}" not in msg, f"Error message contains set notation: {msg}"
+        # No "Found columns" in user-facing message (moved to logger)
+        assert "Found columns" not in msg, f"Error message leaks Found columns: {msg}"
+        # Has problem-fix separator
+        assert " -- " in msg, f"Error message missing fix action separator: {msg}"
+        # Column names are sorted and comma-separated
+        assert "ConsumerAddress, OrderNo" in msg, f"Columns not sorted/comma-separated: {msg}"
 
     def test_empty_address_column_raises(self):
         """All-empty ConsumerAddress column should raise ValueError."""

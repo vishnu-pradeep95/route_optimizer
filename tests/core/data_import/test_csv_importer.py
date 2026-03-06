@@ -8,6 +8,11 @@ import pytest
 from core.data_import.csv_importer import CsvImporter, ColumnMapping, ImportResult, RowError
 from core.data_import.interfaces import DataImporter
 
+try:
+    from core.data_import.csv_importer import _humanize_row_error
+except ImportError:
+    _humanize_row_error = None  # Not yet implemented — tests will fail
+
 
 class TestCsvImporter:
     """Tests for importing CDCMS delivery data from CSV files."""
@@ -342,3 +347,68 @@ class TestCsvImporter:
             assert result.row_numbers["ORD-002"] == 3
         finally:
             os.unlink(csv)
+
+
+class TestErrorMessageFormat:
+    """Tests for humanized error messages — office employees should never see Python internals."""
+
+    def _create_csv(self, content: str) -> str:
+        """Helper: write CSV content to a temp file and return the path."""
+        import tempfile
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        with os.fdopen(fd, "w") as f:
+            f.write(content)
+        return path
+
+    def test_csv_missing_address_column_error_format(self):
+        """Missing address column error must not contain Python list notation.
+
+        Error message must:
+        - Start with "Missing address column"
+        - End with a fix action after " -- "
+        - NOT contain "[" or "]" (no list notation)
+        - NOT contain "Found columns"
+        """
+        csv = self._create_csv(
+            "order_id,customer_id,weight_kg\n"
+            "ORD-001,CUST-001,14.2\n"
+        )
+        try:
+            importer = CsvImporter()
+            with pytest.raises(ValueError) as exc_info:
+                importer.import_orders(csv)
+
+            msg = str(exc_info.value)
+            assert msg.startswith("Missing address column"), f"Wrong prefix: {msg}"
+            assert " -- " in msg, f"Missing fix action separator: {msg}"
+            assert "[" not in msg, f"Contains list notation: {msg}"
+            assert "]" not in msg, f"Contains list notation: {msg}"
+            assert "Found columns" not in msg, f"Leaks Found columns: {msg}"
+        finally:
+            os.unlink(csv)
+
+    @pytest.mark.skipif(_humanize_row_error is None, reason="_humanize_row_error not yet implemented")
+    def test_humanize_row_error_value_error_float(self):
+        """ValueError about float conversion should produce friendly message."""
+        result = _humanize_row_error(ValueError("could not convert string to float: 'abc'"))
+        assert "Invalid number value" in result
+        assert " -- check for" in result
+
+    @pytest.mark.skipif(_humanize_row_error is None, reason="_humanize_row_error not yet implemented")
+    def test_humanize_row_error_key_error(self):
+        """KeyError should mention the missing field name."""
+        result = _humanize_row_error(KeyError("weight_kg"))
+        assert "Missing required field" in result
+        assert "weight_kg" in result
+
+    @pytest.mark.skipif(_humanize_row_error is None, reason="_humanize_row_error not yet implemented")
+    def test_humanize_row_error_type_error(self):
+        """TypeError should produce a friendly empty/invalid cell message."""
+        result = _humanize_row_error(TypeError("float() argument must be a string or a real number"))
+        assert result == "Empty or invalid cell -- fill in required fields"
+
+    @pytest.mark.skipif(_humanize_row_error is None, reason="_humanize_row_error not yet implemented")
+    def test_humanize_row_error_generic(self):
+        """Unknown exception types should produce a generic friendly message."""
+        result = _humanize_row_error(RuntimeError("something unexpected"))
+        assert result == "Could not process this row -- check the data format"
