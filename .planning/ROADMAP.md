@@ -51,7 +51,7 @@
 - [x] **Phase 14: Daily Startup** - Zero-input daily startup script with health polling and URL output (gap closure in progress) (completed 2026-03-05)
 - [x] **Phase 15: CSV Documentation** - Single-page CSV reference covering CDCMS workflow, columns, rejections, and address cleaning (completed 2026-03-05)
 - [x] **Phase 16: Documentation Corrections** - README and DEPLOY.md accuracy fixes for non-technical audience (completed 2026-03-05)
-- [ ] **Phase 17: Error Message Humanization** - Plain-English upload and geocoding errors replacing Python internals
+- [x] **Phase 17: Error Message Humanization** - Plain-English upload and geocoding errors replacing Python internals (completed 2026-03-06)
 - [ ] **Phase 18: Distribution Build** - Licensing module compilation for customer delivery
 
 ## Phase Details
@@ -121,7 +121,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Uploading a CSV with missing required columns shows an error like "Column 'OrderNo' is missing" instead of Python set notation like `{'OrderNo', 'ConsumerAddress'}`
   2. Geocoding failures display office-friendly descriptions (e.g., "Address not found -- check spelling in CDCMS" for ZERO_RESULTS, "Google Maps quota exceeded -- contact IT" for OVER_DAILY_LIMIT) instead of raw API error codes
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] 17-01-PLAN.md -- Humanize upload validation and geocoding error messages: plain-English column errors, _humanize_row_error() helper, GEOCODING_REASON_MAP rewrite, ValueError catch at API boundary
@@ -161,7 +161,7 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 14. Daily Startup | v1.3 | 2/2 | Complete | 2026-03-05 |
 | 15. CSV Documentation | v1.3 | 1/1 | Complete | 2026-03-05 |
 | 16. Documentation Corrections | v1.3 | 2/2 | Complete | 2026-03-05 |
-| 17. Error Message Humanization | v1.3 | 0/1 | Not started | - |
+| 17. Error Message Humanization | 1/1 | Complete   | 2026-03-06 | - |
 | 18. Distribution Build | v1.3 | 0/? | Not started | - |
 
 ---

@@ -37,8 +37,8 @@ Requirements for v1.3 Office-Ready Deployment. Each maps to roadmap phases.
 
 ### Error Messages
 
-- [ ] **ERR-01**: Upload errors use plain English instead of Python set notation
-- [ ] **ERR-02**: Geocoding errors translated to office-friendly descriptions
+- [x] **ERR-01**: Upload errors use plain English instead of Python set notation
+- [x] **ERR-02**: Geocoding errors translated to office-friendly descriptions
 
 ### Distribution
 
@@ -89,8 +89,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOCS-02 | Phase 16 | Complete |
 | DOCS-03 | Phase 16 | Complete |
 | DOCS-04 | Phase 16 | Complete |
-| ERR-01 | Phase 17 | Pending |
-| ERR-02 | Phase 17 | Pending |
+| ERR-01 | Phase 17 | Complete |
+| ERR-02 | Phase 17 | Complete |
 | DIST-01 | Phase 18 | Pending |
 
 **Coverage:**
