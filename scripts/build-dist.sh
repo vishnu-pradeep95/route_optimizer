@@ -83,6 +83,7 @@ rsync -a \
   --exclude='*.pyo' \
   --exclude='dist/' \
   --exclude='backups/' \
+  --exclude='data/' \
   --exclude='tools/' \
   --exclude='.env' \
   --exclude='.env.production' \
