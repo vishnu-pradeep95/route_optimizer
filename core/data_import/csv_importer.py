@@ -99,6 +99,31 @@ class ImportResult(BaseModel):
     )
 
 
+def _humanize_row_error(exc: Exception) -> str:
+    """Translate Python exceptions to office-friendly messages.
+
+    Row-level parsing errors can produce raw Python exception text like
+    "could not convert string to float: 'abc'" which is meaningless to
+    non-technical staff. This function maps common exception types to
+    plain-English "problem -- fix action" messages.
+
+    The raw exception is still logged at WARNING level for IT debugging.
+    """
+    msg = str(exc)
+    if isinstance(exc, ValueError):
+        if "could not convert" in msg and "float" in msg:
+            return "Invalid number value -- check for letters or symbols in numeric fields"
+        if "could not convert" in msg:
+            return "Unexpected value format -- check the cell contents"
+        return f"Invalid value -- {msg}" if len(msg) < 60 else "Invalid value in this row"
+    if isinstance(exc, KeyError):
+        col = msg.strip("'\"")
+        return f"Missing required field '{col}' -- check your CSV has all required columns"
+    if isinstance(exc, TypeError):
+        return "Empty or invalid cell -- fill in required fields"
+    return "Could not process this row -- check the data format"
+
+
 class CsvImporter:
     """Imports delivery orders from CSV or Excel files.
 
@@ -234,7 +259,7 @@ class CsvImporter:
                     RowError(
                         row_number=row_num,
                         column="",
-                        message=str(e),
+                        message=_humanize_row_error(e),
                         stage="validation",
                     )
                 )
@@ -267,9 +292,14 @@ class CsvImporter:
             alternatives = ["address", "delivery_address", "addr", "customer_address"]
             found = [alt for alt in alternatives if alt in df.columns]
             if not found:
+                logger.warning(
+                    "Missing address column '%s'. Found columns: %s",
+                    address_col,
+                    list(df.columns),
+                )
                 raise ValueError(
-                    f"Missing address column. Expected '{address_col}' or one of "
-                    f"{alternatives}. Found columns: {list(df.columns)}"
+                    f"Missing address column '{address_col}' "
+                    f"-- make sure you're uploading the correct file format"
                 )
 
     def _row_to_order_with_warnings(

@@ -5,13 +5,8 @@ import tempfile
 
 import pytest
 
-from core.data_import.csv_importer import CsvImporter, ColumnMapping, ImportResult, RowError
+from core.data_import.csv_importer import CsvImporter, ColumnMapping, ImportResult, RowError, _humanize_row_error
 from core.data_import.interfaces import DataImporter
-
-try:
-    from core.data_import.csv_importer import _humanize_row_error
-except ImportError:
-    _humanize_row_error = None  # Not yet implemented — tests will fail
 
 
 class TestCsvImporter:
@@ -387,27 +382,23 @@ class TestErrorMessageFormat:
         finally:
             os.unlink(csv)
 
-    @pytest.mark.skipif(_humanize_row_error is None, reason="_humanize_row_error not yet implemented")
     def test_humanize_row_error_value_error_float(self):
         """ValueError about float conversion should produce friendly message."""
         result = _humanize_row_error(ValueError("could not convert string to float: 'abc'"))
         assert "Invalid number value" in result
         assert " -- check for" in result
 
-    @pytest.mark.skipif(_humanize_row_error is None, reason="_humanize_row_error not yet implemented")
     def test_humanize_row_error_key_error(self):
         """KeyError should mention the missing field name."""
         result = _humanize_row_error(KeyError("weight_kg"))
         assert "Missing required field" in result
         assert "weight_kg" in result
 
-    @pytest.mark.skipif(_humanize_row_error is None, reason="_humanize_row_error not yet implemented")
     def test_humanize_row_error_type_error(self):
         """TypeError should produce a friendly empty/invalid cell message."""
         result = _humanize_row_error(TypeError("float() argument must be a string or a real number"))
         assert result == "Empty or invalid cell -- fill in required fields"
 
-    @pytest.mark.skipif(_humanize_row_error is None, reason="_humanize_row_error not yet implemented")
     def test_humanize_row_error_generic(self):
         """Unknown exception types should produce a generic friendly message."""
         result = _humanize_row_error(RuntimeError("something unexpected"))

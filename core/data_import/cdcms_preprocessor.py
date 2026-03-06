@@ -344,11 +344,14 @@ def _validate_cdcms_columns(df: pd.DataFrame) -> None:
     missing_optional = optional - present
 
     if missing_required:
+        logger.warning(
+            "CDCMS missing required columns: %s. Found: %s",
+            missing_required,
+            sorted(present),
+        )
         raise ValueError(
-            f"CDCMS export is missing required columns: {missing_required}. "
-            f"Found columns: {sorted(present)}. "
-            f"Expected at least: {sorted(required)}. "
-            "Make sure you're uploading the raw CDCMS export file."
+            f"Required columns missing: {', '.join(sorted(missing_required))} "
+            f"-- make sure you're uploading the raw CDCMS export"
         )
 
     if missing_optional:

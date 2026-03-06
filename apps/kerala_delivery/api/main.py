@@ -1096,6 +1096,11 @@ async def upload_and_optimize(
             duplicate_warnings=duplicate_warnings_list,
         )
 
+    except ValueError as e:
+        # ValueError from preprocess_cdcms() or CsvImporter._validate_columns()
+        # already has a humanized message — pass it through as HTTP 400.
+        raise HTTPException(status_code=400, detail=str(e))
+
     finally:
         # Clean up temp files — only if they were created and not yet removed.
         # preprocessed_path is set to None after successful cleanup above,
