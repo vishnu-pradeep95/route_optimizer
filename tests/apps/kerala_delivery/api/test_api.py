@@ -2549,3 +2549,53 @@ class TestQrSheetEndpoint:
         # Escaped versions SHOULD appear (browser renders as text, not HTML)
         assert '&lt;script&gt;' in html
         assert '&lt;img' in html
+
+
+class TestGeocodingReasonMapFormat:
+    """Tests for humanized geocoding error messages (ERR-02).
+
+    Office employees should see "problem -- fix action" messages,
+    not raw Google API status codes or parenthesized codes.
+    """
+
+    def test_geocoding_reason_map_format(self):
+        """Every GEOCODING_REASON_MAP value must contain ' -- ' separator.
+        No value should contain parenthesized codes like '(ZERO_RESULTS)'.
+        """
+        from apps.kerala_delivery.api.main import GEOCODING_REASON_MAP
+
+        for status, message in GEOCODING_REASON_MAP.items():
+            assert " -- " in message, (
+                f"GEOCODING_REASON_MAP['{status}'] missing fix action separator: {message}"
+            )
+            assert "(" not in message, (
+                f"GEOCODING_REASON_MAP['{status}'] contains parenthesized code: {message}"
+            )
+            assert ")" not in message, (
+                f"GEOCODING_REASON_MAP['{status}'] contains parenthesized code: {message}"
+            )
+
+    def test_geocoding_reason_map_specific_messages(self):
+        """Verify exact messages for key status codes."""
+        from apps.kerala_delivery.api.main import GEOCODING_REASON_MAP
+
+        assert GEOCODING_REASON_MAP["ZERO_RESULTS"] == (
+            "Address not found -- check spelling in CDCMS"
+        )
+        assert GEOCODING_REASON_MAP["OVER_DAILY_LIMIT"] == (
+            "Google Maps quota exceeded -- contact IT"
+        )
+        assert "contact IT" in GEOCODING_REASON_MAP["REQUEST_DENIED"]
+        assert "contact IT" in GEOCODING_REASON_MAP["OVER_QUERY_LIMIT"]
+
+    def test_geocoding_fallback_friendly(self):
+        """Fallback for unknown status codes must not contain 'failed' or raw codes."""
+        from apps.kerala_delivery.api.main import GEOCODING_REASON_MAP
+
+        fallback = GEOCODING_REASON_MAP.get(
+            "SOME_UNKNOWN_STATUS",
+            "Could not find this address -- try checking the spelling",
+        )
+        assert "failed" not in fallback.lower(), f"Fallback contains 'failed': {fallback}"
+        assert "SOME_UNKNOWN_STATUS" not in fallback, f"Fallback leaks raw status code: {fallback}"
+        assert " -- " in fallback, f"Fallback missing fix action: {fallback}"
