@@ -42,7 +42,7 @@ Requirements for v1.3 Office-Ready Deployment. Each maps to roadmap phases.
 
 ### Distribution
 
-- [ ] **DIST-01**: Build script compiles licensing module to .pyc and strips .py source for customer delivery
+- [x] **DIST-01**: Build script compiles licensing module to .pyc and strips .py source for customer delivery
 
 ## Future Requirements
 
@@ -91,7 +91,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOCS-04 | Phase 16 | Complete |
 | ERR-01 | Phase 17 | Complete |
 | ERR-02 | Phase 17 | Complete |
-| DIST-01 | Phase 18 | Pending |
+| DIST-01 | Phase 18 | Complete |
 
 **Coverage:**
 - v1.3 requirements: 19 total
