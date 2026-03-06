@@ -80,12 +80,12 @@ def _point_lng(geom: object) -> float | None:
 # Office staff see these messages, so they must be actionable and jargon-free.
 # The raw status is still logged server-side for debugging.
 GEOCODING_REASON_MAP: dict[str, str] = {
-    "ZERO_RESULTS": "Address not recognized by Google Maps",
-    "REQUEST_DENIED": "Geocoding service error (contact admin)",
-    "OVER_QUERY_LIMIT": "Geocoding quota exceeded (try again later)",
-    "OVER_DAILY_LIMIT": "Geocoding quota exceeded (try again later)",
-    "INVALID_REQUEST": "Address could not be processed",
-    "UNKNOWN_ERROR": "Geocoding service temporarily unavailable",
+    "ZERO_RESULTS": "Address not found -- check spelling in CDCMS",
+    "REQUEST_DENIED": "Geocoding service blocked -- contact IT",
+    "OVER_QUERY_LIMIT": "Google Maps quota exceeded -- contact IT",
+    "OVER_DAILY_LIMIT": "Google Maps quota exceeded -- contact IT",
+    "INVALID_REQUEST": "Address could not be processed -- check for unusual characters",
+    "UNKNOWN_ERROR": "Google Maps is temporarily unavailable -- try again in a few minutes",
 }
 
 
@@ -931,8 +931,14 @@ async def upload_and_optimize(
                         # Collect structured failure for the response.
                         # Staff sees a human-friendly reason, not raw API codes.
                         reason = GEOCODING_REASON_MAP.get(
-                            status, f"Geocoding failed ({status})"
+                            status, "Could not find this address -- try checking the spelling"
                         )
+                        if status not in GEOCODING_REASON_MAP:
+                            logger.warning(
+                                "Unmapped geocoding status '%s' for order %s",
+                                status,
+                                order.order_id,
+                            )
                         geocoding_failures.append(ImportFailure(
                             row_number=order_row_map.get(order.order_id, 0),
                             address_snippet=order.address_raw[:80],
