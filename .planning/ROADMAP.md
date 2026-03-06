@@ -111,8 +111,8 @@ Plans:
 **Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 16-01-PLAN.md -- Fix README.md and SETUP.md factual inaccuracies: container names, credential defaults, REPO_URL notes, automated step annotations
-- [ ] 16-02-PLAN.md -- Restructure DEPLOY.md for non-technical audience: script references, Ubuntu warning, CSV cross-link, Quick Reference Card
+- [x] 16-01-PLAN.md -- Fix README.md and SETUP.md factual inaccuracies: container names, credential defaults, REPO_URL notes, automated step annotations
+- [x] 16-02-PLAN.md -- Restructure DEPLOY.md for non-technical audience: script references, Ubuntu warning, CSV cross-link, Quick Reference Card
 
 ### Phase 17: Error Message Humanization
 **Goal**: Upload and geocoding errors speak the office employee's language -- no Python tracebacks, no set notation, no raw API error codes
@@ -121,10 +121,10 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Uploading a CSV with missing required columns shows an error like "Column 'OrderNo' is missing" instead of Python set notation like `{'OrderNo', 'ConsumerAddress'}`
   2. Geocoding failures display office-friendly descriptions (e.g., "Address not found -- check spelling in CDCMS" for ZERO_RESULTS, "Google Maps quota exceeded -- contact IT" for OVER_DAILY_LIMIT) instead of raw API error codes
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 17-01: TBD
+- [ ] 17-01-PLAN.md -- Humanize upload validation and geocoding error messages: plain-English column errors, _humanize_row_error() helper, GEOCODING_REASON_MAP rewrite, ValueError catch at API boundary
 
 ### Phase 18: Distribution Build
 **Goal**: Customer delivery package contains compiled licensing module without exposable Python source
@@ -160,8 +160,8 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 13. Bootstrap Installation | v1.3 | 1/1 | Complete | 2026-03-05 |
 | 14. Daily Startup | v1.3 | 2/2 | Complete | 2026-03-05 |
 | 15. CSV Documentation | v1.3 | 1/1 | Complete | 2026-03-05 |
-| 16. Documentation Corrections | 2/2 | Complete    | 2026-03-05 | - |
-| 17. Error Message Humanization | v1.3 | 0/? | Not started | - |
+| 16. Documentation Corrections | v1.3 | 2/2 | Complete | 2026-03-05 |
+| 17. Error Message Humanization | v1.3 | 0/1 | Not started | - |
 | 18. Distribution Build | v1.3 | 0/? | Not started | - |
 
 ---
