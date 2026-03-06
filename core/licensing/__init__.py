@@ -22,7 +22,7 @@ Security notes:
     - The HMAC secret is derived via PBKDF2 from an innocuous-looking
       constant (not a plain "SECRET_KEY" string that's easy to grep).
     - The .py source for this module should be compiled to .pyc before
-      distribution (see Makefile `make dist`). This isn't real protection
+      distribution (see `scripts/build-dist.sh`). This isn't real protection
       but raises the bar slightly above "open the file and delete the check".
     - This module is in core/ (not apps/) because licensing is reusable
       across any deployment of the platform.
