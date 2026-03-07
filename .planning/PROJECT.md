@@ -53,19 +53,18 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ Batch route loading (GET /api/routes?include_stops=true) replacing N+1 — v1.2
 - ✓ Driver-verified geocode wiring into delivery status endpoint — v1.2
 - ✓ Duplicate detection thresholds validated against production data — v1.2
+- ✓ One-command WSL bootstrap with Docker CE auto-install and environment guards — v1.3
+- ✓ Daily startup script with health polling and failure diagnosis — v1.3
+- ✓ CSV format reference with error glossary and address cleaning pipeline — v1.3
+- ✓ README/DEPLOY.md accuracy and non-technical audience restructure — v1.3
+- ✓ Plain-English error messages for upload validation and geocoding — v1.3
+- ✓ Distribution build with compiled licensing module (.pyc) — v1.3
+- ✓ OSRM Docker image pinned to v5.27.1 for deployment resilience — v1.3
+- ✓ Error message documentation synced with code (25 messages traced) — v1.3
 
 ### Active
 
-## Current Milestone: v1.3 Office-Ready Deployment
-
-**Goal:** Make the system installable and usable by a non-technical office employee — one-command install from WSL, one-command daily startup, comprehensive documentation of CSV formats and workflow.
-
-**Target features:**
-- Comprehensive docs: CSV format spec, column constraints, address cleaning, rejection reasons
-- README accuracy: fix stale container names, remove manual steps now automated, fill placeholder URLs
-- One-command install from fresh WSL (Docker auto-install if missing)
-- One-command daily startup with clear success output
-- Office-focused workflow: upload CSV → print QR sheets → hand to drivers
+(No active requirements — define next milestone with `/gsd:new-milestone`)
 
 ### Out of Scope
 
@@ -89,8 +88,8 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v1.3 in progress — docs overhaul and office-ready deployment. 8.3k Python LOC, 3.7k TypeScript LOC, 1.9k HTML/JS LOC (~13.9k total).
-- **Known tech debt**: All 22 items from v1.2 audit resolved. Remaining: physical Android device testing for outdoor contrast.
+- **Current state**: v1.3 shipped — office-ready deployment with bootstrap/startup scripts, CSV docs, humanized errors. 2.7k Python LOC, 3.7k TypeScript LOC, 2.0k HTML/JS LOC, 1.6k Shell LOC (~10k total).
+- **Known tech debt**: Physical Android device testing for outdoor contrast; 8 GB laptop testing for install script OSRM OOM validation.
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
 ## Constraints
@@ -124,6 +123,13 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | Exhaustive switch for StatusBadge | TypeScript never-typed default ensures compile-time safety | ✓ Good — catches missing status values at build |
 | Optional `include_stops` query param | Batch route data via existing endpoint, backward compatible | ✓ Good — no breaking changes for existing consumers |
 | Direct `repo.save_geocode_cache` call | Skip CachedGeocoder instantiation for driver-verified saves | ✓ Good — simpler, avoids unnecessary Google API key validation |
+| Two-phase resume with marker file | Docker group membership requires session restart | ✓ Good — seamless bootstrap flow across reboot |
+| Guard-first architecture in bootstrap.sh | All environment checks (WSL version, filesystem, RAM) run before any installation | ✓ Good — fast-fail prevents partial installs |
+| 60s health timeout for daily startup | Shorter than install.sh 300s; services warm in ~10s | ✓ Good — reasonable for daily use |
+| "Problem -- fix action" error pattern | All user-facing errors follow consistent format | ✓ Good — office employees know what to do |
+| Pin OSRM to v5.27.1 | latest tag dropped /bin/bash, breaking fresh deployments | ✓ Good — unblocked all deployments |
+| /bin/sh instead of /bin/bash for OSRM | POSIX constructs only; resilient to base image changes | ✓ Good — works on both Debian and Alpine |
+| ERROR-MAP.md traceability artifact | Maps 25 error messages to source code paths | ✓ Good — prevents documentation drift |
 
 ---
-*Last updated: 2026-03-04 after v1.3 milestone started*
+*Last updated: 2026-03-07 after v1.3 milestone completed*

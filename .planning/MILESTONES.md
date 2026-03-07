@@ -1,5 +1,22 @@
 # Milestones
 
+## v1.3 Office-Ready Deployment (Shipped: 2026-03-07)
+
+**Phases completed:** 8 phases (13-20), 10 plans
+**Timeline:** 14 days (2026-02-21 → 2026-03-07)
+**Git range:** `5ebbf56`..`f533d85` (77 commits)
+**Files modified:** 75 (+10,300 / -380)
+
+**Key accomplishments:**
+- One-command WSL bootstrap installer (bootstrap.sh) with Docker CE auto-install, environment guards, and two-phase resume for Docker group membership
+- Zero-input daily startup script (start.sh) with 60s health polling, container-state diagnosis, and failure recovery guidance
+- Comprehensive CSV format reference (CSV_FORMAT.md) with error glossary, address cleaning pipeline, and copy-pasteable example rows
+- Humanized error messages across all upload and geocoding paths -- plain English "problem -- fix action" pattern replacing Python internals
+- Distribution build script (build-dist.sh) producing versioned tarballs with compiled licensing module (.pyc only)
+- Documentation overhaul for non-technical office employees: README accuracy fixes, DEPLOY.md restructured with script references, error message traceability artifact
+
+---
+
 ## v1.2 Tech Debt & Cleanup (Shipped: 2026-03-04)
 
 **Phases completed:** 5 phases (8-12), 9 plans

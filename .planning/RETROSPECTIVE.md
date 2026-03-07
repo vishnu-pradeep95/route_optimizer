@@ -2,6 +2,54 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.3 — Office-Ready Deployment
+
+**Shipped:** 2026-03-07
+**Phases:** 8 | **Plans:** 10 | **Timeline:** 14 days
+
+### What Was Built
+- One-command WSL bootstrap installer (bootstrap.sh) with Docker CE auto-install, environment guards, and two-phase resume
+- Zero-input daily startup script (start.sh) with 60s health polling, container-state diagnosis, and failure recovery
+- Comprehensive CSV format reference (CSV_FORMAT.md) with error glossary, address cleaning pipeline, and example rows
+- Humanized error messages across upload validation and geocoding (plain English "problem -- fix action" pattern)
+- Distribution build script (build-dist.sh) with compiled licensing module (.pyc only)
+- OSRM Docker image pinned to v5.27.1 with POSIX-compatible entrypoints
+- Documentation overhaul: README, DEPLOY.md, SETUP.md corrected for non-technical audience
+- Error message traceability artifact (ERROR-MAP.md) mapping 25 messages to source code
+
+### What Worked
+- Milestone audit caught 3 real gaps (documentation drift + deployment blocker) that would have shipped broken
+- Gap closure phases (19, 20) were surgical — 1 plan each, completed same day
+- Source-code-verified documentation (CSV_FORMAT.md error messages extracted from actual code paths)
+- "Problem -- fix action" error pattern created consistent UX across all user-facing errors
+- Guard-first architecture in bootstrap.sh: fast-fail prevents partial installations
+
+### What Was Inefficient
+- Phase 17 (error humanization) drifted documentation written in Phase 15 — the audit caught this but it should have been a dependency in the roadmap
+- Phases 17-20 progress table rows had incorrect column alignment (missing milestone column)
+- Some ROADMAP plan checkboxes were `[ ]` despite phases being complete (17, 18, 19, 20)
+- 14-day timeline was longer than other milestones because v1.3 included gap closure phases added mid-milestone
+
+### Patterns Established
+- Two-phase resume pattern for bash scripts needing session restart (marker file + re-exec)
+- if/else pattern for set -euo pipefail safe branching on function return values
+- ERROR-MAP.md as traceability artifact for documentation-to-code sync verification
+- Pin Docker images to specific versions (never use :latest in operational files)
+
+### Key Lessons
+1. Documentation phases should depend on the code phases they document — Phase 15 documenting error messages should have been after Phase 17 (which changed them)
+2. Milestone audits are essential before completion — v1.3 audit found a deployment blocker that would have shipped broken to the customer
+3. Shell scripts under `set -euo pipefail` need careful branching — bare function calls + `$?` don't work as expected
+4. Docker :latest tags are a deployment hazard — always pin versions for operational stability
+5. Gap closure phases should be lightweight (1 plan, same day) — they're targeted fixes, not new feature work
+
+### Cost Observations
+- Model mix: opus for planning/execution, sonnet for audit/integration checking
+- Sessions: ~8 sessions across 14 days
+- Notable: gap closure phases (19, 20) at ~2min each — fastest plans in the project
+
+---
+
 ## Milestone: v1.2 — Tech Debt & Cleanup
 
 **Shipped:** 2026-03-04
@@ -135,14 +183,16 @@
 | v1.0 | ~1 day | 3 | 8 | Foundation-first approach |
 | v1.1 | 3 days | 4 | 16 | Visual verification as formal plans; Playwright MCP E2E testing |
 | v1.2 | 2 days | 5 | 9 | Fine-grained REQ-IDs; parallel independent phases; TDD for data wiring |
+| v1.3 | 14 days | 8 | 10 | Milestone audit + gap closure; documentation-as-code traceability |
 
 ### Cumulative Quality
 
-| Milestone | LOC (Python) | LOC (TS) | LOC (HTML/JS) | Key Addition |
-|-----------|-------------|----------|---------------|-------------|
-| v1.0 | 16.6k | 3.3k | -- | Security headers, test baseline |
-| v1.1 | 17.5k | 3.6k | 1.8k | DaisyUI migration, PWA refresh |
-| v1.2 | 8.3k | 3.7k | 1.9k | Dead code removed (-9.2k Python), typed helpers, config consolidation |
+| Milestone | LOC (Python) | LOC (TS) | LOC (HTML/JS) | LOC (Shell) | Key Addition |
+|-----------|-------------|----------|---------------|-------------|-------------|
+| v1.0 | 16.6k | 3.3k | -- | -- | Security headers, test baseline |
+| v1.1 | 17.5k | 3.6k | 1.8k | -- | DaisyUI migration, PWA refresh |
+| v1.2 | 8.3k | 3.7k | 1.9k | -- | Dead code removed (-9.2k Python), typed helpers, config consolidation |
+| v1.3 | 2.7k | 3.7k | 2.0k | 1.6k | Bootstrap/startup scripts, CSV docs, humanized errors, dist build |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -151,3 +201,6 @@
 3. CSS conventions must be established and enforced in the first phase — late fixes are expensive
 4. Tech debt milestones with specific, measurable requirements (not vague "cleanup") execute faster and verify unambiguously
 5. Config consolidation eliminates cross-codebase drift — do it early in the project lifecycle
+6. Milestone audits before completion catch real bugs — v1.3 audit found a deployment blocker and 8 stale docs
+7. Documentation phases must depend on the code phases they document — otherwise content drifts immediately
+8. Pin Docker image versions in all operational files — :latest is a ticking deployment bomb
