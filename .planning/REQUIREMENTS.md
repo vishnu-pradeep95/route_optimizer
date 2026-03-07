@@ -24,7 +24,7 @@ Requirements for v1.3 Office-Ready Deployment. Each maps to roadmap phases.
 - [x] **CSV-01**: CSV_FORMAT.md documents all accepted file formats (.csv, .xlsx, .xls)
 - [x] **CSV-02**: CSV_FORMAT.md documents CDCMS columns (required/optional, status filter)
 - [x] **CSV-03**: CSV_FORMAT.md documents standard CSV columns with defaults and constraints
-- [x] **CSV-04**: CSV_FORMAT.md documents rejection reasons and what causes rows to fail
+- [ ] **CSV-04**: CSV_FORMAT.md documents rejection reasons and what causes rows to fail
 - [x] **CSV-05**: CSV_FORMAT.md documents address cleaning pipeline with examples
 - [x] **CSV-06**: CSV_FORMAT.md includes example rows for both CDCMS and standard CSV
 
@@ -37,8 +37,8 @@ Requirements for v1.3 Office-Ready Deployment. Each maps to roadmap phases.
 
 ### Error Messages
 
-- [x] **ERR-01**: Upload errors use plain English instead of Python set notation
-- [x] **ERR-02**: Geocoding errors translated to office-friendly descriptions
+- [ ] **ERR-01**: Upload errors use plain English instead of Python set notation
+- [ ] **ERR-02**: Geocoding errors translated to office-friendly descriptions
 
 ### Distribution
 
@@ -82,20 +82,21 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CSV-01 | Phase 15 | Complete |
 | CSV-02 | Phase 15 | Complete |
 | CSV-03 | Phase 15 | Complete |
-| CSV-04 | Phase 15 | Complete |
+| CSV-04 | Phase 20 | Pending |
 | CSV-05 | Phase 15 | Complete |
 | CSV-06 | Phase 15 | Complete |
 | DOCS-01 | Phase 16 | Complete |
 | DOCS-02 | Phase 16 | Complete |
 | DOCS-03 | Phase 16 | Complete |
 | DOCS-04 | Phase 16 | Complete |
-| ERR-01 | Phase 17 | Complete |
-| ERR-02 | Phase 17 | Complete |
+| ERR-01 | Phase 20 | Pending |
+| ERR-02 | Phase 20 | Pending |
 | DIST-01 | Phase 18 | Complete |
 
 **Coverage:**
 - v1.3 requirements: 19 total
-- Mapped to phases: 19
+- Satisfied: 16
+- Pending (gap closure): 3 (CSV-04, ERR-01, ERR-02)
 - Unmapped: 0
 
 ---

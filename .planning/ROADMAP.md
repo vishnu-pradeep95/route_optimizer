@@ -5,7 +5,7 @@
 - ✅ **v1.0 Infrastructure** -- Phases 1-3 (shipped 2026-03-01)
 - ✅ **v1.1 Polish & Reliability** -- Phases 4-7 (shipped 2026-03-03)
 - ✅ **v1.2 Tech Debt & Cleanup** -- Phases 8-12 (shipped 2026-03-04)
-- [ ] **v1.3 Office-Ready Deployment** -- Phases 13-18 (in progress)
+- [ ] **v1.3 Office-Ready Deployment** -- Phases 13-20 (in progress)
 
 ## Phases
 
@@ -53,6 +53,8 @@
 - [x] **Phase 16: Documentation Corrections** - README and DEPLOY.md accuracy fixes for non-technical audience (completed 2026-03-05)
 - [x] **Phase 17: Error Message Humanization** - Plain-English upload and geocoding errors replacing Python internals (completed 2026-03-06)
 - [x] **Phase 18: Distribution Build** - Licensing module compilation for customer delivery (completed 2026-03-06)
+- [ ] **Phase 19: Pin OSRM Docker Image** - Fix osrm-init exit 127 by pinning image version and using POSIX shell (gap closure)
+- [ ] **Phase 20: Sync Error Message Documentation** - Update CSV_FORMAT.md and DEPLOY.md to match Phase 17 humanized messages (gap closure)
 
 ## Phase Details
 
@@ -138,10 +140,36 @@ Plans:
 Plans:
 - [ ] 18-01-PLAN.md -- Create build-dist.sh with rsync exclusions, legacy .pyc compilation, import validation, and versioned tarball output
 
+### Phase 19: Pin OSRM Docker Image
+**Goal**: Fix osrm-init container failure (exit 127) that blocks all fresh deployments
+**Depends on**: Nothing (independent fix)
+**Requirements**: INST-01, DAILY-01 (re-satisfied)
+**Gap Closure:** Closes flow gap from v1.3 audit -- osrm/osrm-backend:latest dropped /bin/bash
+**Success Criteria** (what must be TRUE):
+  1. `docker-compose.yml` pins osrm/osrm-backend to v5.27.1 (matching docker-compose.prod.yml)
+  2. osrm-init entrypoint uses `/bin/sh -c` instead of `/bin/bash -c` for POSIX resilience
+  3. `docker compose up -d` starts osrm-init without exit 127
+
+Plans:
+- [ ] (not yet planned)
+
+### Phase 20: Sync Error Message Documentation
+**Goal**: Update CSV_FORMAT.md and DEPLOY.md error messages to match Phase 17 humanized code output
+**Depends on**: Phase 19
+**Requirements**: CSV-04, ERR-01, ERR-02 (re-satisfied)
+**Gap Closure:** Closes 8 stale error messages (documentation drift) from v1.3 audit
+**Success Criteria** (what must be TRUE):
+  1. All error message strings in CSV_FORMAT.md match the actual humanized messages produced by the code
+  2. DEPLOY.md error example uses plain English format instead of Python set notation
+  3. Every documented error message can be traced to a specific code path
+
+Plans:
+- [ ] (not yet planned)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
+Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19 -> 20
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -163,6 +191,8 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 16. Documentation Corrections | v1.3 | 2/2 | Complete | 2026-03-05 |
 | 17. Error Message Humanization | 1/1 | Complete    | 2026-03-06 | - |
 | 18. Distribution Build | 1/1 | Complete    | 2026-03-06 | - |
+| 19. Pin OSRM Docker Image | v1.3 | 0/0 | Pending | - |
+| 20. Sync Error Message Documentation | v1.3 | 0/0 | Pending | - |
 
 ---
 *Full phase details for v1.0-v1.2 archived in `.planning/milestones/`*
