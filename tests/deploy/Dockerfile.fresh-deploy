@@ -1,0 +1,41 @@
+# Simulates a fresh Ubuntu laptop with Docker pre-installed.
+# Tests the install.sh flow (what bootstrap.sh delegates to after Docker setup).
+#
+# Usage:
+#   cd <project-root>
+#   ./tests/deploy/test-fresh-deploy.sh
+#
+# This uses Docker-in-Docker (privileged) to run docker compose inside.
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Docker CE (mimics what bootstrap.sh does)
+RUN apt-get update -qq && \
+    apt-get install -y -qq ca-certificates curl gnupg git sudo && \
+    install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc && \
+    chmod a+r /etc/apt/keyrings/docker.asc && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+      https://download.docker.com/linux/ubuntu noble stable" \
+      > /etc/apt/sources.list.d/docker.list && \
+    apt-get update -qq && \
+    apt-get install -y -qq docker-ce docker-ce-cli containerd.io \
+      docker-buildx-plugin docker-compose-plugin && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user (mimics WSL employee account)
+RUN useradd -m -s /bin/bash employee && \
+    usermod -aG docker employee && \
+    echo "employee ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Copy project into ~/routing_opt (matches DEPLOY.md path)
+COPY --chown=employee:employee . /home/employee/routing_opt
+
+WORKDIR /home/employee/routing_opt
+
+# The entrypoint starts dockerd, then runs install.sh as the employee user
+COPY --chmod=755 tests/deploy/entrypoint.sh /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
