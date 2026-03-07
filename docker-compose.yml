@@ -68,7 +68,7 @@ services:
   # - Init container runs once, then exits, consuming zero resources
   # See: SETUP.md Step 9 for the manual equivalent
   osrm-init:
-    image: osrm/osrm-backend:v5.27.1
+    image: osrm/osrm-backend:v5.25.0
     container_name: osrm-init
     volumes:
       - ./data/osrm:/data
@@ -82,8 +82,9 @@ services:
           exit 0
         fi
         echo "→ OSRM data not found — downloading and preprocessing Kerala map..."
-        # Install wget if not present (some OSRM images have curl only)
-        apt-get update -qq && apt-get install -y -qq wget > /dev/null 2>&1 || true
+        # Install wget — OSRM image is Debian Stretch (EOL), point to archive
+        echo "deb http://archive.debian.org/debian stretch main" > /etc/apt/sources.list
+        apt-get -o Acquire::Check-Valid-Until=false update -qq && apt-get install -y -qq wget > /dev/null 2>&1 || true
         # Download Kerala OSM extract (~150 MB)
         if [ ! -f /data/kerala-latest.osm.pbf ]; then
           echo "→ Downloading Kerala OpenStreetMap data (~150 MB)..."
@@ -104,7 +105,7 @@ services:
   # Uses Kerala OpenStreetMap data. Preprocessed with Multi-Level Dijkstra
   # for fastest queries. Runs on port 5000.
   osrm:
-    image: osrm/osrm-backend:v5.27.1
+    image: osrm/osrm-backend:v5.25.0
     container_name: osrm-kerala
     ports:
       - "5000:5000"

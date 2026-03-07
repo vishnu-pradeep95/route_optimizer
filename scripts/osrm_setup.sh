@@ -38,7 +38,7 @@ KERALA_PBF_URL="https://download.openstreetmap.fr/extracts/asia/india/kerala.osm
 PBF_FILE="$DATA_DIR/kerala-latest.osm.pbf"
 
 # OSRM Docker image — same version as docker-compose.yml
-OSRM_IMAGE="osrm/osrm-backend:v5.27.1"
+OSRM_IMAGE="osrm/osrm-backend:v5.25.0"
 
 # Car profile is the closest default to a three-wheeler.
 # For Phase 2+, we'll create a custom Lua profile with:

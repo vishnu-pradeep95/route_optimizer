@@ -85,7 +85,7 @@ services:
   # Same as dev: idempotent init container that downloads and preprocesses
   # Kerala OSM data if missing. Production pins to v5.27.1 for stability.
   osrm-init:
-    image: osrm/osrm-backend:v5.27.1
+    image: osrm/osrm-backend:v5.25.0
     container_name: osrm-init-prod
     volumes:
       - ./data/osrm:/data
@@ -98,7 +98,9 @@ services:
           exit 0
         fi
         echo "→ Downloading and preprocessing Kerala map data..."
-        apt-get update -qq && apt-get install -y -qq wget > /dev/null 2>&1 || true
+        # Install wget — OSRM image is Debian Stretch (EOL), point to archive
+        echo "deb http://archive.debian.org/debian stretch main" > /etc/apt/sources.list
+        apt-get -o Acquire::Check-Valid-Until=false update -qq && apt-get install -y -qq wget > /dev/null 2>&1 || true
         if [ ! -f /data/kerala-latest.osm.pbf ]; then
           wget -q --show-progress -O /data/kerala-latest.osm.pbf \
             https://download.openstreetmap.fr/extracts/asia/india/kerala.osm.pbf
@@ -121,7 +123,7 @@ services:
     # OSRM MLD data format can change between versions, which would break
     # routing without a data rebuild. Always rebuild data when upgrading.
     # Check available tags: https://hub.docker.com/r/osrm/osrm-backend/tags
-    image: osrm/osrm-backend:v5.27.1
+    image: osrm/osrm-backend:v5.25.0
     container_name: osrm-kerala-prod
     volumes:
       - ./data/osrm:/data:ro
