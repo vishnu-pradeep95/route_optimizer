@@ -54,7 +54,7 @@
 - [x] **Phase 17: Error Message Humanization** - Plain-English upload and geocoding errors replacing Python internals (completed 2026-03-06)
 - [x] **Phase 18: Distribution Build** - Licensing module compilation for customer delivery (completed 2026-03-06)
 - [x] **Phase 19: Pin OSRM Docker Image** - Fix osrm-init exit 127 by pinning image version and using POSIX shell (gap closure) (completed 2026-03-07)
-- [ ] **Phase 20: Sync Error Message Documentation** - Update CSV_FORMAT.md and DEPLOY.md to match Phase 17 humanized messages (gap closure)
+- [x] **Phase 20: Sync Error Message Documentation** - Update CSV_FORMAT.md and DEPLOY.md to match Phase 17 humanized messages (gap closure) (completed 2026-03-07)
 
 ## Phase Details
 
@@ -163,7 +163,7 @@ Plans:
   1. All error message strings in CSV_FORMAT.md match the actual humanized messages produced by the code
   2. DEPLOY.md error example uses plain English format instead of Python set notation
   3. Every documented error message can be traced to a specific code path
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] 20-01-PLAN.md -- Sync CSV_FORMAT.md error tables (fix 2 stale file-level, add 6 row-level, replace 5+1 geocoding) and DEPLOY.md troubleshooting (remove stale section, update 3 sections, add cross-link), create ERROR-MAP.md traceability artifact
@@ -194,7 +194,7 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19 -> 20
 | 17. Error Message Humanization | 1/1 | Complete    | 2026-03-06 | - |
 | 18. Distribution Build | 1/1 | Complete    | 2026-03-06 | - |
 | 19. Pin OSRM Docker Image | 1/1 | Complete    | 2026-03-07 | - |
-| 20. Sync Error Message Documentation | v1.3 | 0/1 | Planned | - |
+| 20. Sync Error Message Documentation | 1/1 | Complete   | 2026-03-07 | - |
 
 ---
 *Full phase details for v1.0-v1.2 archived in `.planning/milestones/`*
