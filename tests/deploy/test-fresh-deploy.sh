@@ -62,7 +62,11 @@ if [ "$EXIT_CODE" -ne 0 ]; then
     echo "Inspect with: docker logs deploy-test-run"
 fi
 
-# Cleanup container
+# Cleanup
+echo ""
+echo "Cleaning up..."
 docker rm -f deploy-test-run 2>/dev/null || true
+docker rmi "$IMAGE_NAME" 2>/dev/null || true
+docker builder prune -f --filter "label=com.docker.compose.project=route-opt-deploy-test" 2>/dev/null || true
 
 exit "$EXIT_CODE"
