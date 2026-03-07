@@ -53,7 +53,7 @@
 - [x] **Phase 16: Documentation Corrections** - README and DEPLOY.md accuracy fixes for non-technical audience (completed 2026-03-05)
 - [x] **Phase 17: Error Message Humanization** - Plain-English upload and geocoding errors replacing Python internals (completed 2026-03-06)
 - [x] **Phase 18: Distribution Build** - Licensing module compilation for customer delivery (completed 2026-03-06)
-- [ ] **Phase 19: Pin OSRM Docker Image** - Fix osrm-init exit 127 by pinning image version and using POSIX shell (gap closure)
+- [x] **Phase 19: Pin OSRM Docker Image** - Fix osrm-init exit 127 by pinning image version and using POSIX shell (gap closure) (completed 2026-03-07)
 - [ ] **Phase 20: Sync Error Message Documentation** - Update CSV_FORMAT.md and DEPLOY.md to match Phase 17 humanized messages (gap closure)
 
 ## Phase Details
@@ -149,7 +149,7 @@ Plans:
   1. `docker-compose.yml` pins osrm/osrm-backend to v5.27.1 (matching docker-compose.prod.yml)
   2. osrm-init entrypoint uses `/bin/sh -c` instead of `/bin/bash -c` for POSIX resilience
   3. `docker compose up -d` starts osrm-init without exit 127
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] 19-01-PLAN.md -- Pin osrm/osrm-backend to v5.27.1 and switch /bin/bash to /bin/sh in compose files, osrm_setup.sh, and SETUP.md
@@ -192,7 +192,7 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19 -> 20
 | 16. Documentation Corrections | v1.3 | 2/2 | Complete | 2026-03-05 |
 | 17. Error Message Humanization | 1/1 | Complete    | 2026-03-06 | - |
 | 18. Distribution Build | 1/1 | Complete    | 2026-03-06 | - |
-| 19. Pin OSRM Docker Image | v1.3 | 0/1 | In Progress | - |
+| 19. Pin OSRM Docker Image | 1/1 | Complete   | 2026-03-07 | - |
 | 20. Sync Error Message Documentation | v1.3 | 0/0 | Pending | - |
 
 ---
