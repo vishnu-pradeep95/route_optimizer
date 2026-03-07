@@ -160,8 +160,8 @@ These errors appear immediately after you upload the file.
 | "File too large (15.2 MB). Maximum: 10 MB." | The file exceeds the 10 MB limit. | Split your orders into smaller files, or remove unnecessary rows. |
 | "No 'Allocated-Printed' orders found in CDCMS export. Check that the file has orders with status 'Allocated-Printed'." | The system detected a CDCMS export, but every order has a status other than "Allocated-Printed" (e.g., all are "Delivered" or "Cancelled"). | Export a fresh list from CDCMS that includes today's pending orders. |
 | "No valid orders found in file" | The file was read successfully but contained no usable order rows. | Check that the file has data rows below the header. |
-| "Missing address column. Expected 'address' or one of ['address', 'delivery_address', 'addr', 'customer_address']. Found columns: [...]" | The system could not find an address column in your standard CSV. | Rename your address column to `address`, `delivery_address`, `addr`, or `customer_address`. |
-| "CDCMS export is missing required columns: {'OrderNo', 'ConsumerAddress'}. ... Make sure you're uploading the raw CDCMS export file." | The file looks like a CDCMS export (tab-separated), but it is missing the OrderNo or ConsumerAddress column. | Make sure you exported the full report from CDCMS. Do not delete columns before uploading. |
+| "Missing address column 'address' -- make sure you're uploading the correct file format" | The system could not find an address column in your standard CSV. | Rename your address column to `address`, `delivery_address`, `addr`, or `customer_address`. |
+| "Required columns missing: ConsumerAddress, OrderNo -- make sure you're uploading the raw CDCMS export" | The file looks like a CDCMS export (tab-separated), but it is missing the OrderNo or ConsumerAddress column. | Make sure you exported the full report from CDCMS. Do not delete columns before uploading. |
 | "The 'ConsumerAddress' column exists but all values are empty. Check the file format." | The ConsumerAddress column is present but every row has a blank address. | Check the CDCMS export -- the addresses may not have been included. Re-export from CDCMS. |
 | "Unsupported file format: .txt. Use .csv, .xlsx, or .xls" | You uploaded a file with an unrecognized extension. | Rename the file to `.csv` if it contains comma-separated or tab-separated data, or save as `.xlsx`. |
 
@@ -174,6 +174,12 @@ These errors apply to individual rows. The system imports the valid rows and rep
 | "Empty address -- add a delivery address" | A row has no address. | Add the delivery address to that row. |
 | "Duplicate order_id 'ORD-001' -- already imported from an earlier row" | Two rows have the same order ID. | Give each order a unique ID, or remove the duplicate row. |
 | "Invalid weight '20kg' in weight_kg column -- using default 14.2 kg" | The weight column has a value that is not a number. This is a **warning** -- the order is still imported with the default weight. | Enter the weight as a number only (e.g., `14.2`), not with units. |
+| "Invalid number value -- check for letters or symbols in numeric fields" | A numeric column (like quantity or weight) contains text instead of a number. | Remove letters or symbols from numeric columns. Use digits only (e.g., `14.2` not `14.2kg`). |
+| "Unexpected value format -- check the cell contents" | A cell has an unexpected data format that the system cannot parse. | Check the cell for unusual characters or formatting. Clear the cell and re-type the value. |
+| "Invalid value in this row" | A cell contains a value the system does not recognize. | Review the row for typos or incorrect data. |
+| "Missing required field 'order_id' -- check your CSV has all required columns" | A required column is missing or the cell is empty in this row. | Make sure every row has values in the required columns. |
+| "Empty or invalid cell -- fill in required fields" | A required cell is empty or contains only whitespace. | Fill in the empty cell with the correct value. |
+| "Could not process this row -- check the data format" | The row has a data issue the system could not diagnose specifically. | Check all cells in this row for unusual formatting, then re-upload. |
 
 ### During Map Lookup (Geocoding Errors)
 
@@ -181,12 +187,13 @@ After importing, the system looks up each address on Google Maps. These errors m
 
 | What You See | Why It Happened | How to Fix It |
 |-------------|----------------|---------------|
-| "Address not recognized by Google Maps" | Google Maps could not find this address. The address may be misspelled or too vague. | Check the address for typos. Add more detail like the area name, post office, or nearby landmark. |
-| "Geocoding service error (contact admin)" | The Google Maps service rejected the request. This is a system configuration issue, not a problem with your file. | Contact the admin to check the Google Maps API key. |
-| "Geocoding quota exceeded (try again later)" | Too many addresses were looked up in a short time, exceeding the Google Maps limit. | Wait a few minutes and try uploading again. |
-| "Address could not be processed" | The address contains characters or formatting that Google Maps cannot handle. | Simplify the address -- remove special characters and use plain text. |
-| "Geocoding service temporarily unavailable" | Google Maps experienced a temporary error. | Try uploading again in a few minutes. |
-| "Geocoding service not configured (missing API key)" | The system does not have a Google Maps API key set up. Previously looked-up addresses still work from the cache. | Contact the admin to configure the Google Maps API key. |
+| "Address not found -- check spelling in CDCMS" | Google Maps could not find this address. The address may be misspelled or too vague. | Check the address for typos. Add more detail like the area name, post office, or nearby landmark. |
+| "Geocoding service blocked -- contact IT" | The Google Maps service rejected the request. This is a system configuration issue, not a problem with your file. | Contact IT to check the Google Maps API key configuration. |
+| "Google Maps quota exceeded -- contact IT" | Too many addresses were looked up in a short time, exceeding the Google Maps daily or per-second limit. | Contact IT. If urgent, wait a few minutes and try uploading again with fewer new addresses. |
+| "Address could not be processed -- check for unusual characters" | The address contains characters or formatting that Google Maps cannot handle. | Simplify the address -- remove special characters, brackets, or unusual punctuation and use plain text. |
+| "Google Maps is temporarily unavailable -- try again in a few minutes" | Google Maps experienced a temporary error. | Try uploading again in a few minutes. If the problem persists, contact IT. |
+| "Geocoding service not configured (missing API key)" | The system does not have a Google Maps API key set up. Previously looked-up addresses still work from the cache. | Contact IT to configure the Google Maps API key. |
+| "Could not find this address -- try checking the spelling" | Google Maps returned a status the system does not recognize, or the address lookup failed for an unknown reason. | Check the address for typos. Try adding more detail like the post office or landmark name. |
 
 ---
 
