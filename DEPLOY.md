@@ -198,40 +198,33 @@ cd ~/routing_opt
 ./scripts/start.sh
 ```
 
-### "File not found"
-
-```
-FileNotFoundError: CDCMS export file not found
-```
-
-**Fix:** Make sure you drag and drop the file onto the dashboard upload area. You do not need to copy files using terminal commands.
-
 ### "Missing required columns"
 
 ```
-ValueError: CDCMS export is missing required columns: {'OrderNo'}
+Required columns missing: ConsumerAddress, OrderNo -- make sure you're uploading the raw CDCMS export
 ```
 
-**Fix:** The file isn't a proper CDCMS export. Make sure you're exporting from the correct
-CDCMS page and the file has column headers like `OrderNo`, `ConsumerAddress`, etc.
+**Fix:** The file is not a proper CDCMS export. Make sure you are exporting from the correct CDCMS page and the file has column headers like OrderNo, ConsumerAddress, etc.
 
-### "No orders remain after filtering"
+### "No Allocated-Printed orders found"
 
 ```
-WARNING: No orders remain after filtering
+No 'Allocated-Printed' orders found in CDCMS export. Check that the file has orders with status 'Allocated-Printed'.
 ```
 
 **Fix:** Check your filter values:
 - Is the driver name spelled exactly as in CDCMS? (case doesn't matter)
 - Are there any "Allocated-Printed" orders in the file?
 
-### "Google Maps API key error"
+### "Geocoding service not configured"
 
 ```
-ERROR: GOOGLE_MAPS_API_KEY not set
+Geocoding service not configured (missing API key)
 ```
 
-**Fix:** Contact the technical team -- they need to configure the Google Maps API key.
+**Fix:** Contact IT -- they need to configure the Google Maps API key in the system.
+
+> **For a complete list of error messages, see [CSV_FORMAT.md > What Can Go Wrong](CSV_FORMAT.md#what-can-go-wrong).**
 
 ### System is slow / not responding
 
