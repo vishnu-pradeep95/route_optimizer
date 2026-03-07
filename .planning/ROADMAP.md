@@ -163,9 +163,10 @@ Plans:
   1. All error message strings in CSV_FORMAT.md match the actual humanized messages produced by the code
   2. DEPLOY.md error example uses plain English format instead of Python set notation
   3. Every documented error message can be traced to a specific code path
+**Plans:** 1 plan
 
 Plans:
-- [ ] (not yet planned)
+- [ ] 20-01-PLAN.md -- Sync CSV_FORMAT.md error tables (fix 2 stale file-level, add 6 row-level, replace 5+1 geocoding) and DEPLOY.md troubleshooting (remove stale section, update 3 sections, add cross-link), create ERROR-MAP.md traceability artifact
 
 ## Progress
 
@@ -193,7 +194,7 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19 -> 20
 | 17. Error Message Humanization | 1/1 | Complete    | 2026-03-06 | - |
 | 18. Distribution Build | 1/1 | Complete    | 2026-03-06 | - |
 | 19. Pin OSRM Docker Image | 1/1 | Complete    | 2026-03-07 | - |
-| 20. Sync Error Message Documentation | v1.3 | 0/0 | Pending | - |
+| 20. Sync Error Message Documentation | v1.3 | 0/1 | Planned | - |
 
 ---
 *Full phase details for v1.0-v1.2 archived in `.planning/milestones/`*
