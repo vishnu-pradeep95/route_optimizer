@@ -68,11 +68,11 @@ services:
   # - Init container runs once, then exits, consuming zero resources
   # See: SETUP.md Step 9 for the manual equivalent
   osrm-init:
-    image: osrm/osrm-backend:latest
+    image: osrm/osrm-backend:v5.27.1
     container_name: osrm-init
     volumes:
       - ./data/osrm:/data
-    entrypoint: ["/bin/bash", "-c"]
+    entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         set -e
@@ -104,7 +104,7 @@ services:
   # Uses Kerala OpenStreetMap data. Preprocessed with Multi-Level Dijkstra
   # for fastest queries. Runs on port 5000.
   osrm:
-    image: osrm/osrm-backend:latest
+    image: osrm/osrm-backend:v5.27.1
     container_name: osrm-kerala
     ports:
       - "5000:5000"

@@ -89,7 +89,7 @@ services:
     container_name: osrm-init-prod
     volumes:
       - ./data/osrm:/data
-    entrypoint: ["/bin/bash", "-c"]
+    entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         set -e
