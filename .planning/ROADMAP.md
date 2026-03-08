@@ -79,11 +79,12 @@
   3. The Dashboard renders route cards, generates a QR sheet, and loads the map after upload -- verified by passing Playwright tests
   4. Accessing the API with an expired, missing, or invalid license key returns HTTP 503 -- verified by a passing Playwright test
   5. All 420+ existing pytest unit tests continue to pass (no regressions from E2E infrastructure additions)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 21-01: TBD
-- [ ] 21-02: TBD
+- [ ] 21-01-PLAN.md -- Playwright infrastructure (config, fixtures, helpers) + API endpoint tests (TEST-01, TEST-05)
+- [ ] 21-02-PLAN.md -- Driver PWA E2E flow tests (TEST-02)
+- [ ] 21-03-PLAN.md -- Dashboard E2E tests + License validation tests (TEST-03, TEST-04)
 
 ### Phase 22: CI/CD Pipeline Integration
 **Goal**: E2E tests run automatically on every push to main, with clear failure diagnostics and visible project health status
@@ -156,7 +157,7 @@ Phases execute in numeric order: 21 -> 22 -> 23 -> 24
 | 18. Distribution Build | v1.3 | 1/1 | Complete | 2026-03-06 |
 | 19. Pin OSRM Docker Image | v1.3 | 1/1 | Complete | 2026-03-07 |
 | 20. Sync Error Message Documentation | v1.3 | 1/1 | Complete | 2026-03-07 |
-| 21. Playwright E2E Test Suite | v1.4 | 0/? | Not started | - |
+| 21. Playwright E2E Test Suite | v1.4 | 0/3 | Planning | - |
 | 22. CI/CD Pipeline Integration | v1.4 | 0/? | Not started | - |
 | 23. Distribution Verification & Ops | v1.4 | 0/? | Not started | - |
 | 24. Documentation Consolidation | v1.4 | 0/? | Not started | - |
