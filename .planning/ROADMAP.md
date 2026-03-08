@@ -126,10 +126,12 @@ Plans:
   4. An office employee encountering a Google Maps error can follow the troubleshooting guide through Cloud Console setup, key validation, and resolution of common errors (REQUEST_DENIED, OVER_QUERY_LIMIT, INVALID_REQUEST)
   5. Third-party license obligations (OSM attribution, OSRM/VROOM licenses, Leaflet/Google Maps terms) are documented with required attribution text and compliance notes
 
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 24-01: TBD
+- [ ] 24-01-PLAN.md -- Distribution workflow (DISTRIBUTION.md) + License lifecycle extension (LICENSING.md) (DOCS-01, DOCS-02)
+- [ ] 24-02-PLAN.md -- Environment comparison (ENV-COMPARISON.md) + Google Maps troubleshooting (GOOGLE-MAPS.md) (DOCS-03, DOCS-04)
+- [ ] 24-03-PLAN.md -- Third-party attribution (ATTRIBUTION.md) + build-dist.sh update + README.md doc index (DOCS-05)
 
 ## Progress
 
@@ -161,7 +163,7 @@ Phases execute in numeric order: 21 -> 22 -> 23 -> 24
 | 21. Playwright E2E Test Suite | 3/3 | Complete    | 2026-03-08 | - |
 | 22. CI/CD Pipeline Integration | 2/2 | Complete    | 2026-03-08 | - |
 | 23. Distribution Verification & Ops | 2/2 | Complete    | 2026-03-08 | - |
-| 24. Documentation Consolidation | v1.4 | 0/? | Not started | - |
+| 24. Documentation Consolidation | v1.4 | 0/3 | Not started | - |
 
 ---
 *Full phase details for v1.0-v1.3 archived in `.planning/milestones/`*
