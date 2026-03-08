@@ -45,11 +45,11 @@ else
     GREEN='' YELLOW='' RED='' BLUE='' BOLD='' NC=''
 fi
 
-info()    { echo -e "${BLUE}->>${NC} $*"; }
+info()    { echo -e "${BLUE}→${NC} $*"; }
 success() { echo -e "${GREEN}✓${NC} $*"; }
-warn()    { echo -e "${YELLOW}!!${NC} $*"; }
-error()   { echo -e "${RED}x${NC} $*" >&2; }
-header()  { echo -e "\n${BOLD}$*${NC}"; echo "---------------------------------------------"; }
+warn()    { echo -e "${YELLOW}⚠${NC} $*"; }
+error()   { echo -e "${RED}✗${NC} $*" >&2; }
+header()  { echo -e "\n${BOLD}$*${NC}"; echo "─────────────────────────────────────────"; }
 
 # =============================================================================
 # Constants
@@ -88,7 +88,9 @@ cleanup() {
     info "Cleaning up verification environment..."
     if [ -n "$EXTRACT_DIR" ] && [ -d "$EXTRACT_DIR" ]; then
         cd "$EXTRACT_DIR" 2>/dev/null || true
-        docker compose --project-name "$VERIFY_PROJECT" down --volumes --remove-orphans 2>/dev/null || true
+        docker compose --project-name "$VERIFY_PROJECT" \
+            -f docker-compose.verify.yml \
+            down --volumes --remove-orphans 2>/dev/null || true
     fi
     rm -rf "$VERIFY_DIR"
     success "Cleanup complete"
@@ -130,9 +132,9 @@ fi
 
 cp .env.example .env
 
-# Generate random credentials
-DB_PASS=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
-API_KEY=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
+# Generate random credentials (openssl avoids SIGPIPE from /dev/urandom+head with pipefail)
+DB_PASS=$(openssl rand -hex 16)
+API_KEY=$(openssl rand -hex 16)
 
 sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$DB_PASS|" .env
 sed -i "s|^API_KEY=.*|API_KEY=$API_KEY|" .env
@@ -145,24 +147,92 @@ success ".env generated with dummy credentials"
 # Step 3/5: Generate compose port override
 # =============================================================================
 
-header "Step 3/5: Generating port overrides"
+header "Step 3/5: Generating verification compose file"
 
-cat > docker-compose.verify.yml << 'OVERRIDE_EOF'
+# Generate a standalone compose file with ONLY the 4 services needed for
+# verification (db, db-init, dashboard-build, api). This avoids pulling in
+# OSRM/VROOM which download 300+ MB of map data and are not needed for
+# endpoint verification. Uses isolated ports to avoid conflicts.
+
+# Read DB password and API key from the .env we just generated
+VERIFY_DB_PASS=$(grep '^POSTGRES_PASSWORD=' .env | cut -d= -f2)
+VERIFY_API_KEY=$(grep '^API_KEY=' .env | cut -d= -f2)
+
+cat > docker-compose.verify.yml << OVERRIDE_EOF
 services:
   db:
+    image: postgis/postgis:16-3.5
     ports:
       - "5433:5432"
+    environment:
+      POSTGRES_DB: routing_opt
+      POSTGRES_USER: routing
+      POSTGRES_PASSWORD: ${VERIFY_DB_PASS}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U routing -d routing_opt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  db-init:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://routing:${VERIFY_DB_PASS}@db:5432/routing_opt
+    command: >
+      sh -c "
+        echo 'Running database migrations...' &&
+        alembic upgrade head &&
+        echo 'Database schema up to date'
+      "
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  dashboard-build:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.dashboard
+      args:
+        VITE_BASE_PATH: "/dashboard/"
+        VITE_API_KEY: "${VERIFY_API_KEY}"
+    volumes:
+      - dashboard_assets:/srv/dashboard
+    restart: "no"
+
   api:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
     ports:
-      - "8002:8000"
+      - "${VERIFY_PORT}:8000"
+    environment:
+      - GOOGLE_MAPS_API_KEY=
+      - API_KEY=${VERIFY_API_KEY}
+      - ENVIRONMENT=development
+      - OSRM_URL=http://localhost:5000
+      - VROOM_URL=http://localhost:3000
+      - DATABASE_URL=postgresql+asyncpg://routing:${VERIFY_DB_PASS}@db:5432/routing_opt
+    volumes:
+      - ./data:/app/data
+      - dashboard_assets:/srv/dashboard:ro
     depends_on:
       db-init:
         condition: service_completed_successfully
       dashboard-build:
         condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  dashboard_assets:
 OVERRIDE_EOF
 
-success "Port overrides generated (API on :$VERIFY_PORT)"
+success "Verification compose file generated (API on :$VERIFY_PORT)"
 
 # =============================================================================
 # Step 4/5: Build and start services
@@ -178,9 +248,8 @@ info "(Skipping OSRM/VROOM -- not needed for endpoint verification)"
 
 docker compose \
     --project-name "$VERIFY_PROJECT" \
-    -f docker-compose.yml \
     -f docker-compose.verify.yml \
-    up -d --build db db-init dashboard-build api
+    up -d --build
 
 echo ""
 info "Polling health endpoint (http://localhost:$VERIFY_PORT/health)..."
@@ -188,7 +257,7 @@ info "Polling health endpoint (http://localhost:$VERIFY_PORT/health)..."
 # Health polling with spinner (matches start.sh pattern)
 ELAPSED=0
 HEALTHY=false
-SPINNERS=("a" "b" "c" "d")
+SPINNERS=("*" "o" "O" "@")
 
 while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
     if curl -sf "http://localhost:$VERIFY_PORT/health" >/dev/null 2>&1; then
@@ -211,11 +280,15 @@ if [ "$HEALTHY" = false ]; then
     echo ""
     info "Diagnostic logs (last 30 lines):"
     echo ""
-    docker compose --project-name "$VERIFY_PROJECT" logs --tail=30 2>/dev/null || true
+    docker compose --project-name "$VERIFY_PROJECT" -f docker-compose.verify.yml logs --tail=30 2>/dev/null || true
     exit 1
 fi
 
 success "Services healthy after ${ELAPSED}s"
+
+# Brief pause to ensure all routes are initialized (StaticFiles mounts may
+# take a moment after the health endpoint becomes available)
+sleep 2
 
 # =============================================================================
 # Step 5/5: Verify endpoints
@@ -242,27 +315,29 @@ fi
 
 # Check 2: /driver/ returns HTML
 info "Checking GET /driver/ ..."
-DRIVER_BODY=$(curl -sf "http://localhost:$VERIFY_PORT/driver/" 2>/dev/null || echo "")
-if echo "$DRIVER_BODY" | grep -qi "html"; then
-    success "/driver/ -> HTML content served"
+DRIVER_CODE=$(curl -s -o /tmp/verify-driver.html -w "%{http_code}" "http://localhost:$VERIFY_PORT/driver/" 2>/dev/null || echo "000")
+if [ "$DRIVER_CODE" = "200" ] && grep -qi "html" /tmp/verify-driver.html 2>/dev/null; then
+    success "/driver/ -> 200 OK, HTML content served"
     PASS_COUNT=$((PASS_COUNT + 1))
 else
-    error "/driver/ -> No HTML content (response empty or not HTML)"
+    error "/driver/ -> HTTP $DRIVER_CODE (expected 200 with HTML)"
     FAIL_COUNT=$((FAIL_COUNT + 1))
     FAILED_CHECKS="$FAILED_CHECKS /driver/"
 fi
+rm -f /tmp/verify-driver.html
 
 # Check 3: /dashboard/ returns HTML
 info "Checking GET /dashboard/ ..."
-DASHBOARD_BODY=$(curl -sf "http://localhost:$VERIFY_PORT/dashboard/" 2>/dev/null || echo "")
-if echo "$DASHBOARD_BODY" | grep -qi "html"; then
-    success "/dashboard/ -> HTML content served"
+DASH_CODE=$(curl -s -o /tmp/verify-dashboard.html -w "%{http_code}" "http://localhost:$VERIFY_PORT/dashboard/" 2>/dev/null || echo "000")
+if [ "$DASH_CODE" = "200" ] && grep -qi "html" /tmp/verify-dashboard.html 2>/dev/null; then
+    success "/dashboard/ -> 200 OK, HTML content served"
     PASS_COUNT=$((PASS_COUNT + 1))
 else
-    error "/dashboard/ -> No HTML content (response empty or not HTML)"
+    error "/dashboard/ -> HTTP $DASH_CODE (expected 200 with HTML)"
     FAIL_COUNT=$((FAIL_COUNT + 1))
     FAILED_CHECKS="$FAILED_CHECKS /dashboard/"
 fi
+rm -f /tmp/verify-dashboard.html
 
 # =============================================================================
 # Results
@@ -281,13 +356,13 @@ if [ "$FAIL_COUNT" -eq 0 ]; then
     exit 0
 else
     echo -e "${RED}===============================================================${NC}"
-    echo -e "${RED}  x Verification FAILED: $PASS_COUNT/$TOTAL_CHECKS passed, $FAIL_COUNT failed    ${NC}"
+    echo -e "${RED}  ✗ Verification FAILED: $PASS_COUNT/$TOTAL_CHECKS passed, $FAIL_COUNT failed    ${NC}"
     echo -e "${RED}===============================================================${NC}"
     echo ""
     echo -e "  Failed checks:${FAILED_CHECKS}"
     echo ""
     info "Diagnostic logs:"
     echo ""
-    docker compose --project-name "$VERIFY_PROJECT" logs --tail=30 2>/dev/null || true
+    docker compose --project-name "$VERIFY_PROJECT" -f docker-compose.verify.yml logs --tail=30 2>/dev/null || true
     exit 1
 fi
