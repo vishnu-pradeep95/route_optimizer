@@ -1,5 +1,7 @@
 # Routing Optimization Platform
 
+![CI](https://github.com/vishnu-pradeep95/route_optimizer/actions/workflows/ci.yml/badge.svg)
+
 A modular delivery-route optimization system. First deployment: **Kerala LPG cylinder delivery** (HPCL distributor with 13 three-wheelers, 30–50 deliveries/day, 5 km radius from depot in Vatakara, Kozhikode).
 
 The architecture is designed to be **reusable across any delivery business** — the Kerala LPG app is the first consumer, not the only one.
