@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Ship-Ready QA
-status: completed
-stopped_at: Phase 22 context gathered
-last_updated: "2026-03-08T21:17:12.762Z"
-last_activity: 2026-03-08 -- Plan 21-03 executed (Dashboard & License E2E tests)
+status: in-progress
+stopped_at: Completed 22-01-PLAN.md
+last_updated: "2026-03-08T21:43:31Z"
+last_activity: 2026-03-08 -- Plan 22-01 executed (fix all pytest failures)
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_plans: 5
+  completed_plans: 4
+  percent: 80
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-08)
 
 ## Current Position
 
-Phase: 21 (1 of 4 in v1.4) -- Playwright E2E Test Suite
-Plan: 03 of 3 complete
-Status: Phase Complete
-Last activity: 2026-03-08 -- Plan 21-03 executed (Dashboard & License E2E tests)
+Phase: 22 (2 of 4 in v1.4) -- CI/CD Pipeline Integration
+Plan: 01 of 2 complete
+Status: In Progress
+Last activity: 2026-03-08 -- Plan 22-01 executed (fix all pytest failures)
 
-Progress: [████████████████████] 11/11 plans (100%)
+Progress: [████████████████░░░░] 4/5 plans (80%)
 
 ## Performance Metrics
 
@@ -47,6 +47,7 @@ Progress: [████████████████████] 11/11 p
 | v1.3 Office-Ready Deployment | 8 (13-20) | 10 | 2026-02-21 -> 2026-03-07 |
 | Phase 21 P02 | 3min | 2 tasks | 1 files |
 | Phase 21 P03 | 5min | 2 tasks | 3 files |
+| Phase 22 P01 | 10min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,13 @@ See `.planning/milestones/` for full phase details per milestone.
 - License tests use Docker Compose override on port 8001 for isolated production-mode testing
 - 38 total E2E tests pass across all 4 projects in ~22 seconds
 
+**Phase 22-01:**
+- Fixed 12 pytest failures (not 64 as estimated -- previous phases resolved most)
+- Root cause: upload endpoint now requires active vehicles (empty fleet returns 400)
+- Fix: mock get_active_vehicles with non-empty list + vehicle_db_to_pydantic returns Vehicle objects
+- API_KEY env leakage from scripts/import_orders.py load_dotenv() cleared in test fixtures
+- All 426 pytest tests pass with 0 failures
+
 ### Pending Todos
 
 5 pending -- see `.planning/todos/pending/`
@@ -83,6 +91,6 @@ See `.planning/milestones/` for full phase details per milestone.
 
 ## Session Continuity
 
-Last session: 2026-03-08T21:17:12.760Z
-Stopped at: Phase 22 context gathered
-Resume file: .planning/phases/22-ci-cd-pipeline-integration/22-CONTEXT.md
+Last session: 2026-03-08T21:43:31Z
+Stopped at: Completed 22-01-PLAN.md
+Resume file: .planning/phases/22-ci-cd-pipeline-integration/22-02-PLAN.md

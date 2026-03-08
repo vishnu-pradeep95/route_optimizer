@@ -17,7 +17,7 @@ Requirements for Ship-Ready QA milestone. Each maps to roadmap phases.
 
 ### CI/CD
 
-- [ ] **CICD-01**: GitHub Actions pipeline passes (fix any failing jobs)
+- [x] **CICD-01**: GitHub Actions pipeline passes (fix any failing jobs)
 - [ ] **CICD-02**: Playwright E2E job added to CI (Chromium-only, runs on push to main)
 - [ ] **CICD-03**: Playwright HTML report uploaded as CI artifact on failure
 - [ ] **CICD-04**: CI status badge added to README.md
@@ -65,7 +65,7 @@ Requirements for Ship-Ready QA milestone. Each maps to roadmap phases.
 | TEST-03 | Phase 21 | Complete |
 | TEST-04 | Phase 21 | Complete |
 | TEST-05 | Phase 21 | Complete |
-| CICD-01 | Phase 22 | Pending |
+| CICD-01 | Phase 22 | Complete |
 | CICD-02 | Phase 22 | Pending |
 | CICD-03 | Phase 22 | Pending |
 | CICD-04 | Phase 22 | Pending |
