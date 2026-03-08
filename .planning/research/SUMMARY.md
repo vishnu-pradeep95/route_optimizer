@@ -1,232 +1,190 @@
 # Project Research Summary
 
-**Project:** Kerala LPG Delivery Route Optimizer — v1.3 Office-Ready Deployment
-**Domain:** Deployment scripting, documentation UX, and error messaging for Docker Compose logistics app
-**Researched:** 2026-03-04
+**Project:** Kerala LPG Delivery Route Optimizer -- v1.4 Ship-Ready QA
+**Domain:** E2E testing infrastructure, CI/CD integration, distribution verification, operational scripts for Docker Compose delivery app
+**Researched:** 2026-03-08
 **Confidence:** HIGH
 
 ## Executive Summary
 
-This milestone (v1.3) is a pure deployment and documentation hardening pass on a fully-functional, already-deployed LPG delivery routing system. The system's Python/FastAPI/React/Docker stack is locked; no application code changes are in scope. The core work is closing the gap between "works on a developer machine" and "a non-technical office employee in Kerala can use this reliably every morning without IT assistance." The recommended approach is two new entrypoint scripts (`bootstrap.sh` for first-time WSL setup, `start.sh` for daily startup), a consolidated `CSV_FORMAT.md` reference document, plain-English error messages in the upload pipeline, and targeted documentation corrections across `README.md` and `DEPLOY.md`.
+v1.4 is a QA and distribution-readiness milestone on a mature, working product (v1.3 shipped with 420+ pytest tests, Docker Compose orchestration, and full deployment scripts). The core gap is that no automated browser-level testing exists -- the 30+ item CLAUDE.md E2E checklist is performed manually via Playwright MCP but never encoded as repeatable tests. CI does not exercise the running application. The distribution tarball is built but never verified as installable on a fresh machine. No graceful stop script exists for daily end-of-shift use. All four research streams converge on a clear conclusion: the existing stack (Playwright already installed, Docker Compose already working, bash script conventions already established) needs configuration and test authoring, not new technology adoption.
 
-The critical risk in this milestone is not technical — it is usability. Every pitfall identified maps back to one root cause: scripts and documentation that were written by and for developers. A non-technical user who hits "Cannot connect to the Docker daemon" or "missing required columns: {'OrderNo'}" has no path to self-recovery. The prevention strategy is a `start.sh` that wraps all daily startup into one zero-input command, a `CSV_FORMAT.md` that documents the CDCMS workflow from the user's perspective (not the system's schema), and error messages that say "Re-export from CDCMS with Allocated-Printed filter" rather than "KeyError: OrderStatus".
+The recommended approach is a four-phase build: (1) Playwright test infrastructure and first tests against the running Docker stack, (2) CI integration with the E2E job, (3) distribution verification and the stop/GC script, (4) documentation consolidation. This ordering is driven by dependency analysis -- Playwright config gates all E2E work, local test stability gates CI integration, and distribution verification gates customer delivery. The total estimated effort is 20-30 hours across all phases.
 
-The secondary risk is WSL2-specific infrastructure brittleness: Docker does not auto-start after a Windows reboot, OSRM silently OOM-kills on 8 GB laptops, and projects cloned to the Windows filesystem (`/mnt/c/`) produce CRLF errors and 10x slower I/O. These are all addressable in the install script with guards and `wsl.conf` configuration, and all must land before v1.3 ships. A test on an actual 8 GB laptop with a fresh WSL install is required for the install script phase — developer-machine testing will not surface the OSRM memory issue.
+The top risks are: Docker Compose service startup race conditions causing flaky tests in CI (solved by explicit health polling, not Playwright webServer); .pyc magic number mismatch between the developer's Python and the Docker image's Python (solved by compiling inside Docker); and the stop script accidentally destroying the production database volume (solved by using `docker compose stop` not `down -v`, and keeping volume cleanup exclusively in the existing `reset.sh`). All three risks have straightforward prevention strategies identified in the pitfalls research.
 
 ## Key Findings
 
 ### Recommended Stack
 
-No new runtime dependencies are introduced in v1.3. Every tool is bash (already on Ubuntu), `apt` (for Docker CE auto-install), `docker compose` (already in use), and plain GitHub-Flavored Markdown (for docs). The Docker CE install must use the official apt repository (`download.docker.com/linux/ubuntu`), not the `get.docker.com` convenience script or the Snap package. WSL Docker auto-start must use `/etc/wsl.conf` `[boot] command = "service docker start"` rather than a `.bashrc` hack — it fires once at WSL launch, requires no password, and does not pollute every new terminal session.
+No new technologies are required. Playwright `@playwright/test` v1.58.2 is already installed as a devDependency. The stack additions are configuration files and scripts using existing tools. See `.planning/research/STACK.md` for full details.
 
 **Core technologies:**
-- Bash 5.x (Ubuntu 22.04+): bootstrap and daily-start scripts — zero new dependencies, works before Docker is up
-- Docker CE via official apt repo: auditable, idempotent, correct install method — not Snap, not get.docker.com
-- `/etc/wsl.conf` `[boot]` section: Docker auto-start on WSL launch — eliminates daily sudo password prompt
-- `docker compose` plugin v2: already in use — installed automatically alongside `docker-ce`
-- GitHub-Flavored Markdown: CSV documentation — no build step, renders natively in GitHub and VS Code
+- **Playwright 1.58.2 (already installed):** E2E test framework -- `playwright.config.ts` must be created at project root, Chromium-only in CI (drivers and office staff both use Chrome)
+- **GitHub Actions `ubuntu-latest` runner:** CI host for E2E -- install Playwright browsers directly on runner (not Docker-in-Docker) because the app itself IS a Docker Compose stack
+- **Built-in `github` + `html` reporters:** CI test reporting -- PR failure annotations + HTML artifact for debugging, no third-party reporter packages
+- **Bash 5.x (existing conventions):** Stop/GC script and verification scripts -- matches `set -euo pipefail`, color helpers, `header()`/`info()`/`success()`/`error()` function pattern from existing scripts
+- **ShellCheck (pre-installed on CI runners):** Shell script linting -- catches quoting bugs and unbound variables in all `scripts/*.sh` files
 
-**What NOT to add:**
-- Docker Desktop (Windows): requires Pro/Enterprise license; WSL2 + Docker Engine is free and faster
-- Ansible/Chef/Puppet: overkill for single-machine setup; pure bash is the correct scope
-- Snap docker package: known WSL networking issues; use official apt repo
-- Interactive `read` prompts in `start.sh`: daily script must be zero-input
+**What NOT to add:** Cypress, Testcontainers, `@estruyf/github-actions-reporter`, `docker-compose-wait`, visual regression baselines, multi-browser testing. All were evaluated and rejected -- see STACK.md "What NOT to Add" section.
 
 ### Expected Features
 
-The features divide cleanly into two parallel workstreams: scripting and documentation. Scripting is entirely independent from documentation and can be built and tested first.
+See `.planning/research/FEATURES.md` for full analysis including effort estimates and dependency graph.
 
-**Must have (P1 — v1.3 completion):**
-- `start.sh` at project root — single daily startup: start Docker daemon, `docker compose up -d`, 60s health poll, print dashboard URL
-- `bootstrap.sh` at project root — one-time WSL setup: install Docker CE via apt, add docker group, git clone, call `install.sh`
-- `CSV_FORMAT.md` — consolidated single-page CSV reference with exact CDCMS column names, rejection reasons, address cleaning examples, Excel warning
-- README.md container name fix — `routing-db` → `lpg-db`, `routeopt` → `routing` in health check example
-- `<REPO_URL>` placeholder filled in README.md and DEPLOY.md
-- Plain-English error messages in upload pipeline — at minimum: missing column, empty file, wrong file type, geocoding failure
+**Must have (table stakes):**
+- Playwright E2E: API endpoint smoke tests (5-8 tests, no browser needed)
+- Playwright E2E: Driver PWA upload-to-delivery flow (the critical user path)
+- Playwright E2E: Dashboard route display and QR sheet generation
+- CI/CD pipeline with Playwright job (without this, E2E tests rot within weeks)
+- Stop script with garbage collection (daily end-of-shift use, separate from `reset.sh`)
+- Clean install verification from tarball (tests the product customers actually receive)
+- Google API key troubleshooting guide (single most common support issue)
+- Production vs development environment documentation
 
-**Should have (P2 — add during v1.3 if time permits):**
-- `scripts/status.sh` — `docker compose ps` wrapper with health check; gives staff a "is it running?" command
-- Docker auto-start opt-in in `install.sh` (writes `/etc/wsl.conf`)
-- Geocoding error codes (`REQUEST_DENIED`, `ZERO_RESULTS`) translated to plain English
-- Cross-links from README.md and DEPLOY.md to `CSV_FORMAT.md`
-- "Did you mean...?" fuzzy column name suggestion in error messages (Levenshtein distance, message-only — never auto-fix)
-- Address cleaning examples expanded to all 10 documented steps
+**Should have (differentiators):**
+- Playwright test report as CI artifact (saves hours of "works on my machine" debugging)
+- Distribution documentation (build-to-deliver pipeline consolidated)
+- License lifecycle documentation (generate, deliver, activate, renew, troubleshoot)
+- CI badge on README
+- Stop script with log rotation/truncation
 
-**Defer (v1.4+):**
-- Structured `UploadError` Pydantic model with `error_code` + `remediation` fields (requires coordinated API + dashboard change)
-- Desktop shortcut / `.bat` file for Windows launcher
-- Per-service status breakdown with suggested fixes in `status.sh`
+**Defer (v1.5+):**
+- Visual regression tests (requires baseline image management)
+- Offline PWA E2E test (complex service worker testing)
+- License validation E2E test (covered by existing pytest unit tests)
+- Performance/load testing (irrelevant at 50 orders/day scale)
+- Multi-browser testing (irrelevant -- all users on Chrome)
 
 ### Architecture Approach
 
-The architecture for v1.3 is a thin scripting layer added above the existing, unchanged Docker Compose stack. `bootstrap.sh` is a one-time system-provisioning wrapper that delegates all project-level setup to the existing `install.sh` — no logic duplication. `start.sh` is a daily fast-path that does exactly three things and no more: start Docker daemon, run `docker compose up -d` (no `--build`), poll `/health`. The key architectural rule is that documentation follows code, never the reverse: fix `README.md` to show `lpg-db`, do not rename the container in `docker-compose.yml` (which would silently break `backup_db.sh`'s hardcoded container name detection at lines 37-46).
+The architecture adds a Playwright test layer on top of the existing Docker Compose stack with no modifications to existing components. Tests run against `http://localhost:8000` where Docker Compose exposes ports. A Page Object Model pattern encapsulates UI selectors so tests remain stable when the UI changes (as it did in v1.1, v1.2). The stop script is the safe counterpart to `start.sh` -- it halts containers but preserves all data volumes. See `.planning/research/ARCHITECTURE.md` for full component diagrams and data flow.
 
 **Major components:**
-1. `bootstrap.sh` (new, project root) — fresh-machine entrypoint: installs Docker CE, clones repo, delegates to `install.sh`; idempotent guards on every step
-2. `start.sh` (new, project root) — daily entrypoint: starts Docker daemon, brings compose up, verifies health, prints URLs; zero prompts, zero rebuilds
-3. `scripts/install.sh` (minor update) — add bootstrap context note in header; no logic changes; remains the developer setup tool
-4. `DEPLOY.md` (targeted updates) — Section 3.1: replace 4-command block with `./start.sh`; Section 2.3: reference `bootstrap.sh`
-5. `README.md` (targeted corrections) — Docker Services table: fix `routing-db` → `lpg-db`; Quick Start: lead with `./scripts/install.sh`
-6. `CSV_FORMAT.md` (new) — standalone CSV specification with CDCMS workflow, rejection reasons, column constraints
-7. Upload pipeline error messages (targeted string updates) — wrap Google Maps error codes and validation failures in plain English
+1. **`playwright.config.ts`** -- Test runner configuration (baseURL, Chromium-only, CI-aware retries/reporters)
+2. **`e2e/` directory** -- Test specs, Page Object Models, fixtures, and helpers (separated from Python `tests/` to avoid pytest/Playwright discovery conflicts)
+3. **`e2e/pages/*.page.ts`** -- Page Object Models for Driver PWA, Upload flow, and Dashboard (encapsulate selectors, expose high-level actions like `uploadCSV()`, `markStopDone()`)
+4. **CI `e2e` job** -- 4th GitHub Actions job: start Docker Compose on runner, install Chromium, run tests, upload artifacts, teardown
+5. **`scripts/stop.sh`** -- Graceful shutdown (`docker compose stop`) with optional `--gc` flag for image/cache pruning; NEVER touches named volumes
 
-**Unchanged (frozen — do not touch):**
-- `scripts/deploy.sh`, `scripts/backup_db.sh`, `docker-compose.yml`, `docker-compose.prod.yml` — any container rename breaks backup auto-detection
-- All API Python code and React dashboard code — out of scope for v1.3
-- Driver PWA — out of scope for v1.3
+**Key architectural decisions:**
+- Docker Compose managed externally (not via Playwright `webServer`) -- avoids port-open-before-service-ready race condition
+- OSRM/VROOM skipped in CI -- too slow to download/preprocess; UI rendering and API contract tests do not need the optimization engine
+- Database state reset via `beforeAll` hooks or test-only reset endpoint -- prevents order-dependent test failures
+- E2E tests use pre-geocoded/seeded data -- avoids dependency on Google Maps API key in CI
 
 ### Critical Pitfalls
 
-1. **Docker does not auto-start after Windows reboot** — Configure `/etc/wsl.conf` `[boot] command = "service docker start"` during installation. Without this, the office employee faces a cryptic "Cannot connect to Docker daemon" error every morning after a laptop reboot. Currently `install.sh` does not write `wsl.conf`.
+See `.planning/research/PITFALLS.md` for all 10 pitfalls with detailed prevention strategies.
 
-2. **OSRM OOM-kills silently on 8 GB laptops** — Add a memory check before OSRM init: if WSL2 memory is below 5 GB, warn and print `.wslconfig` instructions before attempting preprocessing. Container exits with code 137 and the generic timeout message gives no diagnosis. Test specifically on a 4 GB WSL2 machine.
+1. **Service startup race condition** -- Docker opens ports before the app is ready; Playwright detects the port and starts tests prematurely. Prevention: use `globalSetup` with `/health` endpoint polling (not `webServer` config). Verification: tests pass on cold start `docker compose down && npx playwright test`.
 
-3. **Project cloned to Windows filesystem breaks everything** — Add a filesystem check in `install.sh`: if `$(pwd)` starts with `/mnt/`, abort with a clear message. CRLF line endings break bash scripts (`/bin/bash^M: bad interpreter`), file permissions are fake (NTFS), and OSRM I/O is 10x slower on the translation layer.
+2. **CI resource constraints causing flaky tests** -- GitHub Actions shared runners have 2 vCPUs / 7 GB RAM running 4 Docker containers + Chromium simultaneously. Prevention: `--workers=1`, `retries: 2` in CI, `trace: 'on-first-retry'`, upload artifacts for debugging.
 
-4. **OSRM `:latest` image tag causes silent version drift** — Pin `osrm-init` and `osrm` to a specific version tag in `docker-compose.yml`. A `docker compose pull` after an OSRM major release will silently break existing preprocessed data — the init container skips reprocessing (data exists) but the runtime container fails to load incompatible files.
+3. **.pyc magic number mismatch in distribution tarball** -- `build-dist.sh` compiles `.pyc` with local Python; Docker image may use a different patch version. Prevention: compile .pyc inside Docker (`docker run --rm -v ... python:3.12-slim python -m compileall`), or pin Docker image to exact patch version.
 
-5. **CSV documentation describes internals, not the user's workflow** — Write `CSV_FORMAT.md` backward from the CDCMS export workflow. Use exact CDCMS column names (`OrderNo`, `ConsumerAddress`), not internal system names (`order_id`, `address`). The most common errors (wrong export page, wrong status filter, Excel resave as XLSX) are workflow errors, not schema errors.
+4. **Stop script destroys production database** -- `docker compose down -v` removes named volumes including `pgdata`. Prevention: use `docker compose stop` (not `down -v`); keep volume cleanup exclusively in `reset.sh` with confirmation prompts.
+
+5. **E2E tests leak state between runs** -- Tests upload CSVs and create routes; next test finds stale data. Prevention: database reset in `beforeAll` hooks or test-only `/api/test/reset` endpoint (guarded by `ENVIRONMENT=test`).
+
+6. **Google Maps API key missing in CI** -- Upload flow requires geocoding which fails without API key. Prevention: seed database with pre-geocoded addresses; E2E tests must pass with no `GOOGLE_MAPS_API_KEY` set.
+
+7. **Tarball missing critical files** -- `rsync --exclude` overshoot silently drops required files. Prevention: manifest verification step in `build-dist.sh` that checks for 15+ required files after staging.
 
 ## Implications for Roadmap
 
-Based on research, suggested phase structure:
+Based on combined research, the suggested structure is 4 phases with a clear dependency chain.
 
-### Phase 1: Install Script Hardening
+### Phase 1: Playwright Test Infrastructure + First Tests
+**Rationale:** Everything else depends on this. Playwright config must exist before any test runs. The API smoke tests validate that the test infrastructure works before investing in browser tests. The Driver PWA flow is the highest-value user path and the most complex to automate.
+**Delivers:** `playwright.config.ts`, `e2e/` directory structure, Page Object Models, API smoke tests (5-8 tests), Driver PWA E2E flow, Dashboard E2E flow
+**Addresses:** Table stakes features -- Playwright E2E (API, Driver PWA, Dashboard)
+**Avoids:** Pitfall 1 (startup race -- configure globalSetup with health polling from day one), Pitfall 6 (Google API key -- establish seeding/mocking strategy before writing upload tests), Pitfall 10 (state leakage -- build database reset into fixture setup from the start)
+**Estimated effort:** 10-14 hours
+**Build order within phase:** config + API smoke tests first (validate infrastructure), then Page Object Models, then Driver PWA spec, then Dashboard spec
 
-**Rationale:** The highest-risk items are the pitfalls that prevent the system from starting at all after a Windows reboot or on a low-memory machine. These must be fixed before any other work is usable by the target user. `install.sh` hardening is also a prerequisite for `bootstrap.sh` — bootstrap delegates to install, so install must be correct first.
+### Phase 2: CI/CD Pipeline Integration
+**Rationale:** Tests that do not run in CI rot within weeks. This phase takes locally-passing tests and makes them reliable in GitHub Actions. Must come after Phase 1 (need passing tests before adding CI complexity).
+**Delivers:** 4th CI job (`e2e`), ShellCheck lint job, Playwright browser caching, artifact upload on failure, `package.json` script updates
+**Addresses:** Table stakes feature -- CI/CD pipeline fix and Playwright integration
+**Avoids:** Pitfall 2 (CI flakiness -- configure `--workers=1`, increased timeouts, trace artifacts), Pitfall 6 (no API key in CI -- tests already use seeded data from Phase 1)
+**Estimated effort:** 3-4 hours
+**Key constraint:** OSRM/VROOM not started in CI. Only `db`, `db-init`, `dashboard-build`, `api` services. Tests focus on UI rendering and API contracts.
 
-**Delivers:** Reliable single-command installation on any 8 GB+ Windows laptop with WSL2 Ubuntu; automatic Docker startup after reboot; clear OOM and filesystem error messages; OSRM image version pinned
+### Phase 3: Distribution Verification + Operational Scripts
+**Rationale:** Before declaring the product ship-ready, verify that the actual customer deliverable (tarball) works on a fresh machine. The stop script is operationally independent but belongs in this phase because it rounds out the deployment lifecycle (bootstrap -> install -> start -> stop). The .pyc compilation fix must land before building any customer tarballs.
+**Delivers:** Tarball manifest verification in `build-dist.sh`, clean install verification script, `scripts/stop.sh` with `--gc` flag, `stop_grace_period: 30s` for PostgreSQL in `docker-compose.yml`
+**Addresses:** Table stakes features -- clean install verification, stop script with GC
+**Avoids:** Pitfall 3 (.pyc mismatch -- fix compilation to use Docker), Pitfall 4 (stop script data loss -- use `docker compose stop`, never `-v`), Pitfall 5 (cached state masking fresh-install problems -- test on fresh WSL instance), Pitfall 8 (tarball missing files -- add manifest verification), Pitfall 9 (PostgreSQL unclean shutdown -- set grace period)
+**Estimated effort:** 4-6 hours
 
-**Addresses (from FEATURES.md):** Docker auto-start in wsl.conf, non-zero exit with human-readable reason on failure, idempotent re-run behavior, memory check before OSRM init
-
-**Avoids (from PITFALLS.md):** Pitfall 1 (Docker not auto-starting), Pitfall 2 (OSRM OOM kill), Pitfall 3 (Windows filesystem clone), Pitfall 4 (interactive read hang), Pitfall 7 (OSRM image version drift), Pitfall 12 (health check timeout hides which service is stuck)
-
-**Research flag:** No deeper research needed — patterns are fully documented in official Docker and Microsoft WSL docs.
-
-### Phase 2: Daily Startup Script (`start.sh`)
-
-**Rationale:** `start.sh` is the highest daily-impact change and lowest risk — it calls only `docker compose up -d` and `curl`. It can be tested on the existing running system. Building this second (after install hardening) means it can rely on the wsl.conf auto-start from Phase 1. Getting `start.sh` right first also establishes the color/output conventions before writing the more complex `bootstrap.sh`.
-
-**Delivers:** Single command daily startup with 60s health check, URL output, and graceful "already running" handling; zero prompts; no image rebuilds
-
-**Addresses (from FEATURES.md):** Single script for daily startup (P1), success output with actionable URLs (P1), idempotent re-run behavior (P1), graceful timeout feedback (P2)
-
-**Avoids (from PITFALLS.md):** Pitfall 5 (daily workflow too complex), Pitfall 8 (sudo password required daily — wsl.conf from Phase 1 eliminates the need); Anti-Pattern 2 (start.sh that rebuilds images); Anti-Pattern 4 (prompting for credentials in start.sh)
-
-**Research flag:** No deeper research needed — standard shell scripting with documented WSL2 patterns.
-
-### Phase 3: `bootstrap.sh` (Fresh Machine Entrypoint)
-
-**Rationale:** `bootstrap.sh` depends on `install.sh` being correct (Phase 1) and reuses the script conventions from Phase 2. The Docker CE install sequence is well-documented; the main complexity is the docker group restart requirement, which has a known idiomatic solution (exit-and-rerun pattern: add user to group, instruct terminal restart, rerun on next invocation).
-
-**Delivers:** True one-command first-time setup on a fresh WSL Ubuntu install — covers Docker CE installation via official apt repo, docker group, repo clone, and delegation to `install.sh`
-
-**Addresses (from FEATURES.md):** One-command install for non-technical user (core v1.3 goal from PROJECT.md)
-
-**Avoids (from PITFALLS.md):** Pitfall 3 (bootstrap targets Linux home directory `~/routing_opt` explicitly); Anti-Pattern 1 (Docker install logic inside install.sh — kept separate); Anti-Pattern 5 (monolithic script)
-
-**Research flag:** No deeper research needed — Docker CE official apt install is exactly documented with auditable steps.
-
-### Phase 4: CSV Documentation (`CSV_FORMAT.md`)
-
-**Rationale:** Documentation is independent of script work and can be written in parallel with Phases 2-3. Writing it after install hardening is confirmed means no documentation promises the system cannot keep. `CSV_FORMAT.md` must exist before Phase 5 (error messages can reference it) and before Phase 6 (DEPLOY.md cross-links to it).
-
-**Delivers:** Single-page CSV reference covering both CDCMS and generic formats; exact column names from actual CDCMS exports; rejection reasons with plain-English explanations; address cleaning before/after examples; explicit Excel warning; pre-upload checklist
-
-**Addresses (from FEATURES.md):** CSV_FORMAT.md (P1), single-page CSV cheat sheet (P2), error message glossary (P2), address cleaning examples expanded to all 10 steps (P2)
-
-**Avoids (from PITFALLS.md):** Pitfall 6 (CSV docs describe internals not workflow — write workflow-first), Pitfall 10 (path substitution in docs)
-
-**Research flag:** No deeper research needed — content is extracted directly from existing code (`cdcms_preprocessor.py`, `csv_importer.py`) and existing `DEPLOY.md`.
-
-### Phase 5: Documentation Corrections (README + DEPLOY)
-
-**Rationale:** Documentation corrections are the lowest-risk changes and are ordered after the scripts exist so docs describe what actually ships. DEPLOY.md updates reference `start.sh` and `bootstrap.sh`; README corrections are independent of everything. This phase also includes the DEPLOY.md restructuring for non-technical users: prominent Ubuntu terminal warning, git clone to Linux home directory, and daily use section that fits on one printed page.
-
-**Delivers:** Accurate README Docker Services table; filled `<REPO_URL>` placeholder; DEPLOY.md Section 3.1 replaced with `./start.sh`; DEPLOY.md Section 2.3 referencing `bootstrap.sh`; prominent warning that all commands run in Ubuntu terminal not PowerShell; cross-links to `CSV_FORMAT.md`
-
-**Addresses (from FEATURES.md):** README container name fixes (P1), REPO_URL placeholder filled (P1), CSV_FORMAT.md cross-links (P2), version badge/last-updated date (P2)
-
-**Avoids (from PITFALLS.md):** Pitfall 3 (doc must warn "Ubuntu terminal not PowerShell"), Pitfall 5 (documentation not readable by non-technical users), Pitfall 11 (stale container names break copy-paste troubleshooting)
-
-**Research flag:** No deeper research needed — pure documentation corrections against known ground truth (`docker-compose.yml` container names).
-
-### Phase 6: Plain-English Error Messages
-
-**Rationale:** Error message improvements touch Python API upload pipeline code and are more invasive than documentation-only changes. Ordering last ensures `CSV_FORMAT.md` exists so error messages can reference it. P1 items (missing column, empty file, wrong file type) are simple string changes with zero architectural impact; the P2 geocoding error translation requires wrapping Google Maps API error codes.
-
-**Delivers:** Human-readable upload error messages for the three most common failure cases; geocoding error codes (`REQUEST_DENIED`, `ZERO_RESULTS`, `OVER_DAILY_LIMIT`) translated to staff-facing language with remediation steps linking to `CSV_FORMAT.md`
-
-**Addresses (from FEATURES.md):** Plain-English error messages in upload pipeline (P1), geocoding error plain-English (P2), "Did you mean...?" column name suggestion (P2)
-
-**Avoids (from PITFALLS.md):** Pitfall 6 (cryptic error messages cause users to give up); Anti-Feature "auto-correct column names" — suggest but never silently fix
-
-**Research flag:** P1 string changes need no research. If the P3 structured `UploadError` model is pursued, it requires a coordinated dashboard UI change — flag for a dedicated planning discussion before that sub-task begins.
+### Phase 4: Documentation Consolidation
+**Rationale:** Documentation has no technical dependencies and can proceed in parallel with other work, but is listed last because it benefits from having the verified tooling (E2E tests, CI, stop script, tarball verification) in place -- docs can reference actual commands and workflows. Write customer-facing docs first, developer docs second.
+**Delivers:** Google API key troubleshooting guide (decision tree format), distribution documentation (build-to-deliver pipeline), license lifecycle documentation (customer-facing + developer reference), production vs development environment docs
+**Addresses:** Table stakes features -- Google API troubleshooting, prod vs dev docs; differentiator features -- distribution docs, license lifecycle docs
+**Avoids:** Pitfall 7 (technical docs for non-technical readers -- write customer-facing version first with plain-English error explanations and "contact support" procedures)
+**Estimated effort:** 4-6 hours
 
 ### Phase Ordering Rationale
 
-- Phases 1-3 (scripting) are ordered by dependency: install hardening enables both `start.sh` and `bootstrap.sh`. Writing scripts before docs prevents documentation from making promises the scripts cannot keep.
-- Phases 4 and 5 can be parallelized with Phases 2-3 if two people are available — they have no script dependencies, only the constraint that Phase 4 precedes Phase 5 (DEPLOY.md cross-links to `CSV_FORMAT.md`).
-- Phase 6 (error messages) comes last because it modifies Python API code and benefits from `CSV_FORMAT.md` existing as a reference target in remediation text.
-- `start.sh` before `bootstrap.sh` because `start.sh` validates the output conventions and can be tested immediately on the running system; `bootstrap.sh` cannot be tested without a fresh machine.
+- **Dependency chain:** Config -> tests -> CI -> distribution -> docs. Each phase builds on the previous one. You cannot add tests to CI before they pass locally. You cannot verify distribution before fixing .pyc compilation.
+- **Risk-first:** Phase 1 addresses the three highest-complexity pitfalls (startup race, state leakage, API key mocking). Getting these right early prevents cascading failures in later phases.
+- **Value delivery:** Phase 1 alone delivers the highest-value outcome (automated E2E tests for the critical user paths). If the milestone is time-constrained, Phase 1 is the minimum viable delivery.
+- **Architecture grouping:** Phases group naturally by component boundary -- Phase 1 is all Playwright, Phase 2 is all CI YAML, Phase 3 is all bash scripts, Phase 4 is all markdown.
 
 ### Research Flags
 
 Phases likely needing deeper research during planning:
-- **Phase 6 (structured UploadError model, P3 only):** If the structured error response with `error_code` + `remediation` fields is pursued, it requires coordinated FastAPI and React dashboard changes. Flag for a dedicated research pass on the `ImportSummary` dashboard component before planning that sub-task.
+- **Phase 1:** The database state reset strategy (test-only API endpoint vs SQL truncation vs transaction rollback) needs a concrete decision during phase planning. The seeded-data approach for bypassing Google Geocoding also needs the specific seed data defined.
+- **Phase 2:** OSRM data caching in CI (GitHub Actions cache for `data/osrm/`) is a future optimization that may need research if full-stack E2E is desired later.
 
 Phases with standard patterns (skip research-phase):
-- **Phase 1** (install script hardening): Official Docker CE apt install and WSL `wsl.conf` patterns are fully documented with exact commands.
-- **Phase 2** (`start.sh`): Standard bash scripting; WSL2 health-check pattern already exists in `install.sh` — reuse it.
-- **Phase 3** (`bootstrap.sh`): Docker CE install sequence is exactly documented; docker group restart pattern is canonical.
-- **Phase 4** (`CSV_FORMAT.md`): Content is entirely in existing codebase; no external research needed.
-- **Phase 5** (documentation corrections): Pure text corrections against known ground truth in `docker-compose.yml`.
-- **Phase 6, P1** (plain-English strings): Simple string edits in `cdcms_preprocessor.py` and `google_adapter.py`.
+- **Phase 3:** Stop script and tarball verification are straightforward bash scripting following established project conventions. All Docker commands are documented. No research needed.
+- **Phase 4:** Documentation consolidation is reorganizing existing content. No research needed.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All technologies already in use; Docker CE apt install verified against official docs 2026-03-04; no new dependencies introduced |
-| Features | HIGH | Full codebase audit performed; gap analysis against PROJECT.md v1.3 goals; all P1 items are string or file changes, not architectural |
-| Architecture | HIGH | Based on direct inspection of all scripts (install.sh 324 lines, deploy.sh, backup_db.sh lines 37-46) and docker-compose.yml; no assumptions |
-| Pitfalls | HIGH | WSL/Docker issues verified against official docs and community issue trackers; OOM and CRLF pitfalls verified with multiple sources |
+| Stack | HIGH | All tools already installed or pre-available. Playwright 1.58.2 is pinned. No new dependencies. Verified against official Playwright CI docs, Docker docs. |
+| Features | HIGH | Feature list derived from existing CLAUDE.md E2E checklist and codebase analysis. Effort estimates based on comparable Playwright projects. Clear table stakes vs differentiator separation. |
+| Architecture | HIGH | Architecture adds a test layer on top of an existing, stable system. Page Object Model and CI patterns are well-documented Playwright conventions. No novel architectural decisions. |
+| Pitfalls | HIGH | All 10 pitfalls verified against official documentation (Playwright CI docs, Docker signal handling docs, CPython .pyc specs). Race condition and .pyc mismatch pitfalls confirmed by GitHub issue trackers and community reports. |
 
 **Overall confidence:** HIGH
 
+This is a well-scoped QA milestone on a mature codebase with no technology unknowns. The existing Playwright installation, Docker Compose stack, and bash script conventions provide a solid foundation. Every recommendation uses tools already available in the project.
+
 ### Gaps to Address
 
-- **8 GB laptop testing:** All install script hardening (Phase 1) must be validated on a machine with 4 GB WSL2 memory allocation, not just a developer machine. The OSRM OOM pitfall (exit 137) will not surface on a 16 GB machine with ample WSL2 memory.
-- **Actual REPO_URL:** The `<REPO_URL>` placeholder fix (Phase 5) requires knowing the actual repository URL or a decision on whether to replace it with a specific URL or a "contact IT" instruction. Clarify before Phase 5.
-- **OSRM version to pin:** The correct specific OSRM version tag to use in `docker-compose.yml` must match what was used to preprocess the existing Kerala OSM data. Check the actual installed image version before Phase 1 to avoid forcing a re-preprocessing during the upgrade.
-- **wsl.conf edge case:** If the target machine already has a `[boot]` section in `/etc/wsl.conf` for another purpose, the sed-based insertion needs testing. The research-provided idempotency snippet handles this case but it should be verified on a machine with an existing wsl.conf.
+- **Database state reset strategy:** Research identifies three options (test-only API endpoint, SQL truncation in beforeAll, transaction rollback) but does not prescribe which one. Decision needed during Phase 1 planning based on API framework capabilities.
+- **Seeded test data for geocoding bypass:** The specific CSV fixture and pre-geocoded database records need to be defined. Should use addresses from the existing test fixtures or synthetic Kerala addresses that are already in the geocode cache.
+- **OSRM in CI (future):** If full optimization-flow E2E tests are ever desired in CI, the OSRM data download (~150 MB) and preprocessing need a caching strategy. Not needed for v1.4 but flagged for future milestones.
+- **Physical Android device testing:** Listed as tech debt in PROJECT.md. E2E tests run in desktop Chromium, not on a real Android phone. Outdoor contrast and touch target sizes cannot be verified by Playwright. This remains a manual verification gap.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- `scripts/install.sh` — 324 lines, direct inspection; health check pattern, spinner, color output conventions, existing prereq check structure
-- `scripts/deploy.sh` — direct inspection; production deploy flow, container name references
-- `scripts/backup_db.sh` — direct inspection; lines 37-46, hardcoded container name auto-detection (`lpg-db`/`lpg-db-prod`)
-- `docker-compose.yml` — direct inspection; 6 services, actual container names, `service_completed_successfully` conditions
-- `DEPLOY.md` — direct inspection; daily workflow (3-command block in Section 3.1), CSV docs, Section 2.3 manual Docker install
-- `README.md` — direct inspection; stale container name at lines 403-408 (`routing-db`), REPO_URL placeholder at line 15
-- `.env.example` — direct inspection; all environment variables with defaults
-- [Docker Engine install on Ubuntu — official docs](https://docs.docker.com/engine/install/ubuntu/) — GPG key setup, apt repo, exact package names
-- [Docker post-install steps — official docs](https://docs.docker.com/engine/install/linux-postinstall/) — docker group, usermod pattern, restart requirement
-- [WSL systemd support — Microsoft Learn](https://learn.microsoft.com/en-us/windows/wsl/systemd) — wsl.conf `[boot]` section, WSL version requirements, `service docker start` pattern
-- [Google Maps Geocoding API billing and quotas](https://developers.google.com/maps/documentation/geocoding/usage-and-billing) — free tier limits, quota cap configuration
+- [Playwright CI documentation](https://playwright.dev/docs/ci) -- GitHub Actions setup, Docker image recommendations, caching
+- [Playwright CI intro](https://playwright.dev/docs/ci-intro) -- Recommended YAML, `--with-deps` flag, artifact upload
+- [Playwright Docker documentation](https://playwright.dev/docs/docker) -- Official images, version pinning, `--ipc=host`
+- [Playwright test configuration](https://playwright.dev/docs/test-configuration) -- `defineConfig`, `webServer`, `projects`, `reporter`
+- [Playwright webServer documentation](https://playwright.dev/docs/test-webserver) -- `command`, `url`, `reuseExistingServer`
+- [Playwright Page Object Models](https://playwright.dev/docs/pom) -- Official POM pattern
+- [Playwright test reporters](https://playwright.dev/docs/test-reporters) -- Built-in reporters
+- [Docker Compose stop documentation](https://docs.docker.com/reference/cli/docker/compose/stop/) -- SIGTERM, grace period, SIGKILL
+- [Docker Compose down documentation](https://docs.docker.com/reference/cli/docker/compose/down/) -- `-v` flag behavior
+- [PEP 3147](https://peps.python.org/pep-3147/) -- .pyc magic numbers, version-specific caching
+- [Google Maps Error Messages](https://developers.google.com/maps/documentation/javascript/error-messages) -- REQUEST_DENIED causes
+- Existing codebase: `ci.yml`, `docker-compose.yml`, `package.json`, `scripts/`, `tests/`, `build-dist.sh`, `DEPLOY.md`, `LICENSING.md`
 
 ### Secondary (MEDIUM confidence)
-- [Docker compose `--wait-timeout` bug — docker/compose#12134](https://github.com/docker/compose/issues/12134) — `service_completed_successfully` hang; confirmed issue; use manual health polling instead
-- [WSL2 docker auto-start options — codestudy.net](https://www.codestudy.net/blog/sudo-systemctl-enable-docker-not-available-automatically-run-docker-at-boot-on-wsl2-using-a-sysvinit-init-command-or-a-workaround/) — sysvinit vs systemd comparison, wsl.conf boot command pattern; consistent with Microsoft docs
-- [WSL2 file permissions and /mnt/c gotchas — turek.dev](https://www.turek.dev/posts/fix-wsl-file-permissions/) — CRLF, permission bits, I/O performance
-- [Docker `:latest` tag pitfalls — vsupalov.com](https://vsupalov.com/docker-latest-tag/) — version drift, backward-compatibility breakage
-- [WSL2 memory configuration — ITNEXT](https://itnext.io/wsl2-tips-limit-cpu-memory-when-using-docker-c022535faf6f) — `.wslconfig` memory limits, recommended values
-
-### Tertiary (LOW confidence)
-- [CSV/Excel encoding pitfalls — hilton.org.uk](https://hilton.org.uk/blog/csv-excel) — BOM, CRLF, XLSX resave encoding; consistent with known Excel behavior
-- [Bash pitfalls — Greg's Wiki](https://mywiki.wooledge.org/BashPitfalls) — stdin detection pattern, `[ -t 0 ]` usage
+- [BrowserStack: Playwright Best Practices 2026](https://www.browserstack.com/guide/playwright-best-practices)
+- [Better Stack: Avoid Flaky Playwright Tests](https://betterstack.com/community/guides/testing/avoid-flaky-playwright-tests/)
+- [Dockerized E2E Tests with GitHub Actions](https://lachiejames.com/elevate-your-ci-cd-dockerized-e2e-tests-with-github-actions/)
+- [Playwright webServer race condition with Docker Compose](https://github.com/sillsdev/web-languageforge/issues/1402)
+- [Docker Graceful Shutdown Signals](https://oneuptime.com/blog/post/2026-01-16-docker-graceful-shutdown-signals/view)
 
 ---
-*Research completed: 2026-03-04*
+*Research completed: 2026-03-08*
 *Ready for roadmap: yes*

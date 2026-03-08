@@ -1,9 +1,9 @@
 # Stack Research
 
-**Domain:** WSL bootstrap, Docker auto-install, daily-use scripts, user-facing documentation
-**Researched:** 2026-03-04
+**Domain:** E2E testing, CI/CD pipeline, operational scripts, distribution verification
+**Researched:** 2026-03-08
 **Confidence:** HIGH
-**Scope:** v1.3 milestone only — "Office-Ready Deployment". Existing Python/FastAPI/React/Docker stack is locked. This document covers ONLY what is new: one-command WSL install with Docker auto-provisioning, a daily start script, and CSV documentation format.
+**Scope:** v1.4 milestone only — "Ship-Ready QA". Existing Python/FastAPI/React/Docker/Playwright stack is locked. This document covers ONLY what is new: Playwright E2E test configuration for CI, test reporters, stop/GC scripts, and clean-install verification tooling.
 
 ---
 
@@ -11,349 +11,264 @@
 
 | Component | Status |
 |-----------|--------|
-| `scripts/install.sh` | Validates Docker exists, fails if missing — needs Docker auto-install prepended |
-| `scripts/deploy.sh` | Production deploy — correct, leave unchanged |
-| `docker-compose.yml` | Container names: `lpg-db`, `osrm-init`, `osrm-kerala`, `vroom-solver`, `lpg-db-init`, `lpg-api` |
-| `DEPLOY.md` | Employee-facing guide — incomplete: stale container names, placeholder `<REPO_URL>`, missing Docker install steps |
-| `README.md` | Developer guide — stale container names in Docker Services table (`routing-db`, `osrm-kerala`, `vroom-solver`) |
-
-The container names in README.md (`routing-db`) do not match `docker-compose.yml` (`lpg-db`). This is a documentation bug to fix, not a code change.
+| `@playwright/test` v1.58.2 | Installed in root `package.json` as devDependency. Lock file exists. |
+| Playwright browsers | Installed locally at `~/.cache/ms-playwright/` (chromium-1208, firefox-1509, webkit-2248). |
+| `.playwright-mcp/` | MCP console logs from manual testing sessions. Not automated test infrastructure. |
+| `package.json` (root) | Exists with `@playwright/test` only. No scripts, no config file yet. |
+| `package-lock.json` (root) | Exists. Tracks `@playwright/test` + transitive deps. |
+| `.github/workflows/ci.yml` | 3 jobs: Python Tests, Dashboard Build, Docker Build. No Playwright job. |
+| `scripts/start.sh` | Daily startup script. Health poll, Docker start, diagnosis. |
+| `scripts/install.sh` | First-time install. Builds images, waits for health. |
+| `scripts/build-dist.sh` | Distribution tarball builder. rsync + .pyc compile + tar. |
+| `tests/` (Python) | 420+ pytest unit/integration tests. Fully mocked (no Docker needed). |
+| No `playwright.config.ts` | Does not exist yet. Must be created. |
+| No `tests/e2e/` directory | No Playwright test files exist yet. |
 
 ---
 
 ## Recommended Stack
 
-### Core Technologies (All Already Installed — No New Dependencies)
-
-This milestone adds zero new runtime dependencies. Every tool is either:
-- Already in the system (bash, curl, apt)
-- Already in `docker-compose.yml`
-- Plain Markdown (no static site generator needed)
+### Playwright E2E Testing
 
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| Bash | 5.x (Ubuntu 22.04+) | Bootstrap and daily-start scripts | Already present on every Ubuntu/WSL install. No Python/Node dependency for scripts that run before Docker is up. `#!/usr/bin/env bash` with `set -euo pipefail` is the correct shebang for reliable scripts. |
-| `apt` + Docker official repo | docker-ce 27.x+ | Docker Engine auto-install | Official Docker apt repository (`download.docker.com/linux/ubuntu`) is the only supported install method. The `get.docker.com` convenience script works but adds a network hop for a script the user should inspect. Official apt method is auditable and idempotent. |
-| `docker compose` plugin | 2.x (ships with docker-ce) | Container orchestration | Already used. Installed automatically as `docker-compose-plugin` alongside `docker-ce`. No separate install needed. |
-| `/etc/wsl.conf` `[boot]` section | WSL 0.67.6+ | Auto-start Docker on WSL launch | The `[boot] command` key in `/etc/wsl.conf` runs a command as root when WSL starts. No systemd needed. Simpler than `.bashrc` because it fires once at boot, not per terminal. |
-| Markdown | GFM (GitHub Flavored) | CSV format documentation | No tooling required. Render natively in GitHub, VS Code Preview, and any browser with a Markdown extension. Editors the office employee already has. Tables, code blocks, and headers cover all CSV spec needs. |
+| `@playwright/test` | 1.58.2 (already installed) | E2E test framework | Already in `package.json`. Pin to exact version — Playwright Docker images must match this version exactly or browser executables will not be found. |
+| `playwright.config.ts` | N/A | Test configuration | Must be created at project root. Configures `baseURL`, `webServer`, reporters, browser selection. |
+| Chromium only (in CI) | Bundled with Playwright 1.58.2 | Browser for E2E tests | Use `projects: [{ name: 'chromium' }]` in CI. Chromium-only cuts CI time by 60%+ vs running all three browsers. Cross-browser testing is irrelevant for this app — it targets Chrome on Android (driver PWA) and Chrome on Windows (dashboard). |
 
-### Supporting Libraries
+### CI/CD Additions
 
-| Library | Purpose | When to Use |
-|---------|---------|-------------|
-| `curl` | Health checks, Docker repo GPG key download | Already in `scripts/install.sh`. Required by the Docker install process itself. |
-| `sudo` | Privilege escalation for Docker install | Non-negotiable for apt operations and `/etc/wsl.conf` writes. Script must check for sudo access early and fail with a clear message. |
-| `service docker start` | Start Docker daemon on WSL (sysvinit path) | Fallback when systemd is not enabled. Works on all Ubuntu/WSL versions since Docker 19+. Used in boot command and daily start script. |
-| `systemctl` (optional) | Start Docker when systemd is enabled | Preferred when `[boot] systemd=true` is set in wsl.conf. Script should detect which init system is active and use the right command. |
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `mcr.microsoft.com/playwright:v1.58.2-noble` | v1.58.2 | Docker image for CI runner | Official Playwright Docker image with all browsers + system deps pre-installed. Eliminates `npx playwright install --with-deps` step (~30s savings). Version MUST match `@playwright/test` in `package.json`. Noble = Ubuntu 24.04 LTS base. |
+| GitHub Actions `actions/upload-artifact@v4` | v4 | Upload test reports | Already used pattern in CI. Upload HTML report + trace files on failure for debugging. 30-day retention is sufficient. |
+| Built-in `github` reporter | Bundled | Failure annotations in PR | Playwright's built-in GitHub Actions reporter adds inline failure annotations to PRs. Zero install — just add `['github']` to reporter array. |
+| Built-in `html` reporter | Bundled | Detailed test report | Self-contained HTML report uploaded as CI artifact. Open locally to debug failures with traces, screenshots, DOM snapshots. Configure `open: 'never'` for CI. |
 
-### Development Tools (For Script Quality — Do Not Install on End-User Machine)
+### Operational Scripts
 
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| ShellCheck | Static analysis for bash scripts | `sudo apt install shellcheck` on dev machine. Catches quoting bugs, unbound variables, bad substitutions before users hit them. Run against all new `.sh` files before commit. Not needed on end-user machine. |
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Bash 5.x | Pre-installed | Stop/GC script, verify script | Matches existing script conventions (`set -euo pipefail`, color helpers, `header()`/`info()`/`success()`/`error()` functions). All scripts in `scripts/` use this pattern. |
+| `docker system prune` | Docker CLI | Container/image garbage collection | Built-in Docker command. `--filter until=24h` for time-based cleanup. Safer than manual `rm`. |
+| `docker compose down --remove-orphans` | Docker Compose CLI | Graceful stop | Stops all project containers and removes orphans from previous compose file versions. Already available. |
+| ShellCheck | Pre-installed on ubuntu-latest | Shell script linting in CI | ShellCheck is pre-installed on GitHub Actions `ubuntu-latest` runners. Add a lint step for all `scripts/*.sh` files. Catches quoting bugs, unbound variables, POSIX compatibility issues. |
+
+### Distribution Verification
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Bash + Docker | Already available | Clean-install verification | A script that extracts the tarball to a temp directory, runs `install.sh` inside a fresh Docker container (or validates structure/imports without full Docker orchestration). No new tools needed. |
+| `tar -tzf` | coreutils | Tarball content validation | List tarball contents without extracting. Verify expected files are present and no dev artifacts leaked. Already available everywhere. |
+| `sha256sum` | coreutils | Tarball integrity check | Generate `.sha256` alongside tarball in `build-dist.sh`. Customer can verify integrity. Already available. |
+
+---
+
+## Playwright Configuration Design
+
+### `playwright.config.ts` — Recommended Structure
+
+The config must handle two modes:
+1. **Local development**: Reuse a running `docker compose up` stack at `localhost:8000`
+2. **CI**: Start Docker Compose, wait for health, run tests, tear down
+
+Key decisions:
+
+| Decision | Choice | Why |
+|----------|--------|-----|
+| `webServer.command` | `docker compose up -d && scripts/wait-for-health.sh` | Playwright's `webServer` option can launch Docker Compose. The `url` check waits for the health endpoint. `reuseExistingServer: !process.env.CI` means local dev skips startup if stack is already running. |
+| `baseURL` | `http://localhost:8000` | API serves both dashboard (`/dashboard/`) and driver PWA (`/driver/`). Single origin, no CORS issues in tests. |
+| `workers` | `1` in CI, default locally | CI stability. This is a small test suite (not hundreds of tests). Single worker avoids Docker Compose resource contention. |
+| `retries` | `2` in CI, `0` locally | CI retries catch transient Docker startup race conditions. Locally, retries hide real bugs. |
+| `timeout` | `30000` (30s) | Default. Docker Compose services are pre-warmed by `webServer.url` health check. Individual test actions should complete in seconds. |
+| `trace` | `'on-first-retry'` | Captures Playwright trace (DOM snapshots, network, console) only when a test is retried. Saves disk space while still providing debugging data for flaky tests. |
+| `screenshot` | `'only-on-failure'` | Captures screenshot on failure for CI artifact debugging. |
+| Test directory | `tests/e2e/` | Separates Playwright tests from existing `tests/` Python pytest directory. Clear boundary. |
+| `testMatch` | `**/*.spec.ts` | Standard Playwright convention. |
+
+### Reporter Configuration for CI
+
+```typescript
+reporter: process.env.CI
+  ? [['github'], ['html', { open: 'never' }]]
+  : [['list']],
+```
+
+- **CI**: `github` reporter for PR annotations + `html` for detailed artifact report
+- **Local**: `list` reporter for readable terminal output
+
+Do NOT use `@estruyf/github-actions-reporter`. It is a third-party package (last updated over a year ago) that adds a summary table to GitHub Actions. The built-in `github` reporter already provides inline failure annotations, which is more useful for a small test suite. Avoid unnecessary dependencies.
+
+---
+
+## CI Pipeline Design
+
+### New Job: `e2e`
+
+Add a fourth job to `.github/workflows/ci.yml`. This job:
+1. Runs on `ubuntu-latest`
+2. Uses the Playwright Docker image (`mcr.microsoft.com/playwright:v1.58.2-noble`) as the container
+3. Needs Docker Compose for the application stack (Docker-in-Docker or service containers)
+
+**Critical constraint**: The application requires Docker Compose to run (API + DB + OSRM + VROOM). Running E2E tests in CI means either:
+
+- **Option A: Docker-in-Docker** — Run tests inside the Playwright Docker image with Docker Compose available. Complex, fragile.
+- **Option B: Direct install on runner** — Install Playwright browsers on the ubuntu-latest runner with `npx playwright install --with-deps chromium`. Docker Compose is available natively on GitHub Actions runners. This is simpler and more reliable.
+
+**Recommendation: Option B (direct install on runner)**. Because this app needs Docker Compose for its own services (db, osrm, vroom, api), running tests on the bare `ubuntu-latest` runner where Docker is natively available is far simpler than Docker-in-Docker. The Playwright Docker image is designed for apps that run outside Docker — not for apps that ARE Docker Compose stacks.
+
+### CI Job Structure
+
+```yaml
+e2e:
+  name: E2E Tests
+  runs-on: ubuntu-latest
+  timeout-minutes: 15
+  # Only run on push to main (not PRs — too slow, needs Docker builds)
+  if: github.event_name == 'push'
+  needs: [test, dashboard]  # Run after unit tests pass
+
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'npm'
+    - run: npm ci
+    - run: npx playwright install --with-deps chromium
+    - name: Build and start application
+      run: docker compose up -d --build
+      env:
+        GOOGLE_MAPS_API_KEY: ""  # No geocoding in E2E tests
+        API_KEY: "test-api-key"
+        ENVIRONMENT: "development"
+    - name: Wait for health
+      run: |
+        timeout 120 bash -c 'until curl -sf http://localhost:8000/health; do sleep 3; done'
+    - run: npx playwright test
+    - uses: actions/upload-artifact@v4
+      if: ${{ !cancelled() }}
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 30
+```
+
+**Why `if: github.event_name == 'push'` only**: E2E tests require building Docker images (~2 min) + starting the full stack (~1-2 min). This is too slow for every PR commit. Unit tests and dashboard build catch most regressions. E2E runs on merge to main as a safety net.
+
+### ShellCheck Job
+
+Add a lightweight lint job for shell scripts:
+
+```yaml
+shellcheck:
+  name: Shell Lint
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - name: Run ShellCheck
+      run: shellcheck scripts/*.sh
+```
+
+ShellCheck is pre-installed on ubuntu-latest. No action or install step needed.
+
+---
+
+## Stop/GC Script Design
+
+### No New Tools Needed
+
+The stop and GC script uses only Docker CLI commands that are already available:
+
+| Command | Purpose |
+|---------|---------|
+| `docker compose down --remove-orphans` | Stop all project containers, remove orphans |
+| `docker compose down -v` | Additionally remove named volumes (pgdata, dashboard_assets) — destructive, needs confirmation |
+| `docker image prune -f --filter "label=com.docker.compose.project"` | Remove dangling images from this project |
+| `docker builder prune -f` | Clear build cache |
+| `docker system df` | Show disk usage before/after GC |
+| `truncate -s 0` on log files | Clear container logs without removing files |
+
+Pattern: The script should default to a safe stop (no volume deletion) and offer a `--deep` flag for full cleanup including volumes and build cache.
+
+---
+
+## Clean-Install Verification Design
+
+### No New Tools Needed
+
+Verification is a bash script that validates the tarball's contents without requiring a full Docker orchestration:
+
+1. **Structure check**: Extract to temp dir, verify critical files exist (`docker-compose.yml`, `scripts/install.sh`, `scripts/bootstrap.sh`, `infra/Dockerfile`, `.env.example`)
+2. **No dev artifacts check**: Verify `.git/`, `tests/`, `.planning/`, `.claude/`, `node_modules/` are NOT in the tarball
+3. **License module check**: Verify `core/licensing/__init__.pyc` and `core/licensing/license_manager.pyc` exist, and `.py` source does NOT exist
+4. **Import check**: `PYTHONPATH=<extracted> python3 -c "import core.licensing; import core.licensing.license_manager"` (already done in build-dist.sh, but verify after tarball extraction too)
+5. **Compose syntax check**: `docker compose -f <extracted>/docker-compose.yml config --quiet` validates the compose file parses
+
+These are all shell commands using existing tools.
+
+---
+
+## Alternatives Considered
+
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| CI Playwright runner | `npx playwright install --with-deps chromium` on ubuntu-latest | `mcr.microsoft.com/playwright:v1.58.2-noble` Docker image | App itself needs Docker Compose. Docker-in-Docker is fragile. Direct install on runner where Docker is native is simpler. |
+| CI reporter | Built-in `github` + `html` | `@estruyf/github-actions-reporter` | Third-party dep, last updated 1+ year ago. Built-in `github` reporter provides PR annotations. HTML report covers detailed debugging. No benefit to adding a third-party package. |
+| Test browsers | Chromium only | Chromium + Firefox + WebKit | Target users are Chrome on Android (drivers) and Chrome on Windows (office). Cross-browser testing adds CI time for zero coverage gain. |
+| Shell linting | ShellCheck (pre-installed) | `shfmt` (formatter) | ShellCheck catches bugs. shfmt enforces style. For 9 scripts, manual style consistency is fine. Add shfmt later if the script count grows. |
+| Tarball verification | Bash script with `tar -tzf` | Container-based clean install test | Full Docker orchestration in CI for tarball verification is overkill for v1.4. Structure + import checks catch 95% of distribution bugs. |
+| E2E test runner trigger | Push to main only | Every PR | Docker build + stack startup adds 3-5 min to CI. Unit tests + dashboard build on PRs, E2E on merge is the right balance for a solo/small team. |
+
+---
+
+## What NOT to Add
+
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| Cypress | Playwright is already installed and configured. Cypress adds a second E2E framework with different API, different config, different CI setup. | Playwright (already in package.json) |
+| `@playwright/experimental-ct-react` | Component testing framework. Dashboard components are straightforward React + DaisyUI. E2E covers the integration. Unit tests cover logic. Component testing is a third layer with minimal marginal value. | E2E tests for integration, pytest for logic |
+| Playwright Test for Visual Regression | `toHaveScreenshot()` requires baseline images checked into git, platform-specific rendering differences, and careful threshold tuning. Overkill for this app. | Manual visual checks for subjective UX |
+| `docker-compose-wait` or `wait-for-it.sh` | Third-party wait scripts. A simple `timeout + curl` loop does the same thing in 2 lines of bash. Already proven in `scripts/start.sh`. | `timeout 120 bash -c 'until curl -sf ...; do sleep 3; done'` |
+| Testcontainers for Node.js | Programmatic Docker management for tests. Adds complexity — Playwright's `webServer` config handles starting Docker Compose before tests. | Playwright `webServer` config |
+| `act` (run GitHub Actions locally) | Local CI simulation tool. Useful for complex workflows, but this CI is simple (4 jobs, no matrix). Run Playwright locally with `npx playwright test` against a running stack. | `npx playwright test` locally |
+| New npm packages for reporting | `allure-playwright`, `playwright-html-reporter`, etc. Built-in reporters are sufficient. Adding packages means version management, security updates, and dependency sprawl for marginal formatting improvements. | Built-in `github` + `html` reporters |
+| Separate `docker-compose.test.yml` | A test-specific compose override. The existing `docker-compose.yml` works for E2E with environment variable overrides. Adding a second compose file means keeping two files in sync. | Environment variables in CI (`GOOGLE_MAPS_API_KEY=""`, `API_KEY="test-api-key"`) |
 
 ---
 
 ## Installation
 
-No new packages to install on the target machine beyond Docker itself. The bootstrap script is self-contained and installs what it needs.
+### Root package.json Changes
 
 ```bash
-# Developer quality check — run locally before committing new scripts
-sudo apt install shellcheck
-shellcheck scripts/bootstrap-wsl.sh
-shellcheck scripts/start.sh
+# Already installed — no new packages needed for Playwright
+npm ls @playwright/test  # Should show 1.58.2
+
+# Install Playwright browsers (if not already cached)
+npx playwright install chromium
 ```
 
----
+### New npm Scripts to Add
 
-## Docker Auto-Install: Exact Approach
-
-### Why Official apt Repo, Not `get.docker.com`
-
-The `curl https://get.docker.com | sudo sh` convenience script works but has two downsides for a non-technical user script:
-
-1. It fetches and executes an external script blindly — a security smell to embed in a repo script
-2. It does not allow version pinning
-
-Use the official apt repository directly. It is auditable, idempotent, and what Docker's own documentation recommends for Ubuntu.
-
-### Exact Install Sequence (HIGH confidence — verified against official docs 2026-03-04)
-
-```bash
-# 1. Install apt prerequisites
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl
-
-# 2. Add Docker's GPG key (the .asc format, not the old .gpg dearmor method)
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-  -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-# 3. Add the Docker apt repository
-# The new deb822 .sources format (preferred over the legacy one-liner)
-sudo tee /etc/apt/sources.list.d/docker.sources > /dev/null <<EOF
-Types: deb
-URIs: https://download.docker.com/linux/ubuntu
-Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
-Components: stable
-Signed-By: /etc/apt/keyrings/docker.asc
-EOF
-
-# 4. Install Docker Engine + Compose plugin
-sudo apt-get update
-sudo apt-get install -y \
-  docker-ce \
-  docker-ce-cli \
-  containerd.io \
-  docker-buildx-plugin \
-  docker-compose-plugin
-
-# 5. Add user to docker group (avoids sudo for docker commands)
-sudo usermod -aG docker "$USER"
-
-# 6. Start Docker daemon immediately (WSL does not auto-start services)
-sudo service docker start
-```
-
-Note: After `usermod -aG docker "$USER"`, the group change does not take effect in the current shell. The bootstrap script should instruct the user to close and reopen the WSL terminal (or run `newgrp docker`) before running `install.sh`. Do not try to use `newgrp docker` inside the bootstrap script itself — `newgrp` spawns a subshell and effectively pauses script execution at that line, which breaks the script flow for non-interactive use.
-
-### Docker Group: Handling the Subshell Problem
-
-The `newgrp docker` workaround does NOT work inside a non-interactive script because it opens a new shell. The correct approach for the bootstrap script:
-
-```bash
-# After usermod, check if current session already has docker group
-if ! id -nG "$USER" | grep -q '\bdocker\b'; then
-    warn "You have been added to the docker group."
-    warn "IMPORTANT: Close this terminal, reopen WSL, and run this script again."
-    warn "The next run will complete the setup."
-    exit 0  # Clean exit — user reruns after terminal restart
-fi
-```
-
-This is the pattern used by Ubuntu's own post-install scripts. It is honest about the restart requirement rather than hiding it.
-
----
-
-## WSL Docker Auto-Start: Exact Approach
-
-### The Problem
-
-WSL does not keep services running between terminal sessions. Every time a user opens a new WSL terminal, Docker is stopped. Currently `install.sh` handles this with `sudo service docker start`, but the daily-use script also needs it.
-
-### Recommended: `/etc/wsl.conf` Boot Command
-
-Write to `/etc/wsl.conf` once during bootstrap. Requires WSL 0.67.6+ (available since Windows 10 21H2 with WSL Store update, effectively universal in 2026).
-
-```ini
-# /etc/wsl.conf
-[boot]
-command = "service docker start"
-```
-
-This runs as root when WSL starts — before any user terminal opens. No sudo prompt. No .bashrc pollution. No per-terminal overhead.
-
-The bootstrap script writes this idempotently:
-
-```bash
-configure_wsl_docker_autostart() {
-    local WSL_CONF="/etc/wsl.conf"
-
-    # Check if already configured
-    if grep -q "service docker start" "$WSL_CONF" 2>/dev/null; then
-        success "Docker auto-start already configured in $WSL_CONF"
-        return 0
-    fi
-
-    info "Configuring Docker to start automatically when WSL launches..."
-
-    # Append [boot] section if not present
-    if ! grep -q '^\[boot\]' "$WSL_CONF" 2>/dev/null; then
-        sudo tee -a "$WSL_CONF" > /dev/null <<'EOF'
-
-[boot]
-command = "service docker start"
-EOF
-    else
-        # [boot] section exists — add command under it
-        # Use sed to insert after [boot] line
-        sudo sed -i '/^\[boot\]/a command = "service docker start"' "$WSL_CONF"
-    fi
-
-    success "Docker will now start automatically when you open WSL"
-    info "Note: Takes effect after next 'wsl --shutdown' in PowerShell"
+```json
+{
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed"
+  }
 }
 ```
 
-### Fallback: `.bashrc` Check (for older WSL or if wsl.conf write fails)
+### CI Browser Installation
 
 ```bash
-# Minimal Docker start check — add to ~/.bashrc if wsl.conf approach fails
-if ! docker info &>/dev/null 2>&1; then
-    sudo service docker start &>/dev/null
-fi
+# In GitHub Actions (no Docker image needed)
+npx playwright install --with-deps chromium
 ```
 
-This is the `~/.bashrc` approach documented in the existing SETUP.md. It works but adds ~1-2s to every new terminal. The wsl.conf method is strictly better for user experience.
-
----
-
-## Daily Start Script Design
-
-### What It Should Do
-
-A `scripts/start.sh` that a non-technical user can double-click or run without arguments:
-
-1. Check Docker is running (start it if not — handles missed wsl.conf)
-2. `cd` to the project root (so it works regardless of where the user runs it from)
-3. `docker compose up -d` (idempotent — safe to run when already running)
-4. Wait for health check at `http://localhost:8000/health`
-5. Print the dashboard URL in a box the user cannot miss
-6. Optionally open Chrome to the dashboard URL
-
-### What It Must NOT Do
-
-- Rebuild Docker images (that is slow; only `install.sh` does this)
-- Prompt for any input
-- Require any arguments
-- Do anything if services are already healthy (early exit)
-
-### Chrome Open Pattern (WSL-Specific)
-
-Opening a browser from WSL uses the Windows `cmd.exe /c start` pathway:
-
-```bash
-open_browser() {
-    local url="$1"
-    # WSL: use cmd.exe to open in Windows default browser
-    if command -v cmd.exe &>/dev/null; then
-        cmd.exe /c start "" "$url" 2>/dev/null || true
-    # Native Linux: try xdg-open
-    elif command -v xdg-open &>/dev/null; then
-        xdg-open "$url" 2>/dev/null || true
-    fi
-    # Silently skip if neither works — URL is printed to terminal anyway
-}
-```
-
-The `|| true` prevents script failure if the browser launch fails (e.g., no display server on pure headless WSL).
-
----
-
-## Documentation Format: CSV Specification
-
-### Format: Plain Markdown in DEPLOY.md
-
-No documentation tooling is needed. The existing `DEPLOY.md` is the correct home for CSV format documentation — it is the employee-facing guide. The format should be:
-
-1. **What the file looks like** — a short example of the actual CSV content (a code block with 2-3 example rows)
-2. **Required columns table** — name, what it means in plain language, example value
-3. **What gets rejected and why** — a table of common errors with the exact rejection message shown in the UI
-4. **Address cleaning rules** — what the system does automatically (abbreviations, phone number removal)
-
-### CSV Documentation Template Structure
-
-```markdown
-## 4. The CDCMS Export File
-
-### What to Export from CDCMS
-
-In CDCMS: go to **Order Management → Export → Today's Orders**.
-Save as a `.csv` file. The file will look like this:
-
-```
-OrderNo,OrderStatus,ConsumerAddress,OrderQuantity,AreaName,DeliveryMan,...
-ON-001,Allocated-Printed,"House Near School, Vatakara",2,VALLIKKADU,GIREESHAN ( C ),...
-ON-002,Allocated-Printed,"4/146 Aminas Residency, MG Road",1,RAYARANGOTH,GIREESHAN ( C ),...
-```
-
-### Which Columns the System Uses
-
-| Column | What It Is | Example |
-|--------|-----------|---------|
-| `OrderNo` | Unique order number | `ON-12345` |
-| `OrderStatus` | Only `Allocated-Printed` orders are loaded | `Allocated-Printed` |
-| `ConsumerAddress` | Delivery address — cleaned automatically | `House Near School, Vatakara` |
-| `OrderQuantity` | Number of cylinders | `2` |
-| `AreaName` | Delivery area | `VALLIKKADU` |
-| `DeliveryMan` | Driver name as it appears in CDCMS | `GIREESHAN ( C )` |
-
-All other columns are ignored.
-
-### Why Some Orders Are Rejected
-
-| Rejection Reason | What It Means | What to Do |
-|-----------------|---------------|-----------|
-| `OrderStatus is not Allocated-Printed` | Order is still Pending or already Delivered | Only export Allocated-Printed orders |
-| `Address could not be geocoded` | Google Maps could not find the address | See Section 5: Fixing Bad Addresses |
-| `Quantity is zero or missing` | OrderQuantity column is blank or 0 | Check the CDCMS export — re-export if needed |
-| `Duplicate address (within 15m of another order)` | Two orders have nearly identical GPS location | Check whether it is the same customer uploaded twice |
-```
-
-This structure answers the actual questions a non-technical user has. No tooling beyond a text editor to maintain.
-
-### What NOT to Add for Documentation
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| MkDocs / Docusaurus | Requires Node.js/Python build step. Creates a separate site to maintain. Overkill for a 1-2 page user guide. | Plain Markdown in DEPLOY.md |
-| Swagger/OpenAPI UI for user docs | API docs are for developers. Office employees interact via the dashboard, not the API. | Section in DEPLOY.md with screenshots |
-| A separate `docs/` folder | Splits attention. The employee already has DEPLOY.md bookmarked. | Expand existing DEPLOY.md sections |
-| Excel/PDF spec | Not version-controlled. Hard to update. | Markdown table in DEPLOY.md |
-| AsciiDoc | No tooling advantage over Markdown for GitHub rendering. | GFM Markdown |
-
----
-
-## What NOT to Add (Broader Scope)
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| Docker Desktop (Windows) | Requires Windows Pro/Enterprise, license for business use, more RAM overhead. WSL2 + Docker Engine is free, faster, and works on Windows Home. | Docker Engine directly in WSL2 Ubuntu |
-| Ansible / Chef / Puppet | Overkill for single-machine office setup. Adds a new tool the user must learn. | Pure bash scripts |
-| Snap docker package | Docker from Snap has known networking issues in WSL. The official apt repository is the right path. | Official Docker apt repo |
-| pyenv / nvm for bootstrap | Bootstrap script does not need Python or Node. Installs Docker + starts services. No runtime environment needed. | Direct apt installs only |
-| `sudo visudo` NOPASSWD for Docker | Removes the sudo prompt for `docker` specifically. Tempting for UX, but creates a security hole. | Accept the one-time sudo prompt during install |
-| Interactive `read` prompts in `start.sh` | Daily start script must be zero-input. Non-technical users should be able to run it without reading output carefully. | Silent flags, auto-detect, clear success output only |
-| Health check timeouts over 300s | Already tuned in `install.sh`. OSRM data is cached after first run — subsequent starts are fast. | Keep existing 300s MAX_WAIT, 5s POLL_INTERVAL |
-| WSL2 memory configuration automation | Modifying `%UserProfile%\.wslconfig` requires writing a file on the Windows side from within WSL — fragile, requires Windows path discovery. | Document the `.wslconfig` change in DEPLOY.md as a manual step if needed |
-
----
-
-## Integration with Existing `install.sh`
-
-The existing `install.sh` is well-structured and should not be rewritten. The v1.3 changes are:
-
-1. **Prepend a Step 0** before "Step 1: Check prerequisites" — detect if Docker is missing, and if so, run the Docker auto-install sequence. After install, the script continues normally to its existing Step 1 check.
-
-2. **Add Docker auto-start configuration** at the end of Step 1 (after Docker is confirmed working) — write the wsl.conf boot command idempotently.
-
-3. **Do not change Steps 2-5** — they are correct and complete.
-
-Pattern for Step 0 integration:
-
-```bash
-# ═══════════════════════════════════════════════════════════════════════════
-# Step 0: Auto-install Docker if missing
-# ═══════════════════════════════════════════════════════════════════════════
-
-if ! command -v docker &>/dev/null; then
-    header "Step 0/5: Docker not found — installing automatically"
-    install_docker  # function containing the apt sequence above
-    configure_wsl_docker_autostart
-    info "Docker installed. Please close this terminal, reopen WSL, and run this script again."
-    info "This is required once so Docker group permissions take effect."
-    exit 0
-elif ! docker info &>/dev/null 2>&1; then
-    info "Starting Docker daemon..."
-    sudo service docker start
-fi
-# Now continue to existing Step 1...
-```
-
-The two-run pattern (install → restart terminal → rerun) is the correct UX for the docker group problem. It is honest, safe, and the same experience Docker's own post-install docs describe.
+The `--with-deps` flag installs system-level dependencies (libgbm, libasound, etc.) that Chromium needs on a fresh Ubuntu runner. The `chromium` argument installs only Chromium (not Firefox + WebKit), saving ~200MB download and ~30s.
 
 ---
 
@@ -361,25 +276,27 @@ The two-run pattern (install → restart terminal → rerun) is the correct UX f
 
 | Package | Compatible With | Notes |
 |---------|-----------------|-------|
-| docker-ce (latest stable) | Ubuntu 22.04 (jammy), 24.04 (noble) | Both UBUNTU_CODENAME values work with the official apt repo. Script detects codename via `/etc/os-release`. |
-| docker-compose-plugin | docker-ce (any recent) | Installed together. `docker compose version` (no hyphen) is the v2 plugin syntax. install.sh already tests for this. |
-| `/etc/wsl.conf` `[boot] command` | WSL 0.67.6+ | Effectively universal in 2026. Script should check WSL version and fall back to `.bashrc` method gracefully. |
-| `service docker start` | Ubuntu 22.04+, WSL2 | Uses sysvinit init.d. Works even when systemd is not the init system (default WSL2 without systemd enabled). |
-| `systemctl enable docker` | Ubuntu 22.04+ with `[boot] systemd=true` | Only relevant if user has enabled systemd. Script should detect and prefer systemctl when available. |
+| `@playwright/test` 1.58.2 | Node.js 18, 20, 22 | Node 22 is used in CI (matches dashboard job). |
+| Playwright browsers (chromium-1208) | `@playwright/test` 1.58.2 only | Browser version is tied to Playwright version. Upgrading Playwright requires `npx playwright install` to get new browsers. |
+| `mcr.microsoft.com/playwright:v1.58.2-noble` | Ubuntu 24.04 LTS | Not used in CI (see rationale above), but available if Docker-in-Docker is ever needed. |
+| ShellCheck | Pre-installed on ubuntu-latest | Version varies with runner image. No version pinning needed — ShellCheck is backward-compatible for standard checks. |
+| `docker compose` | v2.x on ubuntu-latest | GitHub Actions runners include Docker Compose v2. Same as local development. |
 
 ---
 
 ## Sources
 
-- [Docker Engine install on Ubuntu — official docs](https://docs.docker.com/engine/install/ubuntu/) — GPG key setup, apt repo, package names. HIGH confidence.
-- [Docker post-install steps — official docs](https://docs.docker.com/engine/install/linux-postinstall/) — docker group, systemd enable. HIGH confidence.
-- [WSL systemd support — Microsoft Learn](https://learn.microsoft.com/en-us/windows/wsl/systemd) — wsl.conf `[boot]` section, WSL version requirements, systemd default for Ubuntu. HIGH confidence.
-- [codestudy.net — WSL2 docker auto-start options](https://www.codestudy.net/blog/sudo-systemctl-enable-docker-not-available-automatically-run-docker-at-boot-on-wsl2-using-a-sysvinit-init-command-or-a-workaround/) — sysvinit vs systemd comparison, wsl.conf boot command pattern. MEDIUM confidence (single non-official source, consistent with Microsoft docs).
-- [ShellCheck — static analysis for shell scripts](https://www.shellcheck.net/) — tool for script quality. HIGH confidence.
-- `scripts/install.sh` in this repo — reviewed directly. Existing structure and Docker detection logic. HIGH confidence (source of truth).
-- `docker-compose.yml` in this repo — reviewed directly. Actual container names (`lpg-db`, `lpg-api`, etc.). HIGH confidence.
+- [Playwright CI documentation](https://playwright.dev/docs/ci) — GitHub Actions setup, Docker image recommendations, caching guidance. HIGH confidence.
+- [Playwright CI intro](https://playwright.dev/docs/ci-intro) — Recommended GitHub Actions YAML, `--with-deps` flag, artifact upload. HIGH confidence.
+- [Playwright Docker documentation](https://playwright.dev/docs/docker) — Official Docker images, version pinning, `--ipc=host` flag. HIGH confidence.
+- [Playwright test reporters documentation](https://playwright.dev/docs/test-reporters) — Built-in reporters (github, html, blob, list, dot), configuration syntax. HIGH confidence.
+- [Playwright webServer documentation](https://playwright.dev/docs/test-webserver) — `command`, `url`, `reuseExistingServer`, `timeout` options. HIGH confidence.
+- [Microsoft Artifact Registry](https://mcr.microsoft.com/en-us/artifact/mar/playwright) — Docker image tags for v1.58.2-noble. HIGH confidence.
+- [@estruyf/github-actions-reporter on npm](https://www.npmjs.com/package/@estruyf/github-actions-reporter) — Third-party reporter, last published 1+ year ago. MEDIUM confidence (not recommended).
+- [ShellCheck GitHub Wiki](https://www.shellcheck.net/wiki/GitHub-Actions) — Pre-installed on ubuntu-latest, direct usage. HIGH confidence.
+- Existing `ci.yml`, `package.json`, `docker-compose.yml`, `scripts/` in this repo — reviewed directly. HIGH confidence (source of truth).
 
 ---
 
-*Stack research for: Kerala LPG Delivery Route Optimizer v1.3 — Office-Ready Deployment*
-*Researched: 2026-03-04*
+*Stack research for: Kerala LPG Delivery Route Optimizer v1.4 — Ship-Ready QA*
+*Researched: 2026-03-08*

@@ -1,279 +1,274 @@
-# Feature Research
+# Feature Landscape
 
-**Domain:** Office-ready deployment — one-command install, daily startup UX, CSV format documentation, non-technical user error messages
-**Researched:** 2026-03-04
-**Confidence:** HIGH (codebase thoroughly analyzed; existing scripts audited; target user pattern well-understood from DEPLOY.md and PROJECT.md)
-
----
-
-## Context: What Already Exists (v1.2 Complete)
-
-This is the v1.3 milestone on a working, deployed system. These deployment artifacts are ALREADY SHIPPED and must NOT be rebuilt:
-
-- `scripts/install.sh` — interactive env setup, docker compose build, OSRM data, health check with 5-minute timeout
-- `scripts/deploy.sh` — production deployment with backup, migrations, health check
-- `DEPLOY.md` — office employee guide with daily workflow, CDCMS export instructions, troubleshooting section
-- `README.md` — developer reference with architecture overview, API table, CSV format docs
-- `SETUP.md` — developer setup (WSL, Docker, Python venv, migrations)
-- CDCMS auto-detection in API upload endpoint (`cdcms_preprocessor.py`)
-- Standard CSV/Excel upload with flexible column mapping (`csv_importer.py`)
-- Geocoding failure reporting with per-row reasons, duplicate detection, cost tracking
-
-**The gap for v1.3:** The daily startup still requires 3 manual bash commands (`sudo service docker start`, `docker compose up -d`, `source .venv/bin/activate`). README has stale container names (`routing-db` vs actual `lpg-db`, `routeopt` vs actual `routing`). The `<REPO_URL>` placeholder in README and DEPLOY.md is never filled in. CSV format documentation is scattered across README, DEPLOY.md, and source code — an office employee cannot find all constraints in one place. Error messages from the API are developer-facing (stack traces, Python exceptions) rather than office-staff-facing ("Your CDCMS file is missing the OrderNo column").
+**Domain:** Ship-Ready QA for Docker Compose Delivery App (v1.4)
+**Researched:** 2026-03-08
+**Confidence:** HIGH (based on existing codebase analysis + current Playwright/Docker docs)
 
 ---
 
-## Feature Landscape
+## Context: What Already Exists (v1.3 Complete)
 
-### Domain 1: One-Command Daily Startup
+This is the v1.4 milestone on a working, deployed system. These artifacts are ALREADY SHIPPED:
 
-#### Table Stakes (Users Expect These)
+- **420 pytest unit tests** with mocked services (OSRM, VROOM, Google, PostgreSQL)
+- **GitHub Actions CI** — 3 jobs: pytest, dashboard TypeScript build, Docker image smoke test
+- **`test-fresh-deploy.sh`** — Docker-in-Docker simulation of a new employee following DEPLOY.md (tests git repo, not dist tarball)
+- **`build-dist.sh`** — creates versioned tarball with .pyc-compiled licensing module, import validation
+- **Operational scripts**: `bootstrap.sh`, `install.sh`, `start.sh`, `deploy.sh`, `backup_db.sh`, `reset.sh`
+- **User docs**: DEPLOY.md (office guide), CSV_FORMAT.md, LICENSING.md, README.md, SETUP.md
+- **License system**: hardware-bound HMAC keys, 7-day grace period, generate/activate/validate lifecycle
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **Single script for daily startup** | Office staff follow printed checklists. 3 separate bash commands with `sudo` prompts is not a checklist — it's a debugging session waiting to fail. Any tool targeting non-technical users (VPN clients, database GUIs, WAMP/XAMPP) provides a single "Start" button or script. | LOW | New `scripts/start.sh`: `sudo service docker start`, `docker compose up -d`, health check poll, print URLs on success. Idempotent — safe to run if already running. Exits with clear message if already healthy. |
-| **Success output with actionable URLs** | `install.sh` already does this well at the end of installation — shows dashboard URL, driver URL, daily workflow in a box. Daily `start.sh` should do the same. Without this, staff open Chrome and type the URL from memory (error-prone). | LOW | Print the same "what to open next" block that `install.sh` shows: Dashboard URL, Driver App URL, "Upload your CDCMS file" next step. |
-| **Non-zero exit code with human-readable reason on failure** | If Docker is not installed or the compose file is missing, the script must fail with a plain-English message and a recovery action. `docker: command not found` is not actionable for a non-technical user. | LOW | Existing `install.sh` already has `require_cmd()` with install hints. Copy that pattern to `start.sh`. |
-| **Idempotent re-run behavior** | Staff may run the start script twice. On the second run, Docker is already started and containers are already up. The script must handle this gracefully (not fail with "port already in use" or "already running"). | LOW | `docker compose up -d` is already idempotent. For `sudo service docker start`: check `docker info` first; skip if daemon responds. |
-
-#### Differentiators (Competitive Advantage)
-
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **Docker auto-start without password prompt** | `sudo service docker start` requires the WSL user's password every time. This is a friction point for non-technical staff. Auto-starting Docker on WSL login (via `.bashrc`) removes a required manual step. | LOW | Add `sudo service docker start 2>/dev/null` to `~/.bashrc` inside the installer if the user opts in. Already mentioned in SETUP.md as a tip. Promote it to install.sh — ask the user during setup: "Start Docker automatically when Ubuntu opens? [Y/n]". |
-| **Status command showing all services** | Staff sometimes wonder if the system is running without trying to open the dashboard. A quick `scripts/status.sh` that runs `docker compose ps` and hits `/health` gives them confidence. | LOW | A 15-line wrapper around `docker compose ps` + `curl /health`. Prints "System is running" or lists which containers are down. |
-| **Graceful timeout feedback during startup** | `docker compose up -d` returns immediately but OSRM takes time to load maps. `install.sh` has a 5-minute health poll with a spinner. `start.sh` should have the same (but with a 60-second timeout, not 5 minutes — on subsequent starts OSRM is already preprocessed and boots in ~15 seconds). | LOW | Reuse the spinner loop from `install.sh`. Poll `http://localhost:8000/health` for 60 seconds. On timeout, print "Still starting — check logs with: docker compose logs -f api". |
-
-#### Anti-Features (Do NOT Build)
-
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| **GUI launcher (Electron/Tauri app)** | "Make it feel like a real application" | Building a native app to launch a bash script is massive scope creep. Adds a separate build system, packaging pipeline, and update mechanism to a project that is already a Docker stack. | Shell script + desktop shortcut. On Windows, a `.bat` file or WSL shortcut can launch Ubuntu + run the script. The "app" is Chrome opening `localhost:8000`. |
-| **Windows batch file or PowerShell wrapper** | "Staff shouldn't have to open Ubuntu" | WSL2 integration complexity. WSL has its own network, file system, and process space. Cross-WSL script invocation is fragile (different path conventions, credential prompts). | DEPLOY.md instructs: "Open Ubuntu from Start menu". This is the established and working pattern. Add a desktop shortcut to Ubuntu as a differentiator, not a batch file. |
-| **Automatic Docker restart on WSL launch** | "I don't want to run any command at all" | systemd in WSL2 is supported only on Ubuntu 22.04+ with WSL version 0.67.6+. Many office laptops may be on older WSL. Auto-start via systemd would silently fail on older systems. | Offer `~/.bashrc` auto-start (explicit opt-in during install). Document it clearly. Do not depend on systemd. |
+**The gap for v1.4:** No automated browser-level testing exists. The CLAUDE.md E2E checklist (8 categories, 30+ checks) is performed manually via Playwright MCP during development but never encoded as repeatable tests. CI does not exercise the running application. The dist tarball is built but never verified as installable. No stop/cleanup script exists for daily end-of-shift use. License lifecycle and distribution workflow docs are scattered.
 
 ---
 
-### Domain 2: CSV Format Documentation
+## Table Stakes
 
-#### Table Stakes (Users Expect These)
+Features that a ship-ready QA milestone must have. Missing any of these means the product is not verifiably ready for customer delivery.
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **Single-page CSV format reference** | Currently CSV documentation is split across: README.md (developer tables), DEPLOY.md (office narrative), `csv_importer.py` docstring (code comments), and `cdcms_preprocessor.py` (inline). An office employee who gets a "missing column" error cannot find all constraints in one place. Every SaaS product (Airtable, Mailchimp, Stripe) has a single CSV import specification page. | LOW | New `CSV_FORMAT.md` at project root. Covers both formats: CDCMS (tab-separated, 19 columns, 6 used) and generic CSV (11 possible columns, 1 required). Self-contained — someone can print it and use it without looking at other docs. |
-| **"What happens if I..." rejection reason table** | The API already generates per-row validation errors with human-readable messages. But there is no doc that tells an office employee in advance: "If OrderStatus is not 'Allocated-Printed', the row is skipped — this is normal." Pre-explaining expected rejections prevents support calls. | LOW | Section in `CSV_FORMAT.md`: "Common Rejection Reasons and What They Mean". Table: error message → plain-English explanation → what to do. Cover: missing required column, empty address, wrong status, duplicate order ID, non-numeric quantity. |
-| **Sample CDCMS row with before/after address cleaning** | DEPLOY.md has a brief table showing address cleaning steps. But office staff need to understand WHY rows are rejected vs. just cleaned. A worked example with the actual sample data (already in `data/sample_cdcms_export.csv`) makes this concrete. | LOW | Already partially done in DEPLOY.md Section 5. Consolidate in `CSV_FORMAT.md` with a side-by-side table for at least 3 real examples from `data/sample_cdcms_export.csv`. |
-| **Column constraint specification** | `csv_importer.py` ColumnMapping documents column names. But constraints (valid values for `cylinder_type`, max value for `priority`, expected format for `delivery_window_start`) are only in code. Office staff uploading a manually-crafted CSV need to know these. | LOW | Column reference table in `CSV_FORMAT.md`: name, type, required/optional, valid values, example. For CDCMS format: which 6 of 19 columns are used, what each does. |
-| **Excel file support documented** | The API accepts `.xlsx` and `.xls` files (handled in `_read_cdcms_file()` and `CsvImporter._read_file()`). This is not documented anywhere in user-facing docs. Office staff who save CDCMS export as Excel and get an error will assume Excel is unsupported. | LOW | Add explicit note in `CSV_FORMAT.md` and relevant DEPLOY.md sections: "Excel files (.xlsx) are supported — you do not need to convert to CSV." |
-| **Tab-separated vs comma-separated behavior documented** | The CDCMS preprocessor tries tab-separated first, falls back to comma-separated. This auto-detection is silently correct in normal use, but if an office employee manually edits the file in Excel (which re-saves as comma-separated), the system still works — they don't know why. | LOW | One sentence in `CSV_FORMAT.md`: "CDCMS exports are tab-separated. If you open and save the file in Excel, it may become comma-separated — that's fine, the system handles both." |
-
-#### Differentiators (Competitive Advantage)
-
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **Printable one-page CSV cheat sheet** | Office staff often print reference cards and tape them near the printer or computer. A condensed reference: "CDCMS columns used: OrderNo, OrderStatus, ConsumerAddress, OrderQuantity, AreaName, DeliveryMan. Status must be: Allocated-Printed." Fits on half an A4 sheet. | LOW | Last section of `CSV_FORMAT.md` with `@media print` friendly layout. Or a separate "quick reference" block (the format DEPLOY.md uses at the end). |
-| **Error message glossary** | The upload endpoint returns structured JSON errors. The dashboard shows them. But terms like "geocoding failure", "row rejected", "cache miss" are technical. A glossary with plain-English definitions builds trust with non-technical users. | LOW | Section in `CSV_FORMAT.md` or `DEPLOY.md`: "What do these messages mean?" Map technical terms to English. Example: "geocoding failure" → "We couldn't find this address on Google Maps. Check the ConsumerAddress field in CDCMS for typos." |
-| **Address cleaning worked examples beyond what's in DEPLOY.md** | DEPLOY.md shows 8 address cleaning examples. The actual preprocessor has 10 cleaning steps covering cases like PO. concatenation (`KUNIYILPO.` → `Kuniyil P.O.`) and CDCMS backtick markers (`` ``THANAL`` `` → `Thanal`). Documenting all 10 with real examples shows office staff why some addresses auto-fix and others don't. | LOW | Extend the address cleaning table with the 2 missing cases. Pull directly from `cdcms_preprocessor.py` comments which already document every step with before/after examples. |
-
-#### Anti-Features (Do NOT Build)
-
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| **Interactive CSV validator web page** | "Let staff validate the file before uploading" | The API upload endpoint already validates on upload and returns row-level errors. A separate validator duplicates this logic and creates a two-step workflow (validate, then upload). | The dashboard upload UI already shows validation errors inline. Improve the error display (plain-English messages), not the validation location. |
-| **Column mapping UI (drag columns to fields)** | "What if CDCMS changes column names?" | CDCMS is an HPCL system with fixed column names. If they change, it's a code update, not a user configuration. Column mapping UI is the right solution for generic import tools (like Airtable or Mailchimp), not for a single-customer system with one known data format. | Update `cdcms_preprocessor.py` constants when CDCMS changes column names. Document in `CSV_FORMAT.md` that column names are fixed and known. |
-| **Auto-detect delimiter (beyond what already exists)** | "The file might use semicolons" | CDCMS exports are exclusively tab-separated. The current tab→comma fallback already covers the edge case of Excel re-saves. Adding semicolon detection or full RFC 4180 sniffing adds complexity for zero real-world value. | Document the tab/comma fallback in `CSV_FORMAT.md`. Current behavior is correct for all known inputs. |
+| Feature | Why Expected | Complexity | Dependencies |
+|---------|-------------|------------|--------------|
+| **Playwright E2E: API endpoint smoke tests** | Every API endpoint (`/health`, `/api/config`, `/api/routes`, `/api/vehicles`, etc.) needs automated verification beyond the pytest mocked tests. These test the actual running Docker stack. | Low | Docker Compose running, `@playwright/test` (already in root devDeps) |
+| **Playwright E2E: Driver PWA upload-to-delivery flow** | The critical user path: CSV upload, vehicle selection, route view rendering, mark stop done/fail, all-done banner. This is the CLAUDE.md checklist (Sections 1-7) automated. If this breaks, drivers get no routes. | Med | API running, test CSV fixtures, browser automation |
+| **Playwright E2E: Dashboard route display** | Office staff's primary interface. Must verify route cards render, QR sheet generates, map view loads after upload. | Med | Dashboard build, API running |
+| **CI/CD pipeline fix + Playwright integration** | Existing CI runs pytest + dashboard build + Docker smoke. E2E tests must also run in CI or the test suite is decorative -- tests that do not run in CI rot within weeks. | Med-High | GitHub Actions, Playwright container image, Docker Compose service startup in CI |
+| **Stop script with garbage collection** | `docker compose down` is the current end-of-day instruction (DEPLOY.md Section 3). No cleanup for dangling images, build cache, or container logs. Over months, customer laptops fill up. This is different from `reset.sh` (nuclear option) -- it is for daily use. | Low | Existing `reset.sh` as pattern reference |
+| **Clean install verification from tarball** | `build-dist.sh` creates a tarball. `test-fresh-deploy.sh` exists but tests the git repo checkout, not the actual distribution tarball that customers receive. The tarball is the product -- it must be tested. | Med | `build-dist.sh`, Docker-in-Docker or clean container |
+| **Production vs development environment docs** | LICENSING.md has a partial comparison table (lines 161-251). Needs consolidation into a clear section a non-developer can use to verify they are running the right configuration. Currently split across LICENSING.md and scattered DEPLOY.md references. | Low | Existing docs to consolidate |
+| **Google API key troubleshooting guide** | The single most common customer support issue. Geocoding fails with `REQUEST_DENIED` or `ZERO_RESULTS`. Current error message says "contact IT" with no actionable steps. Google Cloud Console requires: project created, Geocoding API enabled, billing enabled, key unrestricted or correctly restricted. | Low | Google Cloud Console knowledge |
 
 ---
 
-### Domain 3: README Accuracy
+## Differentiators
 
-#### Table Stakes (Users Expect These)
+Features that go beyond table stakes and make the product notably more professional or reliable. Not expected by every customer, but signal quality and reduce support burden.
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **Correct container names in README** | README.md (line 404) documents container name `routing-db` and health check user `routeopt`. Actual docker-compose.yml has `container_name: lpg-db` and the DB user in `.env.example` is `routing`. Developers hitting "container not found" errors because of stale docs are a support burden. | LOW | Find/replace stale names. Run `grep -n "routing-db\|routeopt" README.md` and fix. Also fix `POSTGRES_USER` discrepancy ("Defaults to `routing`" is correct in env var table but `routeopt` appears in health check example). |
-| **Filled-in REPO_URL placeholder** | README.md line 15 and DEPLOY.md Step 2.3 both have `git clone <REPO_URL>`. This placeholder is never substituted. A non-technical user copy-pasting this command gets a git error. | LOW | Replace `<REPO_URL>` with the actual repository URL. If the repo is private, replace with a generic instruction: "Ask your technical contact for the repository URL." |
-| **Remove manual steps now automated by install.sh** | README Quick Start (lines 14-50) still shows `python3 -m venv .venv`, `pip install -r requirements.txt`, `alembic upgrade head` as manual steps. These are now handled by `install.sh`. Developer-facing README can keep these for development context, but the Quick Start section should lead with `./scripts/install.sh`. | LOW | Rewrite Quick Start to lead with `./scripts/install.sh` for office users. Retain manual steps in a collapsible "For developers" section below. |
-| **Accurate Docker service table** | README documents 4 services: `routing-db`, `osrm-kerala`, `vroom-solver`, `lpg-api`. Actual container names from docker-compose.yml: `lpg-db`, `osrm-kerala` (correct), `vroom-solver` (correct), `lpg-api` (correct). Only `routing-db` is wrong. | LOW | Fix the one wrong container name. Also verify the health check commands in the table match actual working commands. |
-
-#### Differentiators
-
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **Link to CSV_FORMAT.md from README and DEPLOY.md** | When CSV_FORMAT.md is written, README and DEPLOY.md should cross-reference it. Right now CSV format docs are inline in README. After the refactor, the inline docs can be abbreviated with "See CSV_FORMAT.md for full column reference." | LOW | Update README line ~218: "See [CSV_FORMAT.md](CSV_FORMAT.md) for the complete column reference and address cleaning documentation." |
-| **Version badge and last-updated date** | README has no version indicator. Developers and staff cannot tell if they have current documentation. A simple `**Version: v1.3**` at the top and "Last updated: 2026-03-04" gives document confidence. | LOW | Add to README preamble. Update it as part of the milestone completion checklist. |
-
-#### Anti-Features
-
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| **Auto-generate README from code** | "Keep docs in sync with code automatically" | Auto-generated README lacks the narrative context (Kerala business rules, architecture decisions, safety constraints) that makes this README useful. Auto-generated API docs already exist at `/docs` (FastAPI/Swagger). | Keep README hand-maintained. Add to contributing guidelines: "Update README when adding new endpoints or changing container names." |
-| **Separate README per audience (developer vs office)** | "Developers and office staff need different docs" | Already solved: README.md → developer, DEPLOY.md → office staff. Adding a third README file fragments documentation and creates 3 sources of truth to maintain. | Improve README Quick Start to route readers immediately ("Employee? See DEPLOY.md"). Already done (line 7 of README). Just ensure the cross-link is prominent and accurate. |
+| Feature | Value Proposition | Complexity | Dependencies |
+|---------|-------------------|------------|--------------|
+| **Playwright visual regression tests** | Catch CSS regressions in dashboard and driver PWA. Tailwind v4 prefix (`tw:`) has broken before (the v1.0 `tw-` to `tw:` migration affected 13 files). Screenshot comparison prevents silent UI degradation between releases. | Med | Playwright screenshots, baseline images, Docker for consistent rendering environment |
+| **Distribution documentation (build-dist workflow)** | Developer-facing doc explaining the full build-to-deliver pipeline: build tarball, generate license, transfer to customer, verify install. Currently scattered across LICENSING.md "Building a distribution" section and build-dist.sh comments. | Low | Existing docs to consolidate |
+| **License lifecycle documentation** | End-to-end journey: generate key on dev machine, deliver to customer (WhatsApp/email), customer activates, monitor grace period warnings, renew before expiry. Currently split between LICENSING.md (developer steps) and DEPLOY.md Section 6.1 (customer steps). | Low | Existing docs to consolidate |
+| **CI badge on README** | Visual signal that CI is passing. Standard for any project claiming ship-readiness. Adds credibility when sharing the repo with potential customers or collaborators. | Trivial | GitHub Actions workflow name |
+| **Playwright test report as CI artifact** | Upload HTML report on test failure for debugging. Playwright generates detailed HTML reports with screenshots and traces by default. Saves hours of "works on my machine" debugging. | Low | GitHub Actions artifact upload step |
+| **E2E test for license validation flow** | Verify that expired/missing/invalid license keys return 503 correctly. Critical path for the revenue model -- if licensing breaks silently, the product is given away for free. | Low-Med | License generation script, test fixtures |
+| **Stop script with log rotation** | Beyond garbage collection: Docker's default JSON-file logging has no size limit. On a customer laptop running for months, container logs accumulate indefinitely. Truncating or rotating logs prevents disk exhaustion. | Low | Docker log config or manual truncation |
+| **Offline PWA E2E test** | Driver PWA claims offline support (service worker caches route data). Verify this actually works by intercepting network in Playwright. High-value for Kerala's spotty mobile networks. | Med-High | Playwright network mocking, service worker testing |
 
 ---
 
-### Domain 4: Non-Technical Error Messages
+## Anti-Features
 
-#### Table Stakes (Users Expect These)
+Features to explicitly NOT build in this milestone. Including them would delay ship-readiness or add complexity without proportional value.
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **Upload error messages in plain English** | The API returns structured JSON errors with message fields. Currently those messages are developer-facing: `"CDCMS export is missing required columns: {'OrderNo'}. Found columns: [...]"`. A non-technical user reading "Found columns: [...]" doesn't know what to do. Every consumer-facing SaaS (Mailchimp, Airtable) translates import errors into "Column 'Name' is missing — check that your file has a header row." | MEDIUM | The message text is already parameterized in `cdcms_preprocessor.py` `_validate_cdcms_columns()` and `csv_importer.py` `_validate_columns()`. Update the message strings to plain English. No architecture change needed — the message field is already surfaced in the dashboard UI's ImportSummary component. |
-| **Geocoding failure message explains next step** | Current geocoding failure message: `"Geocoding failed for row 7: REQUEST_DENIED"`. A non-technical user doesn't know what `REQUEST_DENIED` means. The expected message: `"Could not find GPS coordinates for address in row 7. Check the ConsumerAddress in CDCMS for typos. If the address looks correct, the Google Maps API key may need renewal."` | MEDIUM | Wrap Google Maps API error codes (`REQUEST_DENIED`, `ZERO_RESULTS`, `OVER_DAILY_LIMIT`) into plain-English messages in `core/geocoding/google_adapter.py`. The message field already flows to the dashboard — this is a string change, not an API change. |
-| **Empty file error message** | If staff upload a 0-byte file or an empty CSV (headers only, no data rows), the current error is a Python stack trace or generic "no orders". Expected: `"The uploaded file appears empty. Export a new file from CDCMS and try again."` | LOW | Already partially handled in `_validate_cdcms_columns()` (checks for empty address column). Add explicit empty-file check at the start of the upload pipeline. |
-| **Wrong file type message** | If staff accidentally upload a PDF or image (it happens), the API returns HTTP 422 Unprocessable Entity with a cryptic Pydantic error. Expected: `"This file type is not supported. Upload a CSV file (.csv) or Excel file (.xlsx) exported from CDCMS."` | LOW | Add file extension check at the start of the upload endpoint before passing to the preprocessor. Return HTTP 400 with a plain-English message. |
-
-#### Differentiators
-
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **"Did you mean...?" suggestions for column name mismatches** | If the file has `Order_No` instead of `OrderNo`, instead of "missing required column OrderNo", show: `"Column 'OrderNo' not found. Your file has 'Order_No' — this looks like it might be a renamed CDCMS column. Try re-exporting from CDCMS without renaming columns."` | LOW | Fuzzy column matching for error messages ONLY (not for silent auto-fixing — that's an anti-feature). Compute Levenshtein distance between "OrderNo" and each found column. If distance ≤ 2, include the suggestion in the error message. |
-| **Structured error response with remediation steps** | Current API returns `{"detail": "error message"}`. A richer format: `{"error": "missing_column", "column": "OrderNo", "message": "...", "docs": "See CSV_FORMAT.md#required-columns"}` gives the dashboard enough structure to show a "How to fix this" button. | MEDIUM | New `UploadError` Pydantic model with `error_code`, `message`, `remediation` fields. Return from upload endpoint instead of bare `HTTPException`. Dashboard shows the remediation step next to the error. Requires dashboard UI change to use the new field. |
-
-#### Anti-Features
-
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| **Auto-correct column names** | "If OrderNo is renamed, map it automatically" | Auto-correction creates ambiguity: if the user uploaded the wrong file entirely (not a CDCMS export), auto-mapping would silently produce wrong results. Data integrity matters more than convenience for a delivery routing system. | Report mismatches with a "Did you mean...?" suggestion in the error message. Let the user re-export correctly from CDCMS. |
-| **Inline address editor in dashboard** | "Let staff fix addresses without going back to CDCMS" | Editing addresses in the dashboard creates a divergence between CDCMS (the source of truth) and the route optimizer. When staff re-upload tomorrow, the manually-fixed addresses are gone. | Fix addresses in CDCMS. Document in `CSV_FORMAT.md` and `DEPLOY.md` that address corrections should be made in CDCMS. |
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| **Performance/load testing** | This is a single-laptop, 13-vehicle system processing ~50 orders/day. Load testing adds no value at this scale. The optimization runs in <15 seconds for 50 orders. | Monitor response times in E2E tests as sanity checks (assert < 30s). |
+| **Multi-browser E2E testing** | Drivers use Chrome on Android. Dashboard users use Chrome on Windows. Safari/Firefox coverage adds CI time (3x) without matching real-world usage. | Run Playwright in Chromium only. Add webkit project later if a customer reports Safari issues. |
+| **Automated accessibility testing (axe-core)** | WCAG AAA contrast is already validated by design (v1.1). axe-core integration is valuable but is a maintenance-phase activity, not a ship-ready gate. | Keep WCAG AAA contrast ratios in the design tokens. Accessibility audit in a future milestone. |
+| **Docker image size optimization** | Multi-stage builds, Alpine base images, etc. The customer laptop has 256+ GB SSD. Current images work. Image size is not a deployment blocker. | Keep the current Debian-based images. Optimize only if a customer reports disk pressure. |
+| **Automated dependency updates (Dependabot/Renovate)** | Adds PR noise to a solo-dev project. Dependencies are pinned for stability (OSRM v5.27.1, VROOM v1.14.0-rc.2). Automated updates risk breaking the stack. | Manual quarterly dependency review. |
+| **Test coverage metrics (codecov/coveralls)** | 420 pytest tests exist. Chasing coverage percentages does not find bugs -- E2E tests that exercise real user flows do. Coverage tooling adds CI time and configuration overhead. | Focus on E2E flow coverage (critical paths tested), not line coverage. |
+| **Canary/blue-green deployment** | Single-laptop deployment. There is no staging environment and no traffic to canary. The deployment model is "stop, update, start." | The `test-fresh-deploy.sh` IS the pre-deployment verification. Clean install verification from tarball extends this. |
+| **Automated rollback on deploy failure** | `deploy.sh` already creates a pre-deploy database backup. Automated rollback for a single-laptop system adds complexity for a failure mode that has never occurred. | Keep manual rollback instructions in deploy.sh comments. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[scripts/start.sh]
-    +-- requires --> [scripts/install.sh health check pattern (reuse)]
-    +-- enables --> [Docker auto-start in ~/.bashrc (opt-in from install.sh)]
-    +-- enables --> [scripts/status.sh (simple wrapper)]
+Playwright config (playwright.config.ts) [prerequisite for all E2E]
+  |
+  +-> Playwright E2E: API smoke tests [no browser needed, fastest]
+  |     |
+  |     +-> Playwright E2E: Driver PWA flow [needs API, needs browser]
+  |     |
+  |     +-> Playwright E2E: Dashboard flow [needs API, needs browser]
+  |
+  +-> CI/CD pipeline fix [needs working CI before adding E2E jobs]
+        |
+        +-> Playwright in CI [needs CI fix, then add E2E job]
+              |
+              +-> Playwright report artifact [upload on E2E failure]
 
-[CSV_FORMAT.md]
-    +-- requires --> [Address cleaning examples (from cdcms_preprocessor.py docstrings)]
-    +-- requires --> [Column constraints (from csv_importer.py ColumnMapping)]
-    +-- enables --> [README cross-link update]
-    +-- enables --> [DEPLOY.md cross-link update]
-    +-- enables --> [Error message glossary (reuse content)]
+build-dist.sh (exists)
+  |
+  +-> Clean install verification from tarball [tests the dist output]
+  |
+  +-> Distribution documentation [documents the build-to-deliver workflow]
 
-[README accuracy fixes]
-    +-- requires --> [docker-compose.yml audit (container names)]
-    +-- requires --> [.env.example audit (POSTGRES_USER, POSTGRES_DB defaults)]
-    +-- independent-of --> [CSV_FORMAT.md (can be done in any order)]
+License generation (exists) + LICENSING.md (exists) + DEPLOY.md 6.1 (exists)
+  |
+  +-> License lifecycle docs [consolidates scattered info]
 
-[Plain-English error messages]
-    +-- requires --> [CSV_FORMAT.md (for remediation links in error text)]
-    +-- requires --> [Audit of all error message strings in upload pipeline]
-    +-- independent-of --> [start.sh]
+Google API key troubleshooting [standalone, no dependencies]
 
-[Structured error response (UploadError model)]
-    +-- requires --> [Plain-English error messages (content prerequisite)]
-    +-- requires --> [Dashboard UI update to use new error_code + remediation fields]
+Stop script with GC [standalone, references docker compose commands]
+
+Prod vs dev docs [standalone, references existing LICENSING.md]
 ```
 
-### Dependency Notes
+---
 
-- **`start.sh` is fully independent.** It can be written before any doc work. It has no dependencies on CSV_FORMAT.md or error message changes.
-- **`CSV_FORMAT.md` should be written before README updates.** README can then just link to it rather than embedding the full table inline.
-- **Plain-English error messages are independent of the structured UploadError model.** Improving the message strings is a LOW complexity change that can ship first. The structured model (with `error_code` and `remediation` fields) is a MEDIUM complexity change that requires both API and dashboard changes.
-- **README accuracy is fully independent of all other features.** Fix container names and REPO_URL placeholder in any order.
+## MVP Recommendation
+
+### Phase 1: Test Infrastructure (do first -- gates everything else)
+
+| # | Feature | Effort | Rationale |
+|---|---------|--------|-----------|
+| 1 | **Playwright config + API smoke tests** | 2-3h | Create `playwright.config.ts`, write 5-8 API test cases using Playwright's `request` API (no browser). Validates test infrastructure works before investing in browser tests. |
+| 2 | **Playwright E2E: Driver PWA upload-to-delivery flow** | 4-6h | Highest-value user path. Upload CSV, select vehicle, verify route view, mark stop done, verify all-done banner. This is the CLAUDE.md E2E checklist (Sections 1-7) automated. |
+| 3 | **Playwright E2E: Dashboard route display** | 3-4h | Second user path. Upload, verify route cards, QR sheet generation, map view. Simpler interactions than PWA. |
+| 4 | **CI/CD pipeline fix + Playwright in CI** | 3-4h | Add 4th CI job: start Docker Compose on runner, install Playwright browsers, run E2E tests, upload report artifact on failure. Without this, E2E tests rot. |
+
+### Phase 2: Distribution Verification (do second)
+
+| # | Feature | Effort | Rationale |
+|---|---------|--------|-----------|
+| 5 | **Clean install verification from tarball** | 2-3h | Extend or create script to: `build-dist.sh v1.4` -> extract tarball in clean container -> run install.sh -> health check -> verify API + PWA + dashboard serve. Tests the product customers receive. |
+| 6 | **Stop script with garbage collection** | 1-2h | Simple script: `docker compose down` (keep volumes), prune dangling images, truncate logs, print disk space freed. High customer value, low effort. |
+
+### Phase 3: Documentation (do third)
+
+| # | Feature | Effort | Rationale |
+|---|---------|--------|-----------|
+| 7 | **Google API key troubleshooting guide** | 1-2h | Standalone. High customer support value. Covers: create project, enable Geocoding API, enable billing, check key restrictions, test with curl. Decision tree format. |
+| 8 | **Distribution documentation** | 1-2h | Developer-facing. Consolidates build-dist.sh workflow, tarball contents, what is excluded and why, customer delivery checklist. |
+| 9 | **License lifecycle documentation** | 1-2h | End-to-end journey consolidation. Currently split across LICENSING.md and DEPLOY.md 6.1. Single coherent narrative: generate -> deliver -> activate -> monitor -> renew -> troubleshoot. |
+| 10 | **Prod vs dev environment docs** | 0.5-1h | Extend LICENSING.md "Dev vs Production" table or create standalone section. Focus: how a non-developer verifies they are in the right environment. |
+
+### Defer to v1.5+
+
+- **Visual regression tests** -- valuable but requires baseline image management infrastructure. Better after core E2E suite is stable and proven.
+- **Offline PWA E2E test** -- complex (service worker testing in Playwright requires network interception patterns). Better after core E2E suite covers the happy path.
+- **License validation E2E test** -- nice to have, but license logic is covered by pytest unit tests. Add after core E2E flows are solid.
+- **CI badge on README** -- trivial, can be added anytime.
 
 ---
 
-## MVP Definition
+## Key Technical Decisions for Features
 
-### Must Ship in v1.3 (P1)
+### Playwright Test Architecture
 
-These directly address the milestone goals stated in PROJECT.md:
+The project already has `@playwright/test ^1.58.2` in root `package.json` devDependencies. No `playwright.config.ts` exists yet.
 
-- [ ] **`scripts/start.sh`** — single command for daily startup: start Docker, start containers, health check, print URLs. This is the core UX improvement for office staff.
-- [ ] **`CSV_FORMAT.md`** — consolidated single-page reference for both CDCMS and generic CSV formats, column constraints, rejection reasons, address cleaning examples.
-- [ ] **README container name fixes** — `routing-db` → `lpg-db`, `routeopt` → `routing` in health check examples. Stale docs cause support overhead.
-- [ ] **`<REPO_URL>` placeholder filled** — both README.md and DEPLOY.md. Non-technical users cannot follow setup without a real URL.
-- [ ] **Plain-English error messages in upload pipeline** — at minimum: missing column, empty file, wrong file type. These are the three most common error cases for office staff.
+**Recommended test structure:**
+```
+tests/e2e/
+  playwright.config.ts     # Config: baseURL, webServer or reuseExistingServer
+  api.spec.ts              # API endpoint smoke tests (Playwright request API, no browser)
+  driver-pwa.spec.ts       # Full driver flow (browser automation)
+  dashboard.spec.ts        # Dashboard route display (browser automation)
+  fixtures/
+    test-orders.csv        # Known-good CSV with 5 orders for upload tests
+```
 
-### Should Have (P2 — add during v1.3 if time permits)
+**Service startup approach:** Two options exist:
+- **Option A (webServer):** Playwright launches `docker compose up -d` before tests, polls `/health`, runs tests, then `docker compose down`. Simpler config but Playwright manages Docker lifecycle.
+- **Option B (external services):** Expect services already running. Set `reuseExistingServer: true` locally. In CI, a separate step starts Docker Compose.
 
-- [ ] **`scripts/status.sh`** — `docker compose ps` wrapper with health check. Gives staff a "is it running?" command without asking a developer.
-- [ ] **Docker auto-start opt-in in `install.sh`** — eliminates `sudo service docker start` from daily routine.
-- [ ] **Geocoding error messages plain-English** — translate `REQUEST_DENIED`, `ZERO_RESULTS` to staff-facing language.
-- [ ] **`CSV_FORMAT.md` linked from README and DEPLOY.md** — cross-links to avoid duplication.
-- [ ] **"Did you mean...?" column name suggestion** — fuzzy match in error messages for slightly-wrong column names.
-- [ ] **Address cleaning examples expanded to all 10 steps** — currently 8 of 10 steps are documented in DEPLOY.md.
+**Recommendation: Option B.** Start services in a separate CI step (or manually for local dev). Playwright tests just connect to `http://localhost:8000`. This matches the existing `test-fresh-deploy.sh` pattern, avoids Playwright managing Docker lifecycle, and is simpler to debug when services fail to start (CI logs show Docker Compose output separately from test output).
 
-### Future Consideration (v1.4+)
+### CI/CD Architecture for E2E
 
-- [ ] **Structured UploadError model** — `error_code` + `remediation` fields — requires coordinated API + dashboard change.
-- [ ] **Desktop shortcut for Ubuntu** — `.desktop` file or Windows shortcut for "Start Route Optimizer".
-- [ ] **`scripts/status.sh` with per-service breakdown** — shows which containers are healthy vs. not, with suggested fixes.
-- [ ] **Error message glossary page** — if office staff report confusion with specific terms.
+Current CI has 3 jobs. Adding Playwright E2E as a 4th job.
+
+**Key constraint:** Playwright E2E needs Docker Compose services running. Two approaches:
+- **Docker-in-Docker:** Complex, slow, fragile. Not recommended.
+- **Direct on runner:** GitHub Actions ubuntu-latest has Docker pre-installed. Run `docker compose up -d` directly, wait for health, run Playwright. Simple and proven.
+
+**Recommendation:** Direct on runner.
+```yaml
+e2e:
+  name: E2E Tests
+  runs-on: ubuntu-latest
+  steps:
+    - checkout
+    - docker compose up -d
+    - wait for health (curl loop)
+    - setup Node + npm ci
+    - npx playwright install --with-deps chromium
+    - npx playwright test
+    - upload playwright-report/ as artifact (always, for debugging)
+    - docker compose down
+```
+
+**CI cost consideration:** The existing 3 jobs run in ~2-3 minutes. E2E with Docker Compose startup adds ~5-8 minutes. Total ~8-11 minutes, well within GitHub Actions free tier (2,000 min/month for private repos).
+
+### Stop Script vs Reset Script
+
+`reset.sh` exists with comprehensive cleanup (6 steps, interactive/all/dry-run modes). The stop script is fundamentally different:
+
+| Aspect | `stop.sh` (new) | `reset.sh` (existing) |
+|--------|-----------------|----------------------|
+| Purpose | End-of-shift shutdown | Nuclear reset for troubleshooting |
+| Frequency | Daily | Rarely (troubleshooting only) |
+| Database | Preserved | Optionally destroyed |
+| OSRM data | Preserved | Optionally destroyed |
+| Docker images | Dangling pruned | All removed |
+| Container logs | Truncated | N/A |
+| User prompt | None (safe by default) | Interactive or `--all` confirmation |
+
+### Clean Install Verification Scope
+
+`test-fresh-deploy.sh` tests: git repo -> install.sh -> health check -> endpoint verification.
+The new tarball verification tests: build-dist.sh -> extract tarball -> install.sh -> health check -> endpoint verification.
+
+**Key difference:** The tarball has no `.git/`, no `tests/`, no `generate_license.py`, and licensing is `.pyc`-only. The test must verify that the tarball works without these files.
 
 ---
 
-## Feature Prioritization Matrix
+## Complexity Estimates Summary
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| `scripts/start.sh` | HIGH | LOW | P1 |
-| `CSV_FORMAT.md` | HIGH | LOW | P1 |
-| README container name fixes | MEDIUM | LOW | P1 |
-| `<REPO_URL>` placeholder filled | HIGH | LOW | P1 |
-| Plain-English error messages (upload) | HIGH | LOW | P1 |
-| `scripts/status.sh` | MEDIUM | LOW | P2 |
-| Docker auto-start opt-in | MEDIUM | LOW | P2 |
-| Geocoding error plain-English | MEDIUM | LOW | P2 |
-| CSV_FORMAT.md cross-links | LOW | LOW | P2 |
-| "Did you mean...?" column suggestions | MEDIUM | LOW | P2 |
-| Address cleaning examples (2 remaining) | LOW | LOW | P2 |
-| Structured UploadError model | MEDIUM | MEDIUM | P3 |
-| Desktop shortcut | LOW | LOW | P3 |
+| Feature | Estimated Effort | Risk |
+|---------|-----------------|------|
+| Playwright config + API smoke tests | 2-3 hours | Low -- well-documented, no browser needed |
+| Driver PWA E2E flow | 4-6 hours | Medium -- file upload automation, multi-step flow, modal interaction |
+| Dashboard E2E flow | 3-4 hours | Medium -- route card rendering depends on upload completing first |
+| CI/CD pipeline fix + Playwright | 3-4 hours | Medium -- Docker Compose in CI has startup timing concerns |
+| Clean install verification | 2-3 hours | Medium -- Docker-in-Docker or clean container approach |
+| Stop script with GC | 1-2 hours | Low -- straightforward shell script |
+| Google API key troubleshooting | 1-2 hours | Low -- documentation only |
+| Distribution documentation | 1-2 hours | Low -- consolidating existing info |
+| License lifecycle docs | 1-2 hours | Low -- consolidating existing info |
+| Prod vs dev docs | 0.5-1 hour | Low -- extending existing table |
 
-**Priority key:**
-- P1: Must have for v1.3 milestone completion — makes the system office-ready
-- P2: Should have, add during v1.3 if time permits
-- P3: Nice to have, defer to v1.4+
+**Total estimated effort:** 20-30 hours (3-5 focused days)
 
 ---
 
-## Reference: What Good Looks Like in Each Area
+## Customer Delivery Checklist (informing distribution docs)
 
-### One-Command Startup (Industry Standard)
+Based on the existing build-dist.sh workflow and LICENSING.md, the full customer delivery pipeline is:
 
-XAMPP, WAMP, and Laragon set the bar for local development tool startup UX for non-technical users:
-- Single launcher: double-click or one command
-- Green/red status indicators per service
-- Direct links to dashboard in the output
-- Graceful handling of "already running" without errors
+1. **Build:** `./scripts/build-dist.sh v1.4` -- creates `dist/kerala-delivery-v1.4.tar.gz`
+2. **Verify build:** Run clean install verification script on the tarball
+3. **Generate license:** Get customer's machine fingerprint, run `generate_license.py`
+4. **Package delivery:** tarball + license key string + DEPLOY.md quick reference card
+5. **Customer installs:** Extract tarball, run `bootstrap.sh`, enter Google API key when prompted
+6. **Customer activates license:** Run `get_machine_id.py`, send fingerprint, receive and save key
+7. **Verify installation:** Customer runs `start.sh`, opens dashboard, uploads test CSV
+8. **Go live:** Customer uploads real CDCMS export, prints QR codes for drivers
 
-`scripts/start.sh` should reach this level within the constraints of WSL2 bash.
-
-### CSV Documentation (Industry Standard)
-
-Mailchimp CSV import docs are the gold standard:
-- Column name + type + required/optional in a table
-- Valid values enumerated (not "see the code")
-- Sample rows with correct formatting
-- Common errors listed with "what to do"
-- All on one page, no clicking around
-
-`CSV_FORMAT.md` should reach this level for both the CDCMS and generic CSV formats.
-
-### Error Messages (Industry Standard)
-
-Stripe's API error messages are the gold standard for technical→non-technical translation:
-- Error code (for developers to look up)
-- Human-readable message (for displaying to users)
-- Suggested next action (not just what went wrong, but what to do)
-
-The upload endpoint error messages should have all three, even if the dashboard only displays the human-readable message today.
+This checklist should be the backbone of the distribution documentation.
 
 ---
 
 ## Sources
 
-- Codebase analysis: `scripts/install.sh` (health check pattern, spinner, color output), `DEPLOY.md` (daily workflow steps, quick reference card), `core/data_import/cdcms_preprocessor.py` (cleaning steps, validation messages), `core/data_import/csv_importer.py` (ColumnMapping, error types), `docker-compose.yml` (actual container names)
-- DEPLOY.md audit: daily startup requires 3 commands (lines 154-157), `<REPO_URL>` placeholder unfilled (line 119), CDCMS format reference scattered (Sections 4-5)
-- README.md audit: stale container name `routing-db` (line 404), stale health check user `routeopt` (line 404), `<REPO_URL>` placeholder (line 15), Quick Start still shows manual venv/pip/alembic steps (lines 14-50)
-- PROJECT.md v1.3 goal: "Make the system installable and usable by a non-technical office employee — one-command install from WSL, one-command daily startup, comprehensive documentation of CSV formats and workflow."
+- [Playwright CI Documentation](https://playwright.dev/docs/ci) -- HIGH confidence
+- [Playwright webServer Configuration](https://playwright.dev/docs/test-webserver) -- HIGH confidence
+- [Playwright Docker Documentation](https://playwright.dev/docs/docker) -- HIGH confidence
+- [BrowserStack: E2E Testing with Playwright and Docker](https://www.browserstack.com/guide/playwright-docker) -- MEDIUM confidence
+- [BrowserStack: 15 Playwright Best Practices 2026](https://www.browserstack.com/guide/playwright-best-practices) -- MEDIUM confidence
+- [Docker Compose stop docs](https://docs.docker.com/reference/cli/docker/compose/stop/) -- HIGH confidence
+- [Docker stop_grace_period](https://oneuptime.com/blog/post/2026-02-08-how-to-use-docker-compose-stopgraceperiod-setting/view) -- MEDIUM confidence
+- [Google Maps API Error Messages](https://developers.google.com/maps/documentation/maps-static/error-messages) -- HIGH confidence
+- [Google Maps API Troubleshooting](https://developers.google.com/maps/documentation/javascript/troubleshooting) -- HIGH confidence
+- [Scalable Integration Testing with Playwright, Docker, and GitHub Actions](https://arthiyadevi.medium.com/scalable-integration-testing-with-playwright-docker-and-github-actions-3712b5c12eee) -- MEDIUM confidence
+- [Elevate Your CI/CD: Dockerized E2E Tests with GitHub Actions](https://lachiejames.com/elevate-your-ci-cd-dockerized-e2e-tests-with-github-actions/) -- MEDIUM confidence
+- Existing codebase: `.github/workflows/ci.yml`, `tests/deploy/test-fresh-deploy.sh`, `scripts/build-dist.sh`, `scripts/reset.sh`, `scripts/start.sh`, `DEPLOY.md`, `LICENSING.md` -- HIGH confidence (primary source)
 
 ---
-*Feature research for: Kerala LPG Delivery Route Optimizer v1.3 — Office-Ready Deployment*
-*Researched: 2026-03-04*
+
+*Feature research for: Kerala LPG Delivery Route Optimizer v1.4 -- Ship-Ready QA*
+*Researched: 2026-03-08*
