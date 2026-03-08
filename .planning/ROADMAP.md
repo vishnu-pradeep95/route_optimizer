@@ -95,10 +95,11 @@ Plans:
   2. The E2E CI job starts the Docker Compose stack (without OSRM/VROOM), installs Chromium, runs Playwright tests with `--workers=1`, and tears down cleanly
   3. When an E2E test fails in CI, a Playwright HTML report is uploaded as a downloadable GitHub Actions artifact for debugging
   4. The project README.md displays a CI status badge that reflects the current pipeline health (green/red)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 22-01: TBD
+- [ ] 22-01-PLAN.md -- Fix 64 pytest failures + update CI comments (CICD-01)
+- [ ] 22-02-PLAN.md -- Add E2E job to CI + failure artifacts + CI badge (CICD-02, CICD-03, CICD-04)
 
 ### Phase 23: Distribution Verification & Operational Scripts
 **Goal**: The actual customer deliverable (tarball from build-dist.sh) installs and runs correctly on a fresh environment, and operators have a safe shutdown script for daily use
@@ -158,7 +159,7 @@ Phases execute in numeric order: 21 -> 22 -> 23 -> 24
 | 19. Pin OSRM Docker Image | v1.3 | 1/1 | Complete | 2026-03-07 |
 | 20. Sync Error Message Documentation | v1.3 | 1/1 | Complete | 2026-03-07 |
 | 21. Playwright E2E Test Suite | 3/3 | Complete    | 2026-03-08 | - |
-| 22. CI/CD Pipeline Integration | v1.4 | 0/? | Not started | - |
+| 22. CI/CD Pipeline Integration | v1.4 | 0/2 | Not started | - |
 | 23. Distribution Verification & Ops | v1.4 | 0/? | Not started | - |
 | 24. Documentation Consolidation | v1.4 | 0/? | Not started | - |
 
