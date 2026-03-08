@@ -102,7 +102,7 @@ if [[ "$GC_MODE" == true ]]; then
         while IFS= read -r cid; do
             if [[ -n "$cid" ]]; then
                 log_path=$(docker inspect --format='{{.LogPath}}' "$cid" 2>/dev/null || true)
-                if [[ -n "$log_path" && -f "$log_path" ]]; then
+                if [[ -n "$log_path" ]]; then
                     LOG_PATHS+=("$log_path")
                 fi
             fi
@@ -128,37 +128,18 @@ fi
 if [[ "$GC_MODE" == true ]]; then
     header "Garbage collection"
 
-    # ── 4a: Orphan container and network cleanup ─────────────────────────
-    info "Removing orphan containers and unused networks..."
-    docker compose down --remove-orphans
-    success "Orphan containers and networks cleaned"
-
-    # ── 4b: Dangling image prune ─────────────────────────────────────────
-    info "Pruning dangling images..."
-    PRUNE_OUTPUT=$(docker image prune -f 2>&1)
-
-    # Parse results
-    DELETED_IMAGES=$(echo "$PRUNE_OUTPUT" | grep -c "^deleted:" 2>/dev/null || echo "0")
-    # Alternative: count "Deleted:" lines (docker outputs "Deleted: sha256:...")
-    if [[ "$DELETED_IMAGES" == "0" ]]; then
-        DELETED_IMAGES=$(echo "$PRUNE_OUTPUT" | grep -ic "^deleted" 2>/dev/null || echo "0")
-    fi
-    RECLAIMED=$(echo "$PRUNE_OUTPUT" | grep -oP "Total reclaimed space: \K.*" 2>/dev/null || echo "")
-
-    if [[ -n "$RECLAIMED" && "$RECLAIMED" != "0B" ]]; then
-        success "Removed dangling image(s) ($RECLAIMED reclaimed)"
-    else
-        info "No dangling images to remove"
-    fi
-
-    # ── 4c: Truncate container logs ──────────────────────────────────────
+    # ── 4a: Truncate container logs (BEFORE down removes containers) ─────
+    # Containers are stopped but still exist, so their log files are intact.
+    # Must truncate now because `docker compose down` deletes containers
+    # and Docker cleans up their log files.
     if [[ ${#LOG_PATHS[@]} -gt 0 ]]; then
         # Check if sudo is available
         if command -v sudo &>/dev/null; then
             TOTAL_FREED=0
             TRUNCATED=0
             for log_path in "${LOG_PATHS[@]}"; do
-                if [[ -f "$log_path" ]]; then
+                # Log files are root-owned; use sudo for all access
+                if sudo test -f "$log_path" 2>/dev/null; then
                     LOG_SIZE=$(sudo stat -c%s "$log_path" 2>/dev/null || echo "0")
                     if [[ "$LOG_SIZE" -gt 0 ]]; then
                         sudo truncate -s 0 "$log_path"
@@ -179,6 +160,24 @@ if [[ "$GC_MODE" == true ]]; then
         fi
     else
         info "No container logs found to truncate"
+    fi
+
+    # ── 4b: Orphan container and network cleanup ─────────────────────────
+    info "Removing orphan containers and unused networks..."
+    docker compose down --remove-orphans
+    success "Orphan containers and networks cleaned"
+
+    # ── 4c: Dangling image prune ─────────────────────────────────────────
+    info "Pruning dangling images..."
+    PRUNE_OUTPUT=$(docker image prune -f 2>&1)
+
+    # Parse results
+    RECLAIMED=$(echo "$PRUNE_OUTPUT" | grep -oP "Total reclaimed space: \K.*" 2>/dev/null || echo "")
+
+    if [[ -n "$RECLAIMED" && "$RECLAIMED" != "0B" ]]; then
+        success "Removed dangling image(s) ($RECLAIMED reclaimed)"
+    else
+        info "No dangling images to remove"
     fi
 
     echo ""
