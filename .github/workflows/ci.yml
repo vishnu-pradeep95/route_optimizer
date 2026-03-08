@@ -4,7 +4,7 @@
 # Runs on every push and pull request to main.
 #
 # What it does:
-#   1. Test: run the full pytest suite (211+ tests)
+#   1. Test: run the full pytest suite (420+ tests)
 #   2. Dashboard: verify TypeScript compiles and React builds
 #   3. Docker: verify Docker images build successfully (push to main only)
 #
