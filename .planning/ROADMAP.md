@@ -109,11 +109,11 @@ Plans:
   1. Running `scripts/stop.sh` gracefully stops all Docker Compose services (containers halted, all data volumes preserved intact)
   2. Running `scripts/stop.sh --gc` additionally removes dangling images, orphan containers, and truncates container logs -- freeing disk space without destroying data
   3. A fresh environment (no prior git clone, no cached images) can unpack the build-dist.sh tarball, run the install/start scripts, and reach a healthy state where the API responds at /health and the Driver PWA loads
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 23-01: TBD
-- [ ] 23-02: TBD
+- [ ] 23-01-PLAN.md -- Graceful shutdown script (stop.sh) with --gc cleanup mode (OPS-01, OPS-02)
+- [ ] 23-02-PLAN.md -- Distribution tarball verification script (verify-dist.sh) (OPS-03)
 
 ### Phase 24: Documentation Consolidation
 **Goal**: A customer or developer can understand the full distribution, licensing, environment setup, and troubleshooting workflow from documentation alone -- no tribal knowledge required
@@ -160,7 +160,7 @@ Phases execute in numeric order: 21 -> 22 -> 23 -> 24
 | 20. Sync Error Message Documentation | v1.3 | 1/1 | Complete | 2026-03-07 |
 | 21. Playwright E2E Test Suite | 3/3 | Complete    | 2026-03-08 | - |
 | 22. CI/CD Pipeline Integration | 2/2 | Complete    | 2026-03-08 | - |
-| 23. Distribution Verification & Ops | v1.4 | 0/? | Not started | - |
+| 23. Distribution Verification & Ops | v1.4 | 0/2 | Not started | - |
 | 24. Documentation Consolidation | v1.4 | 0/? | Not started | - |
 
 ---
