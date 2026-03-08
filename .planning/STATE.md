@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-08)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Phase 21 -- Playwright E2E Test Suite
+**Current focus:** Phase 22 -- CI/CD Pipeline Integration
 
 ## Current Position
 
@@ -30,7 +30,7 @@ Plan: 03 of 3 complete
 Status: Phase Complete
 Last activity: 2026-03-08 -- Plan 21-03 executed (Dashboard & License E2E tests)
 
-Progress: [██████████] 100%
+Progress: [████████████████████] 11/11 plans (100%)
 
 ## Performance Metrics
 
@@ -70,8 +70,6 @@ See `.planning/milestones/` for full phase details per milestone.
 - QR sheet contains base64 PNG img tags, not inline SVGs
 - License tests use Docker Compose override on port 8001 for isolated production-mode testing
 - 38 total E2E tests pass across all 4 projects in ~22 seconds
-- [Phase 21]: Used .maplibregl-map selector (not .leaflet-container) -- dashboard uses MapLibre GL
-- [Phase 21]: License tests use Docker Compose override on port 8001 for isolated production-mode testing
 
 ### Pending Todos
 
@@ -85,6 +83,6 @@ See `.planning/milestones/` for full phase details per milestone.
 
 ## Session Continuity
 
-Last session: 2026-03-08T20:31:51.065Z
-Stopped at: Completed 21-03-PLAN.md (Phase 21 complete)
+Last session: 2026-03-08
+Stopped at: Phase 21 complete, ready to plan Phase 22
 Resume file: None

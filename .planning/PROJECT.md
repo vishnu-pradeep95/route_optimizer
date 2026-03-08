@@ -61,6 +61,7 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ Distribution build with compiled licensing module (.pyc) — v1.3
 - ✓ OSRM Docker image pinned to v5.27.1 for deployment resilience — v1.3
 - ✓ Error message documentation synced with code (25 messages traced) — v1.3
+- ✓ Playwright E2E test suite (38 tests: API, Driver PWA, Dashboard, License) — v1.4
 
 ### Active
 
@@ -69,7 +70,7 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 **Goal:** Verify the full customer delivery pipeline works end-to-end — automated E2E tests, CI/CD health, clean install verification, distribution documentation, and operational scripts for graceful shutdown.
 
 **Target features:**
-- [ ] Automated Playwright E2E tests (upload flow, driver PWA, dashboard)
+- [x] Automated Playwright E2E tests (upload flow, driver PWA, dashboard)
 - [ ] CI/CD pipeline fix and Playwright integration
 - [ ] Stop script with garbage collection (containers, images, logs)
 - [ ] Distribution documentation (build-dist.sh workflow, .pyc licensing, customer delivery)
@@ -100,7 +101,7 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v1.3 shipped — office-ready deployment with bootstrap/startup scripts, CSV docs, humanized errors. 2.7k Python LOC, 3.7k TypeScript LOC, 2.0k HTML/JS LOC, 1.6k Shell LOC (~10k total). v1.4 focuses on QA, testing, and distribution readiness.
+- **Current state**: v1.4 in progress — Phase 21 complete (38 Playwright E2E tests across 4 projects). 2.7k Python LOC, 3.7k TypeScript LOC, 2.0k HTML/JS LOC, 1.6k Shell LOC, ~1k test LOC (~11k total). Remaining v1.4: CI/CD pipeline, distribution verification, documentation.
 - **Known tech debt**: Physical Android device testing for outdoor contrast; 8 GB laptop testing for install script OSRM OOM validation.
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
@@ -142,6 +143,9 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | Pin OSRM to v5.27.1 | latest tag dropped /bin/bash, breaking fresh deployments | ✓ Good — unblocked all deployments |
 | /bin/sh instead of /bin/bash for OSRM | POSIX constructs only; resilient to base image changes | ✓ Good — works on both Debian and Alpine |
 | ERROR-MAP.md traceability artifact | Maps 25 error messages to source code paths | ✓ Good — prevents documentation drift |
+| Playwright 4-project config | Separate projects for api, driver-pwa, dashboard, license with different base URLs and viewports | ✓ Good — isolated test contexts, parallel-safe |
+| Docker Compose override for license tests | Isolated production-mode container on port 8001 | ✓ Good — tests real license enforcement without affecting dev stack |
+| Sequential story pattern for PWA tests | Shared BrowserContext across ordered tests with UI+API dual verification | ✓ Good — tests real user flow without artificial resets |
 
 ---
-*Last updated: 2026-03-08 after v1.4 milestone started*
+*Last updated: 2026-03-08 after Phase 21*
