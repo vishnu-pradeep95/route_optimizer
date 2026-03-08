@@ -1,0 +1,21 @@
+# Override for license validation E2E tests.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.license-test.yml up -d api-license-test
+# Starts a production-mode API on port 8001 with invalid license for 503 testing.
+
+services:
+  api-license-test:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+    ports:
+      - "8001:8000"
+    environment:
+      - ENVIRONMENT=production
+      - LICENSE_KEY=invalid-test-key-for-e2e
+      - DATABASE_URL=postgresql+asyncpg://routing:${POSTGRES_PASSWORD:-routing_dev_pass}@db:5432/routing_opt
+      - API_KEY=${API_KEY:-}
+      - GOOGLE_MAPS_API_KEY=not-needed-for-license-test
+    depends_on:
+      db:
+        condition: service_healthy
+    # No healthcheck needed -- we EXPECT it to return 503
