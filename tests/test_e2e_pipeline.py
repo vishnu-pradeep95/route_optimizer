@@ -42,6 +42,14 @@ from core.optimizer.vroom_adapter import VroomAdapter
 
 VATAKARA_DEPOT = Location(latitude=11.6244, longitude=75.5796, address_text="Depot")
 
+# Mock vehicles for upload tests. The upload endpoint requires at least one
+# active vehicle; without these, it returns 400. Two vehicles are needed
+# because vroom_5_order_response assigns orders to vehicle 0 and vehicle 1.
+MOCK_VEHICLES = [
+    Vehicle(vehicle_id="VEH-01", max_weight_kg=446.0, max_items=30, depot=VATAKARA_DEPOT),
+    Vehicle(vehicle_id="VEH-02", max_weight_kg=446.0, max_items=30, depot=VATAKARA_DEPOT),
+]
+
 # Realistic delivery locations within 5km of Vatakara depot
 DELIVERY_LOCATIONS = [
     Location(latitude=11.5950, longitude=75.5700, address_text="Vatakara Bus Stand"),
@@ -64,11 +72,15 @@ def mock_session():
 
 @pytest.fixture
 def client(mock_session):
-    """TestClient with DB session and rate limiting overridden."""
+    """TestClient with DB session and rate limiting overridden.
+
+    API_KEY is explicitly cleared to prevent leakage from other test modules
+    that import scripts with load_dotenv() at module level (e.g., import_orders.py).
+    """
     async def override_get_session():
         yield mock_session
 
-    with patch.dict(os.environ, {"RATE_LIMIT_ENABLED": "false"}):
+    with patch.dict(os.environ, {"RATE_LIMIT_ENABLED": "false", "API_KEY": ""}):
         from apps.kerala_delivery.api.main import limiter
         limiter.enabled = False
         app.dependency_overrides[get_session] = override_get_session
@@ -299,7 +311,8 @@ class TestFullUploadOptimizePipeline:
                 raise_for_status=lambda: None,
             )
             mock_repo.get_cached_geocode = AsyncMock(return_value=None)
-            mock_repo.get_active_vehicles = AsyncMock(return_value=[])
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock(), MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.side_effect = MOCK_VEHICLES
             mock_repo.save_optimization_run = AsyncMock(return_value=str(uuid.uuid4()))
 
             response = client.post(
@@ -325,7 +338,8 @@ class TestFullUploadOptimizePipeline:
                 raise_for_status=lambda: None,
             )
             mock_repo.get_cached_geocode = AsyncMock(return_value=None)
-            mock_repo.get_active_vehicles = AsyncMock(return_value=[])
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock(), MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.side_effect = MOCK_VEHICLES
             mock_repo.save_optimization_run = AsyncMock(return_value=str(uuid.uuid4()))
 
             response = client.post(

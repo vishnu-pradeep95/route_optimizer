@@ -28,6 +28,7 @@ from apps.kerala_delivery.api.main import app
 from core.database.connection import get_session
 from core.models.location import Location
 from core.models.route import Route, RouteAssignment, RouteStop
+from core.models.vehicle import Vehicle
 
 
 # =============================================================================
@@ -90,6 +91,16 @@ def client(mock_session):
 def mock_run_id():
     """A fixed UUID for testing."""
     return uuid.UUID("12345678-1234-1234-1234-123456789abc")
+
+
+# A default mock vehicle used by upload tests. The upload endpoint requires
+# at least one active vehicle; without this, it returns 400.
+MOCK_VEHICLE = Vehicle(
+    vehicle_id="VEH-01",
+    max_weight_kg=446.0,
+    max_items=30,
+    depot=Location(latitude=11.6244, longitude=75.5796, address_text="Depot"),
+)
 
 
 @pytest.fixture
@@ -585,7 +596,8 @@ class TestUploadAndOptimize:
             )
             # Mock DB operations called during upload
             mock_repo.get_cached_geocode = AsyncMock(return_value=None)
-            mock_repo.get_active_vehicles = AsyncMock(return_value=[])
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = MOCK_VEHICLE
             mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
 
             resp = client.post(
@@ -688,7 +700,8 @@ class TestMonsoonMultiplier:
 
             # Mock DB operations
             mock_repo.get_cached_geocode = AsyncMock(return_value=None)
-            mock_repo.get_active_vehicles = AsyncMock(return_value=[])
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = MOCK_VEHICLE
             mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
 
             resp = client.post(
@@ -994,7 +1007,8 @@ class TestGeocodeCacheHit:
             )
             # Cache returns coordinates for every address
             mock_repo.get_cached_geocode = AsyncMock(return_value=cached_location)
-            mock_repo.get_active_vehicles = AsyncMock(return_value=[])
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = MOCK_VEHICLE
             mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
 
             resp = client.post(
@@ -1222,7 +1236,8 @@ class TestAuthentication:
                 raise_for_status=lambda: None,
             )
             mock_repo.get_cached_geocode = AsyncMock(return_value=None)
-            mock_repo.get_active_vehicles = AsyncMock(return_value=[])
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = MOCK_VEHICLE
             mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
 
             resp = auth_client.post(
@@ -2066,7 +2081,8 @@ class TestCdcmsAutoDetection:
                 raise_for_status=lambda: None,
             )
             mock_repo.get_cached_geocode = AsyncMock(return_value=None)
-            mock_repo.get_active_vehicles = AsyncMock(return_value=[])
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = MOCK_VEHICLE
             mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
 
             # Mock geocoder to return a valid location
@@ -2135,7 +2151,8 @@ class TestCdcmsAutoDetection:
                 raise_for_status=lambda: None,
             )
             mock_repo.get_cached_geocode = AsyncMock(return_value=None)
-            mock_repo.get_active_vehicles = AsyncMock(return_value=[])
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = MOCK_VEHICLE
             mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
 
             resp = client.post(
