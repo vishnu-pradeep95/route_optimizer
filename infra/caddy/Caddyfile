@@ -110,6 +110,16 @@
         reverse_proxy api:8000
     }
 
+    # ── Dashboard redirect ─────────────────────────────────────────────
+    # Redirect /dashboard → / so URLs work whether users type /dashboard
+    # (dev habit) or / (production canonical URL).
+    handle /dashboard {
+        redir / permanent
+    }
+    handle /dashboard/* {
+        redir / permanent
+    }
+
     # ── Dashboard (default) ───────────────────────────────────────────────
     # Serve the React dashboard's static files from /srv/dashboard.
     # try_files: if the requested file doesn't exist, serve index.html.

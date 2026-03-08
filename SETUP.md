@@ -304,17 +304,17 @@ wget -O data/osrm/kerala-latest.osm.pbf \
 # Preprocess the map data (3 steps — takes 5–10 minutes)
 # 1. Extract road network
 docker run --rm -v $(pwd)/data/osrm:/data \
-  osrm/osrm-backend:v5.25.0 \
+  osrm/osrm-backend:latest \
   osrm-extract -p /opt/car.lua /data/kerala-latest.osm.pbf
 
 # 2. Partition the graph
 docker run --rm -v $(pwd)/data/osrm:/data \
-  osrm/osrm-backend:v5.25.0 \
+  osrm/osrm-backend:latest \
   osrm-partition /data/kerala-latest.osrm
 
 # 3. Customize the graph
 docker run --rm -v $(pwd)/data/osrm:/data \
-  osrm/osrm-backend:v5.25.0 \
+  osrm/osrm-backend:latest \
   osrm-customize /data/kerala-latest.osrm
 ```
 

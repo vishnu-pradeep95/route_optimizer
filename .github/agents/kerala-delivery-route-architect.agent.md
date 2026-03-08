@@ -10,6 +10,10 @@ agents:
   - Code Reviewer
   - Partner Explainer
   - Session Journal
+  - Debugger
+  - Codebase Mapper
+  - Verifier
+  - Plan Checker
 handoffs:
   - label: "📋 Create Phase Plan"
     agent: Plan
@@ -40,6 +44,26 @@ handoffs:
     agent: Session Journal
     prompt: 'Read our conversation and append a compact journal entry to plan/session-journal.md. Follow the exact format defined in your instructions. Include all decisions made, files changed, and open questions.'
     send: true
+
+  - label: "🐛 Debug Issue"
+    agent: Debugger
+    prompt: 'Debug the issue we just discussed. Use the scientific method: form hypotheses, design experiments, evaluate results. Create a debug file at .planning/debug/ with your investigation. Project stack: Python 3.12, FastAPI, VROOM, OSRM, PostgreSQL/PostGIS. Run pytest to verify fixes.'
+    send: false
+
+  - label: "🗺️ Map Codebase"
+    agent: Codebase Mapper
+    prompt: 'Explore the codebase and write structured analysis documents to .planning/codebase/. Focus area will be specified. Cross-reference with plan/kerala_delivery_route_system_design.md for architecture context.'
+    send: false
+
+  - label: "✅ Verify Phase"
+    agent: Verifier
+    prompt: 'Verify the current phase achieved its goal using goal-backward analysis. Check plan/kerala_delivery_route_system_design.md for phase goals. Run three-level verification (exists, substantive, wired) on all artifacts. Run pytest. Check non-negotiable constraints. Write results to .planning/phases/'
+    send: false
+
+  - label: "📝 Check Plan"
+    agent: Plan Checker
+    prompt: 'Verify the plan we just created will achieve the phase goal before execution. Check requirement coverage, task completeness, dependency correctness, wiring, scope, interface-first compliance, test coverage, and constraint compliance. Reference plan/kerala_delivery_route_system_design.md for phase goals.'
+    send: false
 ---
 
 # Kerala Delivery Route Architect

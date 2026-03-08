@@ -39,7 +39,7 @@ until everything is healthy, and shows you the dashboard URL.
 3. [Daily Use -- Step by Step](#3-daily-use--step-by-step)
 4. [Understanding CDCMS and CSV Formats](#4-understanding-cdcms-and-csv-formats)
 5. [Troubleshooting](#5-troubleshooting)
-6. [Costs](#6-costs)
+6. [Costs & Licensing](#6-costs)
 7. [Important Rules](#7-important-rules)
 8. [Quick Reference Card](#8-quick-reference-card)
 
@@ -253,13 +253,41 @@ The bootstrap script rebuilds everything with the latest code.
 
 | Item | Cost | Notes |
 |------|------|-------|
-| **Software** | 0 | All open-source |
+| **Software license** | As per agreement | Hardware-bound license key required (see Section 6.1) |
 | **Google Maps lookups** | 0 | Free tier covers 40,000 lookups/month (we use ~50/day) |
 | **After addresses cached** | 0 | Repeat addresses are free -- looked up from local database |
 | **Internet** | Your existing connection | Only needed for first-time address lookups |
 | **Laptop** | Your existing laptop | Runs on any Windows 10/11 laptop with 8 GB RAM |
 
-**Bottom line:** 0 monthly cost. The system runs entirely on your office laptop.
+### 6.1 License Activation
+
+The software requires a valid license key to operate. Without it, the system
+will start but refuse to process requests.
+
+**First-time activation:**
+
+1. Start the system normally (`./scripts/start.sh`)
+2. Open Ubuntu and run:
+   ```bash
+   cd ~/routing_opt
+   python scripts/get_machine_id.py
+   ```
+3. You'll see a "Machine Fingerprint" -- a long string of letters and numbers
+4. Send this fingerprint to the software provider (WhatsApp, email, etc.)
+5. You'll receive a license key (starts with `LPG-`)
+6. Save it:
+   ```bash
+   echo "LPG-XXXX-XXXX-XXXX-XXXX" > ~/routing_opt/license.key
+   ```
+   (Replace `LPG-XXXX-...` with the actual key you received)
+7. Restart: `./scripts/start.sh`
+
+**License renewal:** If you see warnings about license expiry, repeat steps 2--6
+with a new key from the provider. The fingerprint may change if the system was
+reinstalled, so always send a fresh one.
+
+**Important:** The license is tied to this specific laptop. If you move to a new
+laptop, you need a new license key.
 
 ---
 

@@ -411,6 +411,15 @@ async def serve_sw_js():
 if _driver_app_dir.exists():
     app.mount("/driver", StaticFiles(directory=str(_driver_app_dir), html=True), name="driver_app")
 
+# Serve the ops dashboard as static files at /dashboard/
+# In dev mode, the dashboard-build container populates /srv/dashboard via a shared volume.
+# In production, Caddy serves the dashboard at / instead (see Caddyfile).
+# html=True enables SPA fallback: any path under /dashboard/ that doesn't match a
+# real file serves index.html, letting the React app handle client-side navigation.
+_dashboard_dir = pathlib.Path("/srv/dashboard")
+if _dashboard_dir.exists() and any(_dashboard_dir.iterdir()):
+    app.mount("/dashboard", StaticFiles(directory=str(_dashboard_dir), html=True), name="dashboard")
+
 # =============================================================================
 # Authentication — API key on mutating endpoints
 # =============================================================================

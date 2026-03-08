@@ -16,7 +16,19 @@ Architecture is designed to be **reusable across any delivery business**.
 | `plan/kerala_delivery_route_system_design.md` | Authoritative design document (450 lines) |
 | `plan/session-journal.md` | Cross-session memory log — read at start, append at end |
 | `.github/agents/kerala-delivery-route-architect.agent.md` | Main architect agent |
-| `.github/agents/session-journal.agent.md` | Agent for saving/loading session context |
+| `.github/agents/session-journal.agent.md` | Agent for saving/loading/resuming session context |
+
+## Agents, Instructions, Prompts & Skills
+
+| Directory | Purpose |
+|---|---|
+| `.github/agents/` | Agent definitions (architect, implementer, debugger, verifier, etc.) |
+| `.github/instructions/` | Shared instruction sets (TDD, git, checkpoints, verification) |
+| `.github/prompts/` | User-invokable prompts (debug, quick, verify-work, progress, resume) |
+| `.github/skills/` | Reusable skill workflows (diagnose-issues, verify-work) |
+| `.planning/` | Working directory for structured artifacts (debug sessions, plans, verifications) |
+| `.planning/templates/` | Templates for DEBUG.md, UAT.md, VERIFICATION.md, VALIDATION.md, PLAN.md |
+| `.planning/codebase/` | Auto-generated codebase analysis (from codebase-mapper agent) |
 
 ## Current State
 

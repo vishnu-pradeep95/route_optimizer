@@ -33,7 +33,13 @@ def upgrade() -> None:
     # Step 2: Backup current values
     op.execute("UPDATE geocode_cache SET address_norm_old = address_norm")
 
-    # Step 3: Re-normalize using Python function
+    # Step 3: Drop the unique constraint BEFORE updating address_norm.
+    # Re-normalization can collapse different address_raw values to the same
+    # address_norm, which would violate the constraint during row-by-row updates.
+    # We dedup after updating, then re-add the constraint.
+    op.drop_constraint('geocode_cache_address_norm_source_key', 'geocode_cache', type_='unique')
+
+    # Step 4: Re-normalize using Python function
     # Fetch all rows, compute new normalization, update
     conn = op.get_bind()
     rows = conn.execute(
@@ -47,7 +53,7 @@ def upgrade() -> None:
             {"norm": new_norm, "id": row_id},
         )
 
-    # Step 4: Deduplicate -- for entries that now share the same (address_norm, source),
+    # Step 5: Deduplicate -- for entries that now share the same (address_norm, source),
     # keep highest confidence, sum hit_counts.
     # First: update the keeper's hit_count to the sum
     conn.execute(sa.text("""
@@ -86,6 +92,13 @@ def upgrade() -> None:
             WHERE rn > 1
         )
     """))
+
+    # Step 6: Re-add the unique constraint now that duplicates are resolved
+    op.create_unique_constraint(
+        'geocode_cache_address_norm_source_key',
+        'geocode_cache',
+        ['address_norm', 'source']
+    )
 
 
 def downgrade() -> None:

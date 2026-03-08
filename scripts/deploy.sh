@@ -124,6 +124,27 @@ if [[ "${POSTGRES_PASSWORD:-}" == "CHANGE-ME"* || -z "${POSTGRES_PASSWORD:-}" ]]
     exit 1
 fi
 echo "✅ Required secrets are configured"
+
+# 7. Check license key
+LICENSE_KEY_VALUE="${LICENSE_KEY:-}"
+LICENSE_FILE="./license.key"
+if [[ -z "$LICENSE_KEY_VALUE" ]] && [[ ! -f "$LICENSE_FILE" || ! -s "$LICENSE_FILE" ]]; then
+    echo ""
+    echo "⚠️  No license key found."
+    echo "   The API will return 503 on all endpoints without a valid license."
+    echo ""
+    echo "   To get a license key:"
+    echo "   1. Run:  docker compose -f $COMPOSE_FILE --env-file $ENV_FILE run --rm api python scripts/get_machine_id.py"
+    echo "   2. Send the machine fingerprint to your software provider"
+    echo "   3. Place the key in one of:"
+    echo "      - $ENV_FILE as LICENSE_KEY=LPG-XXXX-XXXX-..."
+    echo "      - ./license.key file"
+    echo ""
+    read -rp "   Continue without a license? (y/N) " proceed
+    [[ "$proceed" == "y" || "$proceed" == "Y" ]] || exit 1
+else
+    echo "✅ License key found"
+fi
 echo ""
 
 # ── Pre-deploy backup ───────────────────────────────────────────────────────
@@ -181,28 +202,9 @@ while ! docker exec lpg-db-prod pg_isready -U "${POSTGRES_USER:-routing}" -d "${
 done
 echo "✅ Database is healthy"
 
-# ── Run Alembic migrations ──────────────────────────────────────────────────
-# Why run migrations in a one-shot container instead of on API startup?
-# - Migrations should run ONCE, not once-per-worker (uvicorn spawns 2 workers)
-# - If a migration fails, the API shouldn't start with an incompatible schema
-# - Separating migration from startup follows 12-factor app principles
-# See: https://12factor.net/admin-processes
-echo "📐 Running database migrations..."
-# Why run migrations as a separate one-shot container?
-# - Alembic should run ONCE, not once-per-worker (uvicorn spawns 2 workers)
-# - If a migration fails, the API shouldn't start with an incompatible schema
-# - Separating migration from startup follows 12-factor app principles
-# DATABASE_URL is already in the API container's environment from compose,
-# so we don't need to pass it again here.
-# See: https://12factor.net/admin-processes
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" run --rm \
-    api \
-    alembic upgrade head
-
-echo "✅ Migrations complete"
-echo ""
-
 # ── Start all services ──────────────────────────────────────────────────────
+# Migrations are handled by the db-init service in docker-compose.prod.yml.
+# It runs `alembic upgrade head` as a dependency before the API starts.
 echo "🚀 Starting all services..."
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
 echo ""
@@ -222,8 +224,10 @@ CURL_FLAGS="--max-time 5"
 if [[ "$DOMAIN" == "localhost" ]]; then
     HEALTH_URL="https://localhost/health"
     CURL_FLAGS="$CURL_FLAGS -k"  # Accept self-signed cert for local testing
+    SCHEME="https"
 else
     HEALTH_URL="https://${DOMAIN}/health"
+    SCHEME="https"
 fi
 
 while true; do
@@ -248,13 +252,12 @@ if [[ "$HTTP_STATUS" == "200" ]]; then
 fi
 
 # ── Deployment summary ──────────────────────────────────────────────────────
-SCHEME="https"
-[[ "$DOMAIN" == "localhost" ]] && SCHEME="http"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  🎉 Deployment complete!"
 echo ""
 echo "  Dashboard:  ${SCHEME}://${DOMAIN}/"
+echo "             (also: ${SCHEME}://${DOMAIN}/dashboard → redirects to /)"
 echo "  Driver App: ${SCHEME}://${DOMAIN}/driver/"
 echo "  API Docs:   ${SCHEME}://${DOMAIN}/docs  (disabled in production)"
 echo "  Health:     ${SCHEME}://${DOMAIN}/health"

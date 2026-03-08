@@ -14,20 +14,25 @@ import react from '@vitejs/plugin-react'
  * See: https://vite.dev/config/server-options.html#server-proxy
  */
 export default defineConfig({
+  // Base path for built assets. Defaults to '/' for production (Caddy serves at root).
+  // Set VITE_BASE_PATH='/dashboard/' for dev docker-compose (API serves at /dashboard/).
+  base: process.env.VITE_BASE_PATH || '/',
   plugins: [
     tailwindcss(),  // Must be before react() for optimal performance
     react(),
   ],
   server: {
     proxy: {
-      // Forward all /api/* requests to the FastAPI backend
+      // Forward all /api/* requests to the FastAPI backend.
+      // VITE_API_TARGET overrides the target when running inside Docker
+      // (where the API is at http://api:8000, not localhost:8000).
       '/api': {
-        target: 'http://localhost:8000',
+        target: process.env.VITE_API_TARGET || 'http://localhost:8000',
         changeOrigin: true,
       },
       // Forward health check endpoint too
       '/health': {
-        target: 'http://localhost:8000',
+        target: process.env.VITE_API_TARGET || 'http://localhost:8000',
         changeOrigin: true,
       },
     },

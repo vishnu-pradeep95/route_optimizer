@@ -1,16 +1,24 @@
 # Docker Compose for the Kerala LPG Delivery Route Optimizer
 #
 # Services:
-#   osrm    — Open Source Routing Machine (travel time/distance calculations)
-#   vroom   — Vehicle Route Optimizer (assigns orders to vehicles, sequences stops)
-#   api     — FastAPI backend (imports CSV, geocodes, triggers optimizer, serves routes)
+#   osrm            — Open Source Routing Machine (travel time/distance calculations)
+#   vroom           — Vehicle Route Optimizer (assigns orders to vehicles, sequences stops)
+#   api             — FastAPI backend (imports CSV, geocodes, triggers optimizer, serves routes)
+#   dashboard-build — One-shot: builds React dashboard, populates shared volume
 #
 # Usage:
-#   1. First time: download Kerala OSM data and preprocess (see SETUP.md)
-#   2. docker compose up -d
-#   3. Open http://localhost:8000/driver/ for the driver app
+#   1. docker compose up -d
+#   2. Dashboard:  http://localhost:8000/dashboard/
+#   3. Driver App: http://localhost:8000/driver/
+#   4. API Docs:   http://localhost:8000/docs
+#   5. Health:     http://localhost:8000/health
 #
-# The OSRM data must be preprocessed before starting. See infra/osrm/README.md
+# For dashboard hot-reload during development:
+#   docker compose --profile dev up -d
+#   → Opens Vite dev server at http://localhost:5173/
+#
+# The OSRM data is auto-downloaded on first startup (~150 MB).
+# See infra/osrm/README.md for details.
 
 services:
   # ─── PostgreSQL + PostGIS: persistent storage ──────────────────────
@@ -68,7 +76,7 @@ services:
   # - Init container runs once, then exits, consuming zero resources
   # See: SETUP.md Step 9 for the manual equivalent
   osrm-init:
-    image: osrm/osrm-backend:v5.25.0
+    image: osrm/osrm-backend:latest  # v5.26.0 — must match version used to preprocess data
     container_name: osrm-init
     volumes:
       - ./data/osrm:/data
@@ -105,7 +113,7 @@ services:
   # Uses Kerala OpenStreetMap data. Preprocessed with Multi-Level Dijkstra
   # for fastest queries. Runs on port 5000.
   osrm:
-    image: osrm/osrm-backend:v5.25.0
+    image: osrm/osrm-backend:latest  # v5.26.0 — must match version used to preprocess data
     container_name: osrm-kerala
     ports:
       - "5000:5000"
@@ -117,10 +125,11 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/5000'"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 10s
 
   # ─── VROOM: route optimization solver ────────────────────────────────
   # Connects to OSRM for travel times, solves CVRP/VRPTW in milliseconds.
@@ -168,9 +177,25 @@ services:
         condition: service_healthy
     restart: "no"
 
+  # ─── Dashboard build: one-shot React build ──────────────────────────
+  # Builds the React dashboard and populates a shared volume.
+  # The API container mounts this volume to serve the dashboard at /dashboard/.
+  # Uses the same Dockerfile as production, but with base path /dashboard/
+  # so asset URLs work when served by FastAPI (not Caddy at /).
+  dashboard-build:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.dashboard
+      args:
+        VITE_BASE_PATH: "/dashboard/"
+    container_name: lpg-dashboard-build
+    volumes:
+      - dashboard_assets:/srv/dashboard
+    restart: "no"
+
   # ─── Backend API ─────────────────────────────────────────────────────
   # FastAPI server: handles CSV upload, geocoding, optimization trigger,
-  # and serves driver routes. Also serves the driver PWA.
+  # and serves driver routes + ops dashboard.
   api:
     build:
       context: .
@@ -187,8 +212,11 @@ services:
       - DATABASE_URL=postgresql+asyncpg://routing:${POSTGRES_PASSWORD:-routing_dev_pass}@db:5432/routing_opt
     volumes:
       - ./data:/app/data
+      - dashboard_assets:/srv/dashboard:ro
     depends_on:
       db-init:
+        condition: service_completed_successfully
+      dashboard-build:
         condition: service_completed_successfully
       osrm:
         condition: service_started
@@ -196,6 +224,29 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  # ─── Dashboard dev: Vite hot-reload server (optional) ────────────────
+  # Activate with: docker compose --profile dev up -d
+  # Provides instant hot-reload at http://localhost:5173/ for dashboard development.
+  # API requests are proxied to the api container automatically.
+  dashboard-dev:
+    image: node:22-slim
+    container_name: lpg-dashboard-dev
+    working_dir: /app
+    volumes:
+      - ./apps/kerala_delivery/dashboard:/app
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_TARGET=http://api:8000
+    command: sh -c "npm install && npx vite --host 0.0.0.0"
+    depends_on:
+      api:
+        condition: service_started
+    profiles:
+      - dev
+
 # Named volumes — persist data across container restarts
 volumes:
   pgdata:
+  # Built dashboard static files (shared between dashboard-build and api).
+  dashboard_assets:

@@ -46,6 +46,12 @@ COPY apps/kerala_delivery/dashboard/ .
 # Override this ARG if the API is on a different domain.
 ARG VITE_API_URL=""
 
+# Base path for asset URLs in the built HTML.
+# Production (Caddy serves at /):   VITE_BASE_PATH=/    (default)
+# Development (API serves at /dashboard/): VITE_BASE_PATH=/dashboard/
+ARG VITE_BASE_PATH="/"
+ENV VITE_BASE_PATH=$VITE_BASE_PATH
+
 # Build the production bundle.
 # Vite outputs optimized, minified, code-split files to dist/.
 # TypeScript is compiled and tree-shaken. Unused code is removed.

@@ -170,6 +170,8 @@ routing_opt/
 │
 ├── .env.example                   ← Template for environment vars
 ├── requirements.txt               ← Pinned Python packages
+├── LICENSE                        ← Proprietary software license
+├── LICENSING.md                   ← License generation & activation guide
 ├── SETUP.md                       ← Complete new-developer setup guide
 ├── DEPLOY.md                      ← Employee deployment guide (no coding required)
 └── .github/
@@ -445,6 +447,34 @@ Copy `.env.example` → `.env` and configure:
 | **4B: UI Redesign** | ✅ Complete | Dashboard sidebar nav, stone/amber design system, driver PWA overhaul, responsive layout |
 | **4C: Licensing** | ✅ Complete | Hardware-bound license key generation, offline validation, expiry checks |
 | **4D: Easy Install** | ✅ Complete | Init containers, installer script, Caddy reverse proxy, simplified deployment |
+
+---
+
+## Licensing
+
+The software uses hardware-bound license keys. See [LICENSING.md](LICENSING.md)
+for the complete guide.
+
+**Quick reference:**
+
+| Task | Command |
+|------|---------|
+| Get machine fingerprint | `python scripts/get_machine_id.py` |
+| Generate license key (developer only) | `python scripts/generate_license.py --customer "name" --fingerprint "hash" --months 12` |
+| Activate license | Set `LICENSE_KEY` in `.env` or save key to `license.key` |
+| Build customer distribution | `./scripts/build-dist.sh v1.3` |
+
+### Dev vs Production
+
+| Aspect | Development | Production (customer) |
+|--------|-------------|----------------------|
+| License enforcement | Optional | Required |
+| Licensing source code | `.py` (readable) | `.pyc` (bytecode only) |
+| `generate_license.py` | Included | Excluded |
+| Tests, planning docs | Included | Excluded |
+| Docker Compose | `docker-compose.yml` | `docker-compose.prod.yml` |
+| Ports exposed | 8000, 5432, 5000, 3000 | 80, 443 (Caddy reverse proxy) |
+| API docs (`/docs`) | Available | Disabled |
 
 ---
 

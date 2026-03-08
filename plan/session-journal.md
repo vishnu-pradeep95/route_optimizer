@@ -541,3 +541,160 @@ Two items listed as OPEN in the previous journal entry were already implemented:
 5. Offline-first driver PWA
 
 ---
+
+## 2026-02-28 — CDCMS Upload Auto-Detection, Geocoding Debugging, End-to-End Pipeline Working
+
+**Phase:** 3 (Production — CDCMS integration complete)
+**Commit:** `da160eb` — "feat: CDCMS auto-detection in upload endpoint + improved error handling"
+**Tests:** 262 passing (253 → 262, +9 new)
+
+**What happened:**
+- Debugged end-to-end upload pipeline with real CDCMS data (`sample_cdcms_export.csv`, 27 Vatakara orders)
+- Fixed 3 sequential blockers: (1) CDCMS tab-separated file treated as single CSV column, (2) Docker bind-mount permission error on geocode cache, (3) Google API "not activated" error
+- Added `_is_cdcms_format()` to upload endpoint — checks first line for tabs + CDCMS column names (OrderNo, ConsumerAddress); auto-runs `preprocess_cdcms()` before `CsvImporter`
+- Improved geocoding error messages: surfaces actual Google API error (e.g., "This API is not activated") instead of vague "No orders could be geocoded"
+- Made `_save_cache()` handle `PermissionError` gracefully (Docker bind-mount scenario — log warning, continue)
+- Added VROOM error logging: captures response body before `raise_for_status()` so error details aren't lost
+- Fixed temp file leak: `preprocessed_path` cleaned in `finally` block (code review W1)
+- Lowered `CDCMS_MIN_EXPECTED_COLUMNS` from 10 to 5 — valid CDCMS exports can have as few as 5 used columns
+- **Full pipeline verified:** 27 CDCMS orders → parsed → geocoded → optimized (2 vehicles, 95ms) → persisted → HTTP 200
+
+**Files changed (5):**
+| File | Changes |
+|---|---|
+| `apps/kerala_delivery/api/main.py` | `_is_cdcms_format()` helper, CDCMS auto-detect branch in upload, improved geocoding error, preprocessed_path cleanup in finally |
+| `core/geocoding/google_adapter.py` | Log Google API error_message on failure, PermissionError-safe `_save_cache()` |
+| `core/optimizer/vroom_adapter.py` | Added logger, request summary logging, capture response body on errors |
+| `core/data_import/cdcms_preprocessor.py` | `CDCMS_MIN_EXPECTED_COLUMNS` 10→5 |
+| `tests/apps/kerala_delivery/api/test_api.py` | 9 new tests: TestCdcmsAutoDetection (3), TestIsCdcmsFormat (6) |
+
+**DECIDED:** Upload endpoint auto-detects CDCMS format (no separate endpoint) — employees upload raw CDCMS export directly
+**DECIDED:** CDCMS detection uses tabs AND column name matching to avoid false positives on generic TSVs
+**DECIDED:** Geocode cache write failures are logged warnings, never crashes — cache is nice-to-have optimization
+**DECIDED:** VROOM adapter logs response body before raise_for_status — error details preserved for debugging
+**DECIDED:** Preprocessed temp file tracked separately and cleaned in finally block (prevents PII leak)
+
+**OPEN:** Depot location hardcoded to Kochi (9.97°N, 76.28°E) — needs update to actual Vatakara godown coordinates before production use. Routes show ~500 km because depot is 300 km from delivery area.
+**OPEN:** Google Geocoding API must be enabled in user's Google Cloud Console (API key is valid but API not activated)
+**OPEN:** Offline-first PWA sync not implemented
+**OPEN:** OSRM speed profile not yet calibrated with real GPS data
+**OPEN:** Drag-and-drop route editing for dashboard
+**OPEN:** No dashboard tests (Playwright E2E deferred)
+
+**Next steps:**
+1. Enable Google Geocoding API in Cloud Console + verify end-to-end with real geocoding
+2. Update `DEPOT_LOCATION` in config.py to actual Vatakara godown coordinates
+3. Push to remote: `git push origin main`
+
+---
+
+## 2026-02-28 — QR Code Workflow Complete (Phase B): Upload → Routes → Print QR → Driver Scans
+
+**Phase:** 4B (Feature Pack — QR Code Workflow)
+**Commit:** `7037cf4` — "feat(kerala): add QR code workflow for driver route navigation"
+**Tests:** 268 passing (262 → 268, +16 new including XSS validation)
+
+**What happened:**
+- Implemented complete first-rollout workflow: employee uploads CDCMS → routes generated → QR codes printed → drivers scan with phone → Google Maps opens for navigation
+- Added 2 API endpoints: `GET /api/routes/{vehicle_id}/google-maps` (per-vehicle QR+URL), `GET /api/qr-sheet` (printable A4 HTML with all vehicles)
+- Built route splitting for Google Maps 9-waypoint limit: routes >11 stops split into overlapping segments for continuous navigation
+- Created Upload & Routes dashboard page (`UploadRoutes.tsx` + `.css`): drag-drop upload, route cards with expandable QR codes, print button
+- Set Upload tab as default in dashboard navigation
+- Code review found 1 CRITICAL (XSS in server-rendered HTML), 3 WARNING (auth gap, exact time, stat mismatch) — all fixed
+- Fixed path conflict: renamed `/api/routes/qr-sheet` → `/api/qr-sheet` (conflict with `/api/routes/{vehicle_id}` wildcard)
+- Installed `qrcode==8.2` + `pillow==12.1.1`
+
+**Files changed (7):**
+| File | Changes |
+|---|---|
+| `apps/kerala_delivery/api/main.py` | +300 lines: QR helpers, Google Maps URL builder, route splitter, 2 endpoints, XSS escaping, auth |
+| `apps/kerala_delivery/dashboard/src/lib/api.ts` | `uploadAndOptimize()`, `fetchGoogleMapsRoute()`, `getQrSheetUrl()` + TypeScript interfaces |
+| `apps/kerala_delivery/dashboard/src/pages/UploadRoutes.tsx` | NEW — drag-drop upload page with route cards + QR codes |
+| `apps/kerala_delivery/dashboard/src/pages/UploadRoutes.css` | NEW — industrial-utilitarian design with amber accents |
+| `apps/kerala_delivery/dashboard/src/App.tsx` | Upload tab as default page |
+| `requirements.txt` | Added `pillow==12.1.1`, `qrcode==8.2` |
+| `tests/apps/kerala_delivery/api/test_api.py` | 16 new tests: URL builder, QR generation, route splitting, endpoints, XSS |
+
+**DECIDED:** QR codes encode Google Maps Directions URLs — our value is route OPTIMIZATION, Google handles NAVIGATION
+**DECIDED:** Route splitting at >11 stops with 1-stop overlap for continuous navigation across segments
+**DECIDED:** QR sheet is server-rendered HTML (not React) — most reliable for cross-browser printing
+**DECIDED:** All server-rendered HTML uses `html.escape()` — defence-in-depth XSS prevention
+**DECIDED:** Time shown as range ("6–7 min") on QR sheets, labeled "Est. Route Time" — MVD compliance
+**DECIDED:** Both QR endpoints require `verify_read_key` authentication
+**DECIDED:** Depot location confirmed correct at Vatakara (11.624°N, 75.579°E) — previously listed as OPEN
+**DECIDED:** Google Geocoding API now enabled — previously listed as OPEN
+
+**OPEN:** Route stats (distance/duration) include return-to-depot leg but Google Maps URL does not — minor discrepancy
+**OPEN:** `main.py` at 1,780 lines — QR helpers could be extracted to `google_maps_helpers.py`
+**OPEN:** Offline-first PWA sync not implemented
+**OPEN:** OSRM speed profile not yet calibrated with real GPS data
+**OPEN:** Drag-and-drop route editing for dashboard
+**OPEN:** No dashboard tests (Playwright E2E deferred)
+**OPEN:** Integration test `test_osrm_returns_travel_time_for_kochi` fails (asserts <15km but depot moved to Vatakara)
+
+**Next steps:**
+1. Phase D (Easy Installation) — one-click installer for company PC
+2. Phase A (UI Redesign) — polish dashboard, mobile responsiveness
+3. Phase C (Software Licensing) — license key system
+
+---
+
+## 2026-02-28 — Code Quality Sweep: Refactor, Tests, Security, Docs
+
+**Phase:** Post-Phase 4 (hardening)
+**Commits:** `7aecad7` (refactor), `f1f4e4c` (tests), `dcdf7ce` (docs), `ad4f52e` (fix)
+**Tests:** 351 passing (293 → 351, +58 new)
+
+**What happened:**
+- Extracted `qr_helpers.py` from `main.py` (~160 lines) — pure-function module for QR/Google Maps URL helpers
+- Fixed XSS: added `escapeHtml()` to all `innerHTML` in driver PWA, including Leaflet `bindPopup()` (CRITICAL from code review)
+- Replaced `STATUS_COLORS` JS object with CSS `data-status` attribute selectors in FleetManagement
+- Removed dead CSS transition in `App.css`
+- Security audit: changed API key comparison to `hmac.compare_digest()` (timing-safe); verified no `eval/exec/subprocess/pickle` usage; confirmed CORS, file upload, SQL injection, secrets all clean
+- Added 24 tests for `qr_helpers.py`, 23 tests for `config.py`, 11 E2E pipeline tests
+- Fixed 2 integration tests (hardcoded Kochi depot → Vatakara)
+- Updated README.md + GUIDE.md: test count 268→351, Phase 4B/C/D marked complete, added `qr_helpers.py` + `core/licensing/` to project tree
+- Synced depot defaults in `FleetManagement.tsx` from Kochi to Vatakara (11.6244, 75.5796)
+- Removed stale TODO comment from `config.py` (coords are actual, not placeholder)
+- Fixed docstring copy-paste in `qr_helpers.py` (PNG `box_size` is pixels, not SVG units)
+- Code review: 2 rounds — first found 1 CRITICAL + 2 WARNING + 3 INFO, all fixed; second round 0/0/0
+
+**Files changed/created (14):**
+| File | Changes |
+|---|---|
+| `apps/kerala_delivery/api/main.py` | +`import hmac`, `hmac.compare_digest()`, removed QR helpers |
+| `apps/kerala_delivery/api/qr_helpers.py` | NEW — extracted QR/Google Maps helpers (~188 lines) |
+| `apps/kerala_delivery/config.py` | Updated depot comment (actual, not placeholder) |
+| `apps/kerala_delivery/driver_app/index.html` | `escapeHtml()` on all innerHTML + Leaflet popups |
+| `apps/kerala_delivery/dashboard/src/types.ts` | STATUS_COLORS → design system values |
+| `apps/kerala_delivery/dashboard/src/pages/FleetManagement.tsx` | CSS data-status, Vatakara depot defaults |
+| `apps/kerala_delivery/dashboard/src/pages/FleetManagement.css` | Status badge + edit input CSS |
+| `apps/kerala_delivery/dashboard/src/components/VehicleList.tsx` | Removed STATUS_COLORS import |
+| `apps/kerala_delivery/dashboard/src/App.css` | Removed dead transition |
+| `tests/apps/kerala_delivery/api/test_qr_helpers.py` | NEW — 24 tests |
+| `tests/apps/kerala_delivery/test_config.py` | NEW — 23 tests |
+| `tests/test_e2e_pipeline.py` | NEW — 11 E2E pipeline tests |
+| `tests/integration/test_osrm_vroom_pipeline.py` | Fixed depot fixture |
+| `README.md`, `GUIDE.md` | Test counts, phase status, project tree |
+
+**DECIDED:** `hmac.compare_digest()` for all API key comparisons — prevents timing attacks
+**DECIDED:** All `innerHTML` and Leaflet `bindPopup()` calls use `escapeHtml()` — no raw user data in DOM
+**DECIDED:** CSS `[data-status]` attribute selectors replace JS STATUS_COLORS object
+**DECIDED:** Config.py depot comment updated — Vatakara coords are final production values (previously OPEN)
+**DECIDED:** FleetManagement.tsx depot defaults synced to Vatakara (previously OPEN — Kochi mismatch)
+**DECIDED:** `main.py` QR extraction done → `qr_helpers.py` (previously OPEN)
+**DECIDED:** Integration test depot fixed (previously OPEN)
+
+**OPEN:** Offline-first PWA sync not implemented
+**OPEN:** OSRM speed profile not yet calibrated with real GPS data
+**OPEN:** Drag-and-drop route editing for dashboard
+**OPEN:** No dashboard tests (Playwright E2E deferred)
+**OPEN:** Route stats (distance/duration) include return-to-depot leg but Google Maps URL does not
+**OPEN:** `escapeHtml()` in driver PWA has no automated test coverage (single-file HTML app)
+
+**Next steps:**
+1. Push to remote: `git push origin main`
+2. Consider Playwright E2E tests for dashboard when UI stabilizes
+3. Calibrate OSRM speed profile with real GPS telemetry data
+
+---

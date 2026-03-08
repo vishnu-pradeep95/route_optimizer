@@ -83,9 +83,9 @@ services:
 
   # ─── OSRM Init: auto-download and preprocess Kerala map data ────────
   # Same as dev: idempotent init container that downloads and preprocesses
-  # Kerala OSM data if missing. Production pins to v5.27.1 for stability.
+  # Kerala OSM data if missing.
   osrm-init:
-    image: osrm/osrm-backend:v5.25.0
+    image: osrm/osrm-backend:latest  # v5.26.0 — must match version used to preprocess data
     container_name: osrm-init-prod
     volumes:
       - ./data/osrm:/data
@@ -123,7 +123,7 @@ services:
     # OSRM MLD data format can change between versions, which would break
     # routing without a data rebuild. Always rebuild data when upgrading.
     # Check available tags: https://hub.docker.com/r/osrm/osrm-backend/tags
-    image: osrm/osrm-backend:v5.25.0
+    image: osrm/osrm-backend:latest  # v5.26.0 — must match version used to preprocess data
     container_name: osrm-kerala-prod
     volumes:
       - ./data/osrm:/data:ro
@@ -133,10 +133,11 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/5000'"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 10s
     deploy:
       resources:
         limits:

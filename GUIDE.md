@@ -229,7 +229,8 @@ routing_opt/
 │   ├── optimizer/             ← Talk to VROOM ("plan the best routes")
 │   ├── geocoding/             ← Talk to Google Maps ("where is this address?")
 │   ├── database/              ← Talk to PostgreSQL ("save this, load that")
-│   └── data_import/           ← Read CSV files ("parse this spreadsheet")
+│   ├── data_import/           ← Read CSV files ("parse this spreadsheet")
+│   └── licensing/             ← Hardware-bound license key validation
 │
 ├── apps/kerala_delivery/      ← Kerala-specific business logic
 │   ├── config.py              ← All Kerala numbers (speed limits, weights, etc.)
@@ -237,7 +238,7 @@ routing_opt/
 │   ├── driver_app/            ← What drivers see on their phones
 │   └── dashboard/             ← What the ops manager sees on their computer
 │
-├── tests/                     ← Automated tests (144 of them!)
+├── tests/                     ← Automated tests (351 of them!)
 │   ├── core/                  ← Tests for each core module
 │   ├── apps/                  ← Tests for API endpoints
 │   └── integration/           ← End-to-end tests (whole pipeline)
@@ -420,7 +421,7 @@ docker compose up -d
 # 4. Apply database migrations
 alembic upgrade head
 
-# 5. Run tests (should show 144 passing)
+# 5. Run tests (should show 351 passing)
 pytest tests/ -v
 
 # 6. Start the dashboard (separate terminal)
@@ -440,7 +441,7 @@ npm install && npm run dev
 | Database accessible | `docker exec routing-db pg_isready` | "accepting connections" |
 | OSRM responding | `curl http://localhost:5000/health` | JSON response |
 | API responding | `curl http://localhost:8000/health` | `{"status": "ok"}` |
-| Tests pass | `pytest tests/ -v` | 144 passed |
+| Tests pass | `pytest tests/ -v` | 351 passed |
 | Dashboard compiles | `cd apps/kerala_delivery/dashboard && npx tsc --noEmit` | 0 errors |
 
 ---
@@ -555,7 +556,7 @@ quality, test coverage, and design-doc alignment.
 
 ## 12. What's Built vs. What's Planned
 
-### Current State (Phase 3 Complete + Phase 4 In Progress)
+### Current State (Through Phase 4 — All Complete)
 
 **What works right now:**
 
@@ -580,11 +581,12 @@ quality, test coverage, and design-doc alignment.
 - Docker Compose for one-command infrastructure startup
 - Docker Compose production config with Caddy reverse proxy, health checks
 
-**What shipped in Phase 4:**
+**What shipped in Phase 4 (all sub-phases complete):**
 
-- Dashboard UI redesign (sidebar nav, stone/amber design system, responsive layout)
-- Hardware-bound software licensing (offline validation, expiry checks)
-- Easy installation (init containers, installer script, Caddy reverse proxy)
+- 4A: QR code generation for Google Maps navigation (printable A4 sheets, route splitting for >11 stops)
+- 4B: Dashboard UI redesign (sidebar nav, stone/amber design system, responsive layout)
+- 4C: Hardware-bound software licensing (offline validation, expiry checks, grace period)
+- 4D: Easy installation (init containers, installer script, Caddy reverse proxy, simplified deployment)
 
 ### Future Work
 

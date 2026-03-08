@@ -84,3 +84,30 @@ When saving a session entry, always check and record:
 - **Performance fixes**: any optimization work (query N+1 fixes, caching added, batch operations). Note the measurable impact if available.
 - **Open security items**: unimplemented security features (rate limiting, auth, etc.) go under `OPEN:` so they're tracked across sessions.
 - **Test count**: always note the current test count (e.g., "118 tests passing") so regressions are immediately visible across sessions.
+
+### 3. RESUME — Start of Session with Full Context ("resume work" / "pick up where I left off")
+
+Combines LOAD with active state detection for a complete session start.
+
+1. **Run LOAD** (session journal briefing) — same as Job 2
+2. **Check for interrupted work:**
+   - Active debug sessions: `ls .planning/debug/*.md 2>/dev/null | grep -v resolved`
+   - Incomplete verifications: `ls .planning/phases/*-VERIFICATION.md 2>/dev/null`
+   - Uncommitted changes: `git status --short 2>/dev/null | head -10`
+   - Recent file modifications: `find core/ apps/ tests/ -name "*.py" -newer plan/session-journal.md -not -path "*__pycache__*" 2>/dev/null`
+3. **Quick health check:**
+   - `source .venv/bin/activate && pytest --tb=no -q 2>&1 | tail -5`
+   - `docker compose ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null`
+4. **Present combined briefing** including:
+   - Everything from LOAD
+   - Interrupted work items (if any)
+   - Test suite status
+   - Docker service status
+   - Proactive recommendation for next action
+5. **Proactively load relevant context** — read the files most likely needed based on the recommended next action
+
+**Rules for RESUME:**
+- Keep the briefing under 30 lines (it's a superset of LOAD).
+- Flag any test regressions (current count < last journal entry count).
+- Flag any Docker services that are down but likely needed.
+- If interrupted work is found, prioritize resuming that over starting new work.

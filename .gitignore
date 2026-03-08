@@ -10,6 +10,7 @@ build/
 # Environment — NEVER commit files with real secrets
 .env
 .env.production
+license.key
 
 # Data files (too large for git, may contain PII in cache)
 data/kerala.osm.pbf
@@ -43,5 +44,6 @@ apps/kerala_delivery/dashboard/dist/
 tools/tailwindcss-extra
 
 # Backups (large binary files, stored on host not in git)
-backups/
+backups/*
+!backups/.gitkeep
 *.sql.gz
