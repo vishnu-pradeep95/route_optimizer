@@ -64,7 +64,19 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 
 ### Active
 
-(No active requirements — define next milestone with `/gsd:new-milestone`)
+#### Current Milestone: v1.4 Ship-Ready QA
+
+**Goal:** Verify the full customer delivery pipeline works end-to-end — automated E2E tests, CI/CD health, clean install verification, distribution documentation, and operational scripts for graceful shutdown.
+
+**Target features:**
+- [ ] Automated Playwright E2E tests (upload flow, driver PWA, dashboard)
+- [ ] CI/CD pipeline fix and Playwright integration
+- [ ] Stop script with garbage collection (containers, images, logs)
+- [ ] Distribution documentation (build-dist.sh workflow, .pyc licensing, customer delivery)
+- [ ] Clean install verification from tarball
+- [ ] Production vs development environment documentation
+- [ ] License lifecycle documentation (generate → deliver → activate → renew → troubleshoot)
+- [ ] Google API key troubleshooting guide
 
 ### Out of Scope
 
@@ -88,7 +100,7 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v1.3 shipped — office-ready deployment with bootstrap/startup scripts, CSV docs, humanized errors. 2.7k Python LOC, 3.7k TypeScript LOC, 2.0k HTML/JS LOC, 1.6k Shell LOC (~10k total).
+- **Current state**: v1.3 shipped — office-ready deployment with bootstrap/startup scripts, CSV docs, humanized errors. 2.7k Python LOC, 3.7k TypeScript LOC, 2.0k HTML/JS LOC, 1.6k Shell LOC (~10k total). v1.4 focuses on QA, testing, and distribution readiness.
 - **Known tech debt**: Physical Android device testing for outdoor contrast; 8 GB laptop testing for install script OSRM OOM validation.
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
@@ -132,4 +144,4 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | ERROR-MAP.md traceability artifact | Maps 25 error messages to source code paths | ✓ Good — prevents documentation drift |
 
 ---
-*Last updated: 2026-03-07 after v1.3 milestone completed*
+*Last updated: 2026-03-08 after v1.4 milestone started*
