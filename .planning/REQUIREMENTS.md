@@ -10,7 +10,7 @@ Requirements for Ship-Ready QA milestone. Each maps to roadmap phases.
 ### Testing
 
 - [x] **TEST-01**: Playwright E2E tests verify all API endpoints return expected status codes against running Docker stack
-- [ ] **TEST-02**: Playwright E2E tests cover full Driver PWA flow: upload CSV -> vehicle select -> route view -> mark done/fail -> all-done banner
+- [x] **TEST-02**: Playwright E2E tests cover full Driver PWA flow: upload CSV -> vehicle select -> route view -> mark done/fail -> all-done banner
 - [ ] **TEST-03**: Playwright E2E tests verify Dashboard: route cards render, QR sheet generates, map loads after upload
 - [ ] **TEST-04**: Playwright E2E tests verify license validation: expired/missing/invalid keys return 503
 - [x] **TEST-05**: All existing 420 pytest unit tests pass in CI
@@ -61,7 +61,7 @@ Requirements for Ship-Ready QA milestone. Each maps to roadmap phases.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | TEST-01 | Phase 21 | Complete |
-| TEST-02 | Phase 21 | Pending |
+| TEST-02 | Phase 21 | Complete |
 | TEST-03 | Phase 21 | Pending |
 | TEST-04 | Phase 21 | Pending |
 | TEST-05 | Phase 21 | Complete |
