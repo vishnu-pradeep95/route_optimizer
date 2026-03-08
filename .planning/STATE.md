@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Ship-Ready QA
 status: in-progress
-stopped_at: Completed 22-01-PLAN.md
-last_updated: "2026-03-08T21:43:31Z"
-last_activity: 2026-03-08 -- Plan 22-01 executed (fix all pytest failures)
+stopped_at: Completed 22-02-PLAN.md
+last_updated: "2026-03-08T21:47:40Z"
+last_activity: 2026-03-08 -- Plan 22-02 executed (E2E CI job + badge)
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 4
-  percent: 80
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-08)
 ## Current Position
 
 Phase: 22 (2 of 4 in v1.4) -- CI/CD Pipeline Integration
-Plan: 01 of 2 complete
+Plan: 02 of 2 complete (phase complete)
 Status: In Progress
-Last activity: 2026-03-08 -- Plan 22-01 executed (fix all pytest failures)
+Last activity: 2026-03-08 -- Plan 22-02 executed (E2E CI job + badge)
 
-Progress: [████████████████░░░░] 4/5 plans (80%)
+Progress: [████████████████████] 5/5 plans (100%)
 
 ## Performance Metrics
 
@@ -48,6 +48,7 @@ Progress: [████████████████░░░░] 4/5 pla
 | Phase 21 P02 | 3min | 2 tasks | 1 files |
 | Phase 21 P03 | 5min | 2 tasks | 3 files |
 | Phase 22 P01 | 10min | 2 tasks | 3 files |
+| Phase 22 P02 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,12 @@ See `.planning/milestones/` for full phase details per milestone.
 - API_KEY env leakage from scripts/import_orders.py load_dotenv() cleared in test fixtures
 - All 426 pytest tests pass with 0 failures
 
+**Phase 22-02:**
+- E2E runs only on push to main (not PRs) to save CI minutes
+- Artifacts upload only on failure (not always) to reduce storage
+- Full Docker Compose stack including OSRM/VROOM required for E2E tests
+- CI pipeline now has 4 jobs: Python Tests, Dashboard Build, Docker Build, E2E Tests
+
 ### Pending Todos
 
 5 pending -- see `.planning/todos/pending/`
@@ -91,6 +98,6 @@ See `.planning/milestones/` for full phase details per milestone.
 
 ## Session Continuity
 
-Last session: 2026-03-08T21:43:31Z
-Stopped at: Completed 22-01-PLAN.md
-Resume file: .planning/phases/22-ci-cd-pipeline-integration/22-02-PLAN.md
+Last session: 2026-03-08T21:47:40Z
+Stopped at: Completed 22-02-PLAN.md (Phase 22 complete)
+Resume file: Next phase
