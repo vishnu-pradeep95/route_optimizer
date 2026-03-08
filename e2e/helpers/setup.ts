@@ -17,6 +17,13 @@ import path from 'path';
 export const TEST_CSV_PATH = path.join(__dirname, '..', 'fixtures', 'test-orders.csv');
 
 /**
+ * Path to the pre-geocoded sample orders CSV (has lat/lon columns).
+ * Used when GOOGLE_MAPS_API_KEY is not available for geocoding.
+ * These orders already have coordinates so they bypass the geocoding step.
+ */
+export const PREGEOCODE_CSV_PATH = path.join(__dirname, '..', '..', 'data', 'sample_orders.csv');
+
+/**
  * Validate that the API_KEY environment variable is set.
  *
  * E2E tests require an API key for authenticated endpoints (POST, PUT, DELETE,
