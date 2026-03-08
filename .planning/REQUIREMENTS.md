@@ -24,8 +24,8 @@ Requirements for Ship-Ready QA milestone. Each maps to roadmap phases.
 
 ### Operations
 
-- [ ] **OPS-01**: `scripts/stop.sh` gracefully stops all services (docker compose stop, not down -v)
-- [ ] **OPS-02**: `stop.sh --gc` cleans dangling images, orphan containers, and truncates container logs
+- [x] **OPS-01**: `scripts/stop.sh` gracefully stops all services (docker compose stop, not down -v)
+- [x] **OPS-02**: `stop.sh --gc` cleans dangling images, orphan containers, and truncates container logs
 - [ ] **OPS-03**: Clean install from `build-dist.sh` tarball verified in fresh environment
 
 ### Documentation
@@ -69,8 +69,8 @@ Requirements for Ship-Ready QA milestone. Each maps to roadmap phases.
 | CICD-02 | Phase 22 | Complete |
 | CICD-03 | Phase 22 | Complete |
 | CICD-04 | Phase 22 | Complete |
-| OPS-01 | Phase 23 | Pending |
-| OPS-02 | Phase 23 | Pending |
+| OPS-01 | Phase 23 | Complete |
+| OPS-02 | Phase 23 | Complete |
 | OPS-03 | Phase 23 | Pending |
 | DOCS-01 | Phase 24 | Pending |
 | DOCS-02 | Phase 24 | Pending |
