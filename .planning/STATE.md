@@ -4,10 +4,10 @@ milestone: v1.4
 milestone_name: Ship-Ready QA
 status: active
 stopped_at: null
-last_updated: "2026-03-08T14:55:00.000Z"
-last_activity: 2026-03-08 -- Milestone v1.4 Ship-Ready QA started
+last_updated: "2026-03-08T15:30:00.000Z"
+last_activity: 2026-03-08 -- Roadmap created for v1.4 (4 phases, 17 requirements mapped)
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,14 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-08)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** v1.4 Ship-Ready QA
+**Current focus:** Phase 21 -- Playwright E2E Test Suite
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-08 — Milestone v1.4 started
+Phase: 21 (1 of 4 in v1.4) -- Playwright E2E Test Suite
+Plan: --
+Status: Ready to plan
+Last activity: 2026-03-08 -- Roadmap created for v1.4
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -53,15 +55,16 @@ See `.planning/milestones/` for full phase details per milestone.
 
 ### Pending Todos
 
-5 pending — see `.planning/todos/pending/`
+5 pending -- see `.planning/todos/pending/`
 
 ### Blockers/Concerns
 
 - Physical Android device testing required for outdoor contrast validation -- browser DevTools cannot replicate Kerala sunlight conditions.
 - 8 GB laptop testing required for install script validation -- OSRM OOM (exit 137) will not surface on developer machines.
-- Google Maps API key is currently invalid (REQUEST_DENIED) -- all new geocoding fails with "Geocoding service blocked"
+- Google Maps API key is currently invalid (REQUEST_DENIED) -- E2E tests must use pre-geocoded seed data to bypass this.
 
 ## Session Continuity
 
 Last session: 2026-03-08
-Stopped at: Defining v1.4 requirements
+Stopped at: Roadmap created for v1.4 -- ready to plan Phase 21
+Resume file: None
