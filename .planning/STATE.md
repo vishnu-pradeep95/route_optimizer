@@ -64,5 +64,5 @@ See `.planning/milestones/` for full phase details per milestone.
 ## Session Continuity
 
 Last session: 2026-03-09
-Stopped at: Milestone v1.4 archived
+Stopped at: Completed quick-fix 1 (fix 500 error on fresh clone CSV upload)
 Resume file: None
