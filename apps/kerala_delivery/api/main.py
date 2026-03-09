@@ -544,9 +544,19 @@ def _get_geocoder() -> GoogleGeocoder | None:
     global _geocoder_instance
     if _geocoder_instance is not None:
         return _geocoder_instance
-    api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "")
-    if api_key:
-        _geocoder_instance = GoogleGeocoder(api_key=api_key)
+    api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+    # Reject placeholder values that aren't real API keys.
+    # Real Google API keys start with "AIza" and are 39 characters.
+    placeholder_values = {"your-key-here", "your-api-key", "change-me", ""}
+    if api_key.lower() in placeholder_values:
+        if api_key:
+            logger.warning(
+                "GOOGLE_MAPS_API_KEY appears to be a placeholder ('%s') — geocoding disabled. "
+                "Set a real API key in .env to enable geocoding.",
+                api_key,
+            )
+        return None
+    _geocoder_instance = GoogleGeocoder(api_key=api_key)
     return _geocoder_instance
 
 

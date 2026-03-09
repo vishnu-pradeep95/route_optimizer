@@ -292,9 +292,24 @@ else
     DB_PASS=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
     API_KEY_VAL=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
 
-    # Override password and API key (preserve everything else including GOOGLE_MAPS_API_KEY)
+    # Override password and API key
     sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$DB_PASS|" .env
     sed -i "s|^API_KEY=.*|API_KEY=$API_KEY_VAL|" .env
+
+    # Prompt for Google Maps API key (required for geocoding)
+    echo ""
+    echo -e "  ${BOLD}Google Maps API key${NC} (required for geocoding addresses)"
+    echo "  Get one at: https://console.cloud.google.com/apis/credentials"
+    echo "  Enable the \"Geocoding API\" — free \$200/month credit covers ~40,000 lookups."
+    echo ""
+    read -rp "  Google Maps API key (press Enter to skip): " GMAPS_KEY
+    if [ -n "$GMAPS_KEY" ]; then
+        sed -i "s|^GOOGLE_MAPS_API_KEY=.*|GOOGLE_MAPS_API_KEY=$GMAPS_KEY|" .env
+        success "Google Maps API key configured"
+    else
+        warn "No Google Maps API key — geocoding will only work for cached addresses."
+        info "Add it later: edit .env and set GOOGLE_MAPS_API_KEY=your-key"
+    fi
 
     success ".env created with auto-generated credentials"
 fi
