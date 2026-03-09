@@ -2,6 +2,55 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.4 — Ship-Ready QA
+
+**Shipped:** 2026-03-09
+**Phases:** 4 | **Plans:** 10 | **Timeline:** 2 days
+
+### What Was Built
+- 38-test Playwright E2E suite across 4 projects (API, Driver PWA, Dashboard, License) running in ~22s
+- CI/CD pipeline expanded to 4 jobs with E2E tests on push to main, failure artifact uploads, and README status badge
+- Graceful shutdown script (stop.sh) with --gc mode for log truncation, dangling image pruning, and orphan cleanup
+- Automated distribution tarball verification (verify-dist.sh) in isolated Docker stack on port 8002
+- Fixed all 426 pytest unit tests with proper vehicle mocking and API_KEY env isolation
+- 5 documentation artifacts: DISTRIBUTION.md, LICENSING.md lifecycle, ENV-COMPARISON.md, GOOGLE-MAPS.md, ATTRIBUTION.md
+
+### What Worked
+- Milestone audit (17/17 requirements, 4/4 phases, 6/6 E2E flows) gave high confidence before archival
+- Parallel plan execution within phases (23-01 and 23-02, 24-01 and 24-02 ran concurrently)
+- Pre-geocoded CSV fallback strategy avoided blocking on invalid Google Maps API key
+- Docker Compose override pattern for isolated license testing (port 8001) prevented dev stack interference
+- Sequential story pattern for PWA tests maintained realistic user flow state across 7 tests
+- Documentation extracted commands from actual scripts (build-dist.sh, verify-dist.sh) rather than writing from memory
+
+### What Was Inefficient
+- Plan estimated 64 pytest failures but only 12 remained — previous phases had silently fixed most as side effects
+- Docker Compose port merging behavior required switching from override to standalone compose file mid-plan (23-02)
+- `tr -dc < /dev/urandom | head` SIGPIPE under `set -o pipefail` required openssl rand workaround
+- ROADMAP progress table rows for phases 21-24 had incorrect column alignment (missing milestone column)
+
+### Patterns Established
+- Playwright 4-project config: separate projects for api, driver-pwa, dashboard, license with different viewports
+- UI + API dual verification: test both DOM state change AND separate API GET to confirm server persistence
+- Standalone Docker Compose for testing: avoids additive port merging and container_name conflicts
+- Copyleft-first attribution: flag restrictive licenses at top for compliance scanning
+- Failure-only CI artifacts: upload-artifact with `if: failure()` to minimize storage
+
+### Key Lessons
+1. Docker Compose override files merge ports additively — use standalone compose files for isolated test stacks
+2. `set -o pipefail` breaks `tr < /dev/urandom | head` with SIGPIPE — use `openssl rand` instead
+3. Container logs must be truncated BEFORE `docker compose down` (down removes containers and their log files)
+4. Pre-existing test failures should be tracked with exact counts, not estimates — "64 failures" became 12
+5. Documentation phases benefit from running in parallel when docs cover independent domains
+6. Docker log files are root-owned — need `sudo test -f` not bare `-f` for access checks
+
+### Cost Observations
+- Model mix: opus for planning/execution, sonnet for audit/integration checking
+- Sessions: ~2 sessions across 2 days
+- Notable: 10 plans in 2 days (5 plans/day) — fastest milestone per-plan due to well-scoped automation and documentation tasks
+
+---
+
 ## Milestone: v1.3 — Office-Ready Deployment
 
 **Shipped:** 2026-03-07
@@ -184,6 +233,7 @@
 | v1.1 | 3 days | 4 | 16 | Visual verification as formal plans; Playwright MCP E2E testing |
 | v1.2 | 2 days | 5 | 9 | Fine-grained REQ-IDs; parallel independent phases; TDD for data wiring |
 | v1.3 | 14 days | 8 | 10 | Milestone audit + gap closure; documentation-as-code traceability |
+| v1.4 | 2 days | 4 | 10 | E2E testing as quality gate; parallel doc plans; standalone compose for isolation |
 
 ### Cumulative Quality
 
@@ -193,6 +243,7 @@
 | v1.1 | 17.5k | 3.6k | 1.8k | -- | DaisyUI migration, PWA refresh |
 | v1.2 | 8.3k | 3.7k | 1.9k | -- | Dead code removed (-9.2k Python), typed helpers, config consolidation |
 | v1.3 | 2.7k | 3.7k | 2.0k | 1.6k | Bootstrap/startup scripts, CSV docs, humanized errors, dist build |
+| v1.4 | 17.9k | 5.0k | -- | 3.0k | E2E test suite, CI/CD pipeline, stop/verify scripts, 5 doc artifacts |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -204,3 +255,6 @@
 6. Milestone audits before completion catch real bugs — v1.3 audit found a deployment blocker and 8 stale docs
 7. Documentation phases must depend on the code phases they document — otherwise content drifts immediately
 8. Pin Docker image versions in all operational files — :latest is a ticking deployment bomb
+9. Docker Compose override files merge ports additively — use standalone compose files for isolated test stacks
+10. Container logs must be truncated BEFORE `docker compose down` — down removes containers and their log files
+11. Pre-existing test failure counts should be tracked with exact numbers, not estimates carried forward from stale context

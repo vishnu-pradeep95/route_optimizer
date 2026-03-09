@@ -1,5 +1,22 @@
 # Milestones
 
+## v1.4 Ship-Ready QA (Shipped: 2026-03-09)
+
+**Phases completed:** 4 phases (21-24), 10 plans
+**Timeline:** 2 days (2026-03-08 → 2026-03-09)
+**Git range:** `74772b6`..`2e59c07` (51 commits)
+**Files modified:** 56 (+8,457 / -83)
+
+**Key accomplishments:**
+- 38-test Playwright E2E suite across 4 projects (API, Driver PWA, Dashboard, License) running in ~22 seconds against live Docker stack
+- CI/CD pipeline expanded to 4 jobs (Python tests, Dashboard build, Docker build, E2E tests) with failure artifact uploads and README status badge
+- Graceful shutdown script (stop.sh) with --gc mode for container log truncation, dangling image pruning, and orphan cleanup
+- Automated distribution tarball verification (verify-dist.sh) running isolated Docker stack on port 8002 with endpoint health checks
+- All 426 pytest unit tests fixed and passing green (proper vehicle mocking, API_KEY env isolation)
+- Complete documentation suite: DISTRIBUTION.md, LICENSING.md lifecycle, ENV-COMPARISON.md, GOOGLE-MAPS.md, ATTRIBUTION.md with README index
+
+---
+
 ## v1.3 Office-Ready Deployment (Shipped: 2026-03-07)
 
 **Phases completed:** 8 phases (13-20), 10 plans

@@ -65,22 +65,16 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ CI/CD pipeline with E2E tests on push to main, failure artifacts, status badge — v1.4
 - ✓ Graceful shutdown script with --gc garbage collection mode — v1.4
 - ✓ Distribution tarball verification (automated endpoint checks in isolated stack) — v1.4
+- ✓ All 426 pytest unit tests passing green (vehicle mocking, env isolation fixes) — v1.4
+- ✓ Distribution workflow documentation (build → license → deliver → verify) — v1.4
+- ✓ License lifecycle documentation (generate → deliver → activate → renew → troubleshoot) — v1.4
+- ✓ Production vs development environment comparison documentation — v1.4
+- ✓ Google Maps API key troubleshooting guide for office employees — v1.4
+- ✓ Third-party attribution audit (59 Python + 11 JS + infrastructure) — v1.4
 
 ### Active
 
-#### Current Milestone: v1.4 Ship-Ready QA
-
-**Goal:** Verify the full customer delivery pipeline works end-to-end — automated E2E tests, CI/CD health, clean install verification, distribution documentation, and operational scripts for graceful shutdown.
-
-**Target features:**
-- [x] Automated Playwright E2E tests (upload flow, driver PWA, dashboard)
-- [x] CI/CD pipeline fix and Playwright integration
-- [x] Stop script with garbage collection (containers, images, logs)
-- [x] Clean install verification from tarball
-- [ ] Distribution documentation (build-dist.sh workflow, .pyc licensing, customer delivery)
-- [ ] Production vs development environment documentation
-- [ ] License lifecycle documentation (generate → deliver → activate → renew → troubleshoot)
-- [ ] Google API key troubleshooting guide
+(No active milestone — v1.4 shipped. Use `/gsd:new-milestone` to start next.)
 
 ### Out of Scope
 
@@ -104,7 +98,7 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v1.4 in progress — Phase 23 complete (E2E tests, CI/CD, stop.sh, verify-dist.sh). 2.7k Python LOC, 3.7k TypeScript LOC, 2.0k HTML/JS LOC, 1.9k Shell LOC, ~1k test LOC (~11.3k total). Remaining v1.4: documentation consolidation.
+- **Current state**: v1.4 shipped (2026-03-09). ~17.9k Python LOC, ~5k TypeScript LOC, ~3k Shell LOC. 38 E2E tests + 426 unit tests. 5 milestones shipped (v1.0-v1.4), 24 phases, 53 plans.
 - **Known tech debt**: Physical Android device testing for outdoor contrast; 8 GB laptop testing for install script OSRM OOM validation.
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
@@ -153,5 +147,13 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | Standalone compose for verification | Docker Compose merges ports additively in overrides, causing conflicts | ✓ Good — isolated stack with no name/port collisions |
 | Skip OSRM/VROOM in tarball verification | Endpoints don't require routing; saves 300+ MB download and minutes of init | ✓ Good — verification runs in ~30s instead of 10+ min |
 
+| Playwright 4-project config | Separate projects for api, driver-pwa, dashboard, license with different base URLs and viewports | ✓ Good |
+| Docker Compose override for license tests | Isolated production-mode container on port 8001 | ✓ Good |
+| Sequential story pattern for PWA tests | Shared BrowserContext across ordered tests with UI+API dual verification | ✓ Good |
+| Truncate logs before compose down | docker compose down removes containers and their log files | ✓ Good |
+| Standalone compose for verification | Docker Compose merges ports additively in overrides, causing conflicts | ✓ Good |
+| Skip OSRM/VROOM in tarball verification | Endpoints don't require routing; saves 300+ MB download and minutes of init | ✓ Good |
+| Copyleft-first attribution | Flag restrictive licenses at top for compliance scanning | ✓ Good |
+
 ---
-*Last updated: 2026-03-08 after Phase 23*
+*Last updated: 2026-03-09 after v1.4 milestone*
