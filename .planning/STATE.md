@@ -4,8 +4,8 @@ milestone: v1.4
 milestone_name: Ship-Ready QA
 status: milestone_complete
 stopped_at: Milestone v1.4 archived
-last_updated: "2026-03-09T00:30:00.000Z"
-last_activity: 2026-03-09 - Completed quick task 1: Fix 500 error on fresh-clone CSV upload and track reset script in git
+last_updated: "2026-03-09T00:52:00.000Z"
+last_activity: 2026-03-09 - Completed quick task 2: Document OSRM readiness check and add Docker dependency conditions
 progress:
   total_phases: 4
   completed_phases: 4
@@ -66,9 +66,10 @@ See `.planning/milestones/` for full phase details per milestone.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 1 | Fix 500 error on fresh-clone CSV upload and track reset script in git | 2026-03-09 | c91525d | [1-fix-500-error-on-fresh-clone-csv-upload-](./quick/1-fix-500-error-on-fresh-clone-csv-upload-/) |
+| 2 | Document OSRM readiness check and add Docker dependency conditions | 2026-03-09 | 3b994e5 | [2-document-osrm-readiness-check-and-add-tr](./quick/2-document-osrm-readiness-check-and-add-tr/) |
 
 ## Session Continuity
 
 Last session: 2026-03-09
-Stopped at: Completed quick-fix 1 (fix 500 error on fresh clone CSV upload)
+Stopped at: Completed quick task 2 (document OSRM readiness check and add Docker dependency conditions)
 Resume file: None
