@@ -97,16 +97,17 @@
 | 23. Distribution Verification & Ops | v1.4 | 2/2 | Complete | 2026-03-08 |
 | 24. Documentation Consolidation | v1.4 | 3/3 | Complete | 2026-03-09 |
 
-### Phase 1: Documentation Restructure & Validation
+### Phase 1: Documentation Restructure & Validation ✓
 
 **Goal:** Restructure ~3,600 lines of documentation into an organized docs/ directory, validate all content against the current codebase (post-v1.4), fix drift, and add audience separation between developer and office-employee docs.
 **Requirements**: [DOC-MOVE, DOC-XREF, DOC-CLEANUP, DOC-VALIDATE, DOC-AUDIENCE, DOC-INDEX, DOC-README]
 **Depends on:** Phase 0
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
+**Completed:** 2026-03-09
 
 Plans:
-- [x] 01-01-PLAN.md -- Move files to docs/, update cross-references, delete plan/, clean .github/ refs (1/2 plans complete)
-- [ ] 01-02-PLAN.md -- Validate content against codebase, fix drift, add audience badges, create INDEX.md, trim README
+- [x] 01-01-PLAN.md -- Move files to docs/, update cross-references, delete plan/, clean .github/ refs
+- [x] 01-02-PLAN.md -- Validate content against codebase, fix drift, add audience badges, create INDEX.md, trim README
 
 ### Phase 2: Error Handling Infrastructure
 

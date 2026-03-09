@@ -71,10 +71,13 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ Production vs development environment comparison documentation — v1.4
 - ✓ Google Maps API key troubleshooting guide for office employees — v1.4
 - ✓ Third-party attribution audit (59 Python + 11 JS + infrastructure) — v1.4
+- ✓ Documentation consolidated in docs/ with cross-reference cleanup — post-v1.4
+- ✓ All documentation validated against codebase, audience badges added — post-v1.4
+- ✓ docs/INDEX.md as central documentation hub, README trimmed to overview-only — post-v1.4
 
 ### Active
 
-(No active milestone — v1.4 shipped. Use `/gsd:new-milestone` to start next.)
+- [ ] Error handling infrastructure (Phase 2 — to be planned)
 
 ### Out of Scope
 
@@ -98,7 +101,7 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v1.4 shipped (2026-03-09). ~17.9k Python LOC, ~5k TypeScript LOC, ~3k Shell LOC. 38 E2E tests + 426 unit tests. 5 milestones shipped (v1.0-v1.4), 24 phases, 53 plans.
+- **Current state**: v1.4 shipped (2026-03-09). ~17.9k Python LOC, ~5k TypeScript LOC, ~3k Shell LOC. 38 E2E tests + 426 unit tests. 5 milestones shipped (v1.0-v1.4), 25 phases, 55 plans.
 - **Known tech debt**: Physical Android device testing for outdoor contrast; 8 GB laptop testing for install script OSRM OOM validation.
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
@@ -154,6 +157,9 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | Standalone compose for verification | Docker Compose merges ports additively in overrides, causing conflicts | ✓ Good |
 | Skip OSRM/VROOM in tarball verification | Endpoints don't require routing; saves 300+ MB download and minutes of init | ✓ Good |
 | Copyleft-first attribution | Flag restrictive licenses at top for compliance scanning | ✓ Good |
+| docs/ as single documentation home | All docs except README.md/CLAUDE.md consolidated under docs/ | ✓ Good — clean root, discoverable docs |
+| docs/INDEX.md as documentation hub | Central entry point with audience tags replaces scattered README links | ✓ Good — office employees find their docs first |
+| README.md overview-only | Setup/startup instructions moved to docs/SETUP.md, README links to INDEX.md | ✓ Good — clean landing page |
 
 ---
-*Last updated: 2026-03-09 after v1.4 milestone*
+*Last updated: 2026-03-09 after Phase 01 (Documentation Restructure)*
