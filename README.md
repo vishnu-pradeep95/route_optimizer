@@ -6,71 +6,9 @@ A modular delivery-route optimization system. First deployment: **Kerala LPG cyl
 
 The architecture is designed to be **reusable across any delivery business** — the Kerala LPG app is the first consumer, not the only one.
 
-> **Employee?** If you're setting up this system at the office, skip to the [Employee Deployment Guide (DEPLOY.md)](docs/DEPLOY.md) — no programming knowledge required.
+> **Employee?** If you're setting up this system at the office, skip to the [Employee Deployment Guide (DEPLOY.md)](docs/DEPLOY.md) -- no programming knowledge required.
 
----
-
-## Quick Start
-
-```bash
-# 1. Clone & setup Python
-git clone <REPO_URL> routing_opt && cd routing_opt
-# ^^^ Replace <REPO_URL> with the actual repository URL before customer delivery
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# 2. Environment config
-cp .env.example .env
-# Edit .env — minimum required changes:
-#   POSTGRES_PASSWORD=any-strong-password-you-choose
-#   GOOGLE_MAPS_API_KEY=your-key-here       (only needed for geocoding)
-#   CORS_ALLOWED_ORIGINS=http://localhost:8000,http://localhost:5173
-#   (add :5173 so the React dashboard dev server can talk to the API)
-
-# 3. Start infrastructure (OSRM + VROOM + PostgreSQL + API)
-sudo service docker start          # WSL2 only — skip on native Linux/Mac
-docker compose up -d
-
-# 4. Wait for services to be healthy, then verify
-# start.sh handles health polling -- only needed if running outside Docker
-sleep 5
-curl http://localhost:8000/health   # should return {"status":"ok"}
-docker compose ps                   # all services should show "running"
-
-# 5. Apply database migrations
-# Automated by db-init container -- only needed if running outside Docker
-alembic upgrade head
-
-# 6. Run tests (no Docker needed — all external services are mocked)
-pytest tests/ -v
-
-# 7. Open the app
-# Driver PWA:   http://localhost:8000/driver/
-# API docs:     http://localhost:8000/docs
-#
-# Ops dashboard (React dev server with hot reload):
-cd apps/kerala_delivery/dashboard
-npm install          # first time only
-npm run dev          # → http://localhost:5173
-```
-
-> **Full setup guide** (first-time, including Docker install, OSRM data prep): see [SETUP.md](docs/SETUP.md)
-
-### Stopping & Restarting
-
-```bash
-# Stop everything
-docker compose down
-
-# Restart after Python/config changes
-docker compose restart api
-
-# Rebuild API image after adding pip packages
-docker compose up -d --build api
-
-# Hard-refresh the dashboard after frontend changes
-# Browser: Ctrl+Shift+R  (bypasses service worker cache)
-```
+> **Developer?** See [SETUP.md](docs/SETUP.md) for the complete development environment setup guide, or browse the [Documentation Index](docs/INDEX.md) for all available docs.
 
 ---
 
@@ -526,18 +464,20 @@ This allows swapping OSRM → Valhalla, or VROOM → OR-Tools, without changing 
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [DEPLOY.md](docs/DEPLOY.md) | Office employee setup and daily use guide |
-| [SETUP.md](docs/SETUP.md) | Developer environment setup |
-| [LICENSING.md](docs/LICENSING.md) | License generation, activation, and lifecycle |
-| [DISTRIBUTION.md](docs/DISTRIBUTION.md) | Build, deliver, and verify customer distributions |
-| [ENV-COMPARISON.md](docs/ENV-COMPARISON.md) | Development vs production environment differences |
-| [GOOGLE-MAPS.md](docs/GOOGLE-MAPS.md) | Google Maps API key setup and troubleshooting |
-| [ATTRIBUTION.md](docs/ATTRIBUTION.md) | Third-party licenses and required attribution |
-| [CSV_FORMAT.md](docs/CSV_FORMAT.md) | Upload file format reference |
-| [GUIDE.md](docs/GUIDE.md) | Comprehensive platform guide |
-| [ERROR-MAP.md](docs/ERROR-MAP.md) | Error message traceability map |
+See the [Documentation Index](docs/INDEX.md) for a complete list with audience tags.
+
+| Document | Description | Audience |
+|----------|-------------|----------|
+| [DEPLOY.md](docs/DEPLOY.md) | System setup and daily operations for office staff | Office Employee |
+| [CSV_FORMAT.md](docs/CSV_FORMAT.md) | Upload file format reference and column guide | Both |
+| [GOOGLE-MAPS.md](docs/GOOGLE-MAPS.md) | Google Maps API setup and troubleshooting | Both |
+| [SETUP.md](docs/SETUP.md) | Developer environment setup and configuration | Developer |
+| [GUIDE.md](docs/GUIDE.md) | Platform architecture, code organization, and learning path | Developer |
+| [DISTRIBUTION.md](docs/DISTRIBUTION.md) | Build and package customer distribution archives | Developer |
+| [LICENSING.md](docs/LICENSING.md) | License key generation, activation, and lifecycle | Developer |
+| [ENV-COMPARISON.md](docs/ENV-COMPARISON.md) | Development vs production environment differences | Developer |
+| [ATTRIBUTION.md](docs/ATTRIBUTION.md) | Third-party software licenses and attribution | Developer |
+| [ERROR-MAP.md](docs/ERROR-MAP.md) | Error message traceability from UI to source code | Developer |
 
 ---
 

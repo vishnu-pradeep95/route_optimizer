@@ -1,5 +1,7 @@
 # Google Maps API Key Setup & Troubleshooting
 
+> **Audience:** Office Employee | Developer
+
 > **Who this is for:** An employee at the office who needs to set up or fix Google Maps
 > for address lookup (geocoding). No programming knowledge required.
 

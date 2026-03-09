@@ -1,5 +1,7 @@
 # Licensing Guide
 
+> **Audience:** Developer
+
 This document covers how the software licensing system works, how to generate
 license keys (developer), and how to activate them (customer/employee).
 

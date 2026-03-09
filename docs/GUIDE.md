@@ -1,5 +1,7 @@
 # Beginner's Guide to the Routing Optimization Platform
 
+> **Audience:** Developer
+
 > **Who this is for:** You're new to programming or new to this project. This guide
 > explains what the system does, how all the pieces fit together, and how to think
 > about it — using plain language and analogies. No prior knowledge assumed.

@@ -1,5 +1,7 @@
 # Error Message Traceability Map
 
+> **Audience:** Developer
+
 **Created:** Phase 20 (Sync Error Message Documentation)
 **Verified:** 2026-03-07
 **Total entries:** 25 (9 file-level + 9 row-level + 7 geocoding)

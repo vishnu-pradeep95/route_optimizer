@@ -1,5 +1,7 @@
 # Third-Party Attribution
 
+> **Audience:** Developer
+
 This document lists all third-party software used in this project, their licenses,
 and required attribution text. It is included in customer distributions.
 
