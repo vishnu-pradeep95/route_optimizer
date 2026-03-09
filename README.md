@@ -141,7 +141,7 @@ routing_opt/
 │           ├── src/components/    ← RouteMap, VehicleList, StatsBar
 │           └── src/lib/api.ts     ← Typed fetch client for all API endpoints
 │
-├── tests/                         ← Mirrors source structure (351 tests)
+├── tests/                         ← Mirrors source structure (420 tests)
 │   ├── conftest.py                ← Shared fixtures (Kerala coordinates)
 │   ├── core/                      ← Unit tests for all core modules
 │   │   ├── database/              ← 35 DB tests (models, repository, connection)
@@ -368,22 +368,24 @@ source .venv/bin/activate
 pytest tests/ -v
 ```
 
-**351 tests** covering:
+**420 tests** covering:
 - Core models (16 tests: location, order, vehicle, route validation)
 - OSRM adapter (8 tests: travel time, distance matrix, safety multiplier)
 - VROOM adapter (15 tests: route optimization, priority, unassigned handling)
-- Google geocoder (11 tests: API calls, caching, geocode cache hits)
-- PostGIS geocode cache (16 tests: CachedGeocoder — cache-first strategy, hit/miss, confidence)
-- CSV importer (10 tests: standard/custom columns, coordinate passthrough, error recovery)
+- Google geocoder (10 tests: API calls, caching, geocode cache hits)
+- PostGIS geocode cache (16 tests: CachedGeocoder -- cache-first strategy, hit/miss, confidence)
+- Geocode normalization (15 tests: address normalization and deduplication)
+- Duplicate detector (21 tests: geocoded location duplicate detection)
+- CSV importer (22 tests: standard/custom columns, coordinate passthrough, error recovery)
 - CDCMS preprocessor (33 tests: TSV reading, address cleaning, filtering, abbreviation handling)
 - Database layer (35 tests: ORM models, repository CRUD, connection lifecycle, telemetry)
 - Licensing (25 tests: hardware-bound license keys, offline validation, expiry, tampering)
-- API endpoints (93 tests: health, routes, status updates, upload pipeline, optimization runs, telemetry, fleet CRUD, rate limiting, QR codes, XSS prevention)
+- API endpoints (107 tests: health, routes, status updates, upload pipeline, optimization runs, telemetry, fleet CRUD, rate limiting, QR codes, XSS prevention)
 - QR helpers (24 tests: Google Maps URL building, QR SVG/PNG generation, route splitting)
-- Kerala config (23 tests: vehicle specs, safety constraints, routing config, depot location)
-- Batch scripts (31 tests: import_orders.py, geocode_batch.py — parsing, geocoding, dry-run, stats)
-- E2E pipelines (11 tests: CSV→Order, Order→VROOM, Route→QR, full upload→optimize, QR sheet)
-- Integration (end-to-end CSV → geocode → optimize → persist pipeline)
+- Kerala config (22 tests: vehicle specs, safety constraints, routing config, depot location)
+- Batch scripts (31 tests: import_orders.py, geocode_batch.py -- parsing, geocoding, dry-run, stats)
+- E2E pipelines (11 tests: CSV->Order, Order->VROOM, Route->QR, full upload->optimize, QR sheet)
+- Integration (9 tests: end-to-end CSV -> geocode -> optimize -> persist pipeline)
 
 All external services (OSRM, VROOM, Google Maps, PostgreSQL) are mocked in tests — no Docker required to run the test suite.
 

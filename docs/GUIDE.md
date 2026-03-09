@@ -19,7 +19,7 @@
 9. [Setup & Running the System](#9-setup--running-the-system)
 10. [How to Read the Code (Learning Path)](#10-how-to-read-the-code-learning-path)
 11. [How the AI Agents Help You Build](#11-how-the-ai-agents-help-you-build)
-12. [What's Built vs. What's Planned](#12-whats-built-vs-whats-planned)
+12. [Project Status](#12-project-status)
 13. [Glossary](#13-glossary)
 
 ---
@@ -238,19 +238,19 @@ routing_opt/
 │   ├── driver_app/            ← What drivers see on their phones
 │   └── dashboard/             ← What the ops manager sees on their computer
 │
-├── tests/                     ← Automated tests (351 of them!)
+├── tests/                     ← Automated tests (420 of them!)
 │   ├── core/                  ← Tests for each core module
 │   ├── apps/                  ← Tests for API endpoints
 │   └── integration/           ← End-to-end tests (whole pipeline)
 │
 ├── infra/                     ← Infrastructure setup
-│   ├── docker-compose.yml     ← One command to start all services
 │   ├── postgres/init.sql      ← Database table definitions
 │   └── alembic/               ← Database migration scripts
 │
 ├── data/                      ← Sample data and cached results
 ├── docs/                      ← All documentation files
 ├── scripts/                   ← Utility scripts (setup, comparison, import)
+├── docker-compose.yml         ← One command to start all services
 └── .github/agents/            ← AI agent definitions for Copilot
 ```
 
@@ -396,53 +396,7 @@ on a live map.
 
 ## 9. Setup & Running the System
 
-### Prerequisites
-- Ubuntu (or WSL2 on Windows)
-- Python 3.12
-- Docker & Docker Compose
-- Node.js v24 (for the dashboard)
-
-### Quick Start
-
-```bash
-# 1. Clone the repo and set up Python
-git clone <REPO_URL> routing_opt && cd routing_opt
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# 2. Configure environment
-cp .env.example .env
-# Edit .env → add your GOOGLE_MAPS_API_KEY
-
-# 3. Start all services
-sudo service docker start     # WSL2 only
-docker compose up -d
-
-# 4. Apply database migrations
-alembic upgrade head
-
-# 5. Run tests (should show 351 passing)
-pytest tests/ -v
-
-# 6. Start the dashboard (separate terminal)
-cd apps/kerala_delivery/dashboard
-npm install && npm run dev
-# Opens at http://localhost:5173
-```
-
-> For the full detailed setup (including Docker installation, OSRM data download,
-> and troubleshooting), see [SETUP.md](SETUP.md).
-
-### Verifying Everything Works
-
-| Check | Command | Expected |
-|-------|---------|----------|
-| Docker services up | `docker compose ps` | 4 containers running |
-| Database accessible | `docker exec routing-db pg_isready` | "accepting connections" |
-| OSRM responding | `curl http://localhost:5000/health` | JSON response |
-| API responding | `curl http://localhost:8000/health` | `{"status": "ok"}` |
-| Tests pass | `pytest tests/ -v` | 351 passed |
-| Dashboard compiles | `cd apps/kerala_delivery/dashboard && npx tsc --noEmit` | 0 errors |
+For complete setup instructions (Python, Docker, OSRM data, Node.js, environment variables), see [SETUP.md](SETUP.md).
 
 ---
 
@@ -554,51 +508,11 @@ quality, test coverage, and design-doc alignment.
 
 ---
 
-## 12. What's Built vs. What's Planned
+## 12. Project Status
 
-### Current State (Through Phase 4 — All Complete)
+The platform is fully functional through 24 development phases (milestones v1.0 through v1.4). All core features are complete: CDCMS/CSV upload, geocoding with PostGIS caching, VROOM+OSRM route optimization, driver PWA, operations dashboard, GPS telemetry, fleet management, hardware-bound licensing, and production deployment with Caddy reverse proxy.
 
-**What works right now:**
-
-- Upload a CDCMS export (HPCL tab-separated) or standard CSV and get optimized routes back
-- Automatic CDCMS format detection in the upload endpoint (no separate preprocessing step)
-- Geocoding with Google Maps (results cached in PostGIS to save money)
-- PostGIS geocode cache with CachedGeocoder (decorator pattern, async Protocol)
-- Route optimization with VROOM + OSRM (68% better than manual routes!)
-- Full PostgreSQL database with PostGIS for GPS data
-- Driver PWA (mobile-friendly web app) showing routes with Google Maps navigation
-- QR code generation: printable A4 sheet with QR codes per vehicle → drivers scan with phone → Google Maps opens
-- Route splitting for routes >11 stops (Google Maps 9-waypoint limit)
-- Upload & Routes dashboard page with drag-drop upload, route cards, expandable QR codes
-- Real-time GPS telemetry tracking (drivers send position every 15s)
-- Batch telemetry endpoint (POST /api/telemetry/batch) — reduces N+1 fetch overhead
-- Fleet management API (full CRUD for vehicles)
-- API key authentication on write endpoints + sensitive reads (X-API-Key header)
-- Rate limiting on write endpoints (slowapi — prevents abuse)
-- Operations dashboard with upload/routes, live map, route history, and fleet management
-- Batch scripts for importing orders and geocoding addresses (import_orders.py, geocode_batch.py)
-- 351 automated tests covering all core functionality + batch scripts + QR code + licensing + config + E2E pipelines + XSS prevention
-- Docker Compose for one-command infrastructure startup
-- Docker Compose production config with Caddy reverse proxy, health checks
-
-**What shipped in Phase 4 (all sub-phases complete):**
-
-- 4A: QR code generation for Google Maps navigation (printable A4 sheets, route splitting for >11 stops)
-- 4B: Dashboard UI redesign (sidebar nav, stone/amber design system, responsive layout)
-- 4C: Hardware-bound software licensing (offline validation, expiry checks, grace period)
-- 4D: Easy installation (init containers, installer script, Caddy reverse proxy, simplified deployment)
-
-### Future Work
-
-| Item | Priority | Notes |
-|------|----------|-------|
-| Offline-first driver PWA sync | Medium | Service worker + local DB for patchy Kerala mobile data |
-| OSRM speed profile calibration | Medium | Calibrate with real GPS data from Phase 3 routes |
-| Dashboard E2E tests | Low | Playwright — deferred until UI stabilizes |
-| Drag-and-drop route editing | Low | Manual route adjustments in dashboard |
-| ML travel-time models | Future | Learn from real delivery data |
-| Dynamic re-routing | Future | Mid-shift re-optimization when delays occur |
-| Customer notifications | Future | SMS/WhatsApp ETA updates |
+For current project status and future plans, see [ROADMAP.md](../README.md) (the Development Phases section) or `.planning/PROJECT.md`.
 
 ---
 

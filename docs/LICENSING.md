@@ -171,7 +171,7 @@ receive a new key.
   license checks, or generate a dev license with `--this-machine`
 - **Docker Compose:** `docker-compose.yml` — ports exposed for debugging
 - **Scripts included:** `generate_license.py` (the signing tool)
-- **Files present:** `tests/`, `plan/`, `.planning/`, `.github/`, `GUIDE.md`,
+- **Files present:** `tests/`, `.planning/`, `.github/`, `docs/GUIDE.md`,
   `CLAUDE.md`, `pytest.ini`
 
 ```bash
@@ -188,7 +188,7 @@ cd apps/kerala_delivery/dashboard && npm run dev
 - **Docker Compose:** `docker-compose.prod.yml` — only ports 80/443 exposed
   through Caddy reverse proxy with auto-TLS
 - **Scripts excluded:** `generate_license.py` is NOT included
-- **Files excluded:** `tests/`, `plan/`, `.planning/`, `.github/`, `GUIDE.md`,
+- **Files excluded:** `tests/`, `.planning/`, `.github/`, `docs/GUIDE.md`,
   `CLAUDE.md`, `pytest.ini`, `.env.production.example`
 
 ```bash
@@ -219,7 +219,7 @@ What it does:
 |----------|--------|
 | `.git/` | Version control history |
 | `tests/` | Developer test suite |
-| `plan/`, `.planning/` | Design docs and session journals |
+| `.planning/` | Design docs and planning artifacts |
 | `.github/`, `.claude/` | AI agent configs |
 | `scripts/generate_license.py` | License signing tool (developer-only) |
 | `GUIDE.md`, `CLAUDE.md` | Developer-only documentation |
@@ -235,7 +235,7 @@ What it does:
 | `infra/` | Docker configs, migrations |
 | `scripts/` (minus generate_license) | Setup, start, backup, machine ID |
 | `docker-compose.yml` | Service stack |
-| `README.md`, `DEPLOY.md`, `CSV_FORMAT.md`, `SETUP.md` | User documentation |
+| `README.md`, `docs/DEPLOY.md`, `docs/CSV_FORMAT.md`, `docs/SETUP.md` | User documentation |
 | `ATTRIBUTION.md` | Third-party license obligations |
 | `.env.example` | Environment template |
 

@@ -51,12 +51,12 @@ The `v1.4` argument sets the version in the output filename. Use semantic versio
 | Excluded | Reason |
 |----------|--------|
 | `.git/` | Version control history |
-| `.github/`, `.claude/`, `.vscode/` | CI configs, AI agent configs, editor settings |
-| `tests/` | Developer test suite |
+| `.github/`, `.claude/`, `.vscode/`, `.playwright-mcp/`, `.agents/` | CI configs, AI agent configs, editor settings, test tooling |
+| `tests/`, `.pytest_cache/` | Developer test suite and cache |
 | `.planning/` | Design docs and planning artifacts |
 | `.venv/`, `node_modules/`, `__pycache__/` | Environment-specific, rebuilt on install |
 | `scripts/generate_license.py` | License signing tool -- must never reach customers |
-| `docs/GUIDE.md`, `CLAUDE.md`, `pytest.ini` | Developer-only documentation |
+| `docs/GUIDE.md`, `CLAUDE.md`, `pytest.ini`, `.gitignore` | Developer-only documentation and config |
 | `.env`, `.env.production`, `.env.production.example` | Secrets and internal templates |
 | `docker-compose.prod.yml` | Included separately or pre-configured for the customer |
 | `dist/`, `backups/`, `data/` | Build artifacts, backups, runtime data |
