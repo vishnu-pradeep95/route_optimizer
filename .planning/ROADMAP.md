@@ -105,7 +105,7 @@
 **Plans:** 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Move files to docs/, update cross-references, delete plan/, clean .github/ refs
+- [x] 01-01-PLAN.md -- Move files to docs/, update cross-references, delete plan/, clean .github/ refs (1/2 plans complete)
 - [ ] 01-02-PLAN.md -- Validate content against codebase, fix drift, add audience badges, create INDEX.md, trim README
 
 ### Phase 2: Error Handling Infrastructure
