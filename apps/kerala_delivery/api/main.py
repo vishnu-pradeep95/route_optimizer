@@ -27,6 +27,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+import httpx
 from Secweb import SecWeb
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -1115,6 +1116,46 @@ async def upload_and_optimize(
         # ValueError from preprocess_cdcms() or CsvImporter._validate_columns()
         # already has a humanized message — pass it through as HTTP 400.
         raise HTTPException(status_code=400, detail=str(e))
+
+    except httpx.ConnectError as e:
+        logger.error("VROOM/OSRM connection failed during upload: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Route optimizer is not ready yet. "
+                "OSRM may still be downloading map data (this takes ~15 minutes on first run). "
+                "Please wait and try again."
+            ),
+        )
+    except httpx.TimeoutException as e:
+        logger.error("VROOM/OSRM timed out during upload: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Route optimizer timed out. "
+                "OSRM may still be processing map data. "
+                "Please wait a few minutes and try again."
+            ),
+        )
+    except httpx.HTTPStatusError as e:
+        logger.error("VROOM returned error %d: %s", e.response.status_code, e.response.text[:300])
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"Route optimizer returned an error (HTTP {e.response.status_code}). "
+                "This may indicate OSRM is still starting up. Please try again in a few minutes."
+            ),
+        )
+    except Exception as e:
+        logger.exception("Unexpected error during upload: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "An unexpected error occurred while processing your upload. "
+                "Please check that all services are running and try again. "
+                f"Error: {type(e).__name__}: {e}"
+            ),
+        )
 
     finally:
         # Clean up temp files — only if they were created and not yet removed.
