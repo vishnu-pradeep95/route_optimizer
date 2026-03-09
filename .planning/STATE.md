@@ -5,7 +5,7 @@ milestone_name: Ship-Ready QA
 status: milestone_complete
 stopped_at: Milestone v1.4 archived
 last_updated: "2026-03-09T00:30:00.000Z"
-last_activity: 2026-03-09 -- v1.4 Ship-Ready QA milestone completed and archived
+last_activity: 2026-03-09 - Completed quick task 1: Fix 500 error on fresh-clone CSV upload and track reset script in git
 progress:
   total_phases: 4
   completed_phases: 4
@@ -60,6 +60,12 @@ See `.planning/milestones/` for full phase details per milestone.
 - Physical Android device testing required for outdoor contrast validation -- browser DevTools cannot replicate Kerala sunlight conditions.
 - 8 GB laptop testing required for install script validation -- OSRM OOM (exit 137) will not surface on developer machines.
 - Google Maps API key is currently invalid (REQUEST_DENIED) -- E2E tests must use pre-geocoded seed data to bypass this.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 1 | Fix 500 error on fresh-clone CSV upload and track reset script in git | 2026-03-09 | c91525d | [1-fix-500-error-on-fresh-clone-csv-upload-](./quick/1-fix-500-error-on-fresh-clone-csv-upload-/) |
 
 ## Session Continuity
 
