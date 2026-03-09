@@ -249,7 +249,7 @@ routing_opt/
 │   └── alembic/               ← Database migration scripts
 │
 ├── data/                      ← Sample data and cached results
-├── plan/                      ← Design documents and session memory
+├── docs/                      ← All documentation files
 ├── scripts/                   ← Utility scripts (setup, comparison, import)
 └── .github/agents/            ← AI agent definitions for Copilot
 ```
@@ -637,8 +637,6 @@ quality, test coverage, and design-doc alignment.
 
 ## Need Help?
 
-- **Design decisions:** Read [plan/kerala_delivery_route_system_design.md](plan/kerala_delivery_route_system_design.md) — the authoritative 450-line design document with footnoted research
-- **Session history:** Read [plan/session-journal.md](plan/session-journal.md) — every development session's decisions, changes, and open questions
 - **Setup help:** Follow [SETUP.md](SETUP.md) — step-by-step first-time environment setup
-- **API reference:** See [README.md](README.md) — all endpoints, CSV format, config values
+- **API reference:** See [README.md](../README.md) — all endpoints, CSV format, config values
 - **Ask the AI:** Use the `Kerala Delivery Route Architect` agent in Copilot Chat — it knows the entire project context

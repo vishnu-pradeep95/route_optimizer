@@ -13,8 +13,7 @@ Architecture is designed to be **reusable across any delivery business**.
 
 | File | Purpose |
 |---|---|
-| `plan/kerala_delivery_route_system_design.md` | Authoritative design document (450 lines) |
-| `plan/session-journal.md` | Cross-session memory log — read at start, append at end |
+| `.planning/PROJECT.md` | Authoritative project reference document |
 | `.github/agents/kerala-delivery-route-architect.agent.md` | Main architect agent |
 | `.github/agents/session-journal.agent.md` | Agent for saving/loading/resuming session context |
 
@@ -70,7 +69,7 @@ Architecture is designed to be **reusable across any delivery business**.
 - Every function gets a docstring. Every non-trivial block gets an inline comment
   explaining the *design decision* (why), not just the mechanics (what).
 - When creating files: follow the layout in the design document's file structure section
-- New dev setup: follow `SETUP.md`
+- New dev setup: follow `docs/SETUP.md`
 
 ## Dev Environment
 
@@ -83,4 +82,4 @@ Architecture is designed to be **reusable across any delivery business**.
 - **Env vars:** Copy `.env.example` → `.env` and fill in API keys
 - **WSL note:** Docker daemon must be started manually: `sudo service docker start`
 - **Testing:** `pytest` from project root. Tests live alongside code in `tests/` mirrors.
-- **New developer?** Follow `SETUP.md` for complete environment setup.
+- **New developer?** Follow `docs/SETUP.md` for complete environment setup.

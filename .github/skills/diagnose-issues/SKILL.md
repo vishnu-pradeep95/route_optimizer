@@ -65,7 +65,7 @@ Debug this gap in the routing optimization project:
 Project context:
 - Stack: Python 3.12, FastAPI, VROOM, OSRM, PostgreSQL/PostGIS
 - Tests: pytest (source .venv/bin/activate && pytest)
-- Design doc: plan/kerala_delivery_route_system_design.md
+- Project reference: .planning/PROJECT.md
 
 Investigate the root cause. Create debug file at .planning/debug/{slug}.md
 Return: root cause + recommended fix (specific files and changes)

@@ -6,7 +6,7 @@ A modular delivery-route optimization system. First deployment: **Kerala LPG cyl
 
 The architecture is designed to be **reusable across any delivery business** — the Kerala LPG app is the first consumer, not the only one.
 
-> **Employee?** If you're setting up this system at the office, skip to the [Employee Deployment Guide (DEPLOY.md)](DEPLOY.md) — no programming knowledge required.
+> **Employee?** If you're setting up this system at the office, skip to the [Employee Deployment Guide (DEPLOY.md)](docs/DEPLOY.md) — no programming knowledge required.
 
 ---
 
@@ -54,7 +54,7 @@ npm install          # first time only
 npm run dev          # → http://localhost:5173
 ```
 
-> **Full setup guide** (first-time, including Docker install, OSRM data prep): see [SETUP.md](SETUP.md)
+> **Full setup guide** (first-time, including Docker install, OSRM data prep): see [SETUP.md](docs/SETUP.md)
 
 ### Stopping & Restarting
 
@@ -166,16 +166,21 @@ routing_opt/
 │   ├── sample_orders.csv          ← 30 example orders (generic CSV format)
 │   └── sample_cdcms_export.csv    ← 27-row CDCMS tab-separated sample (Vatakara area)
 │
-├── plan/                          ← Design docs & session memory
-│   ├── kerala_delivery_route_system_design.md   ← Authoritative design doc
-│   └── session-journal.md         ← Cross-session development log
+├── docs/                          ← All documentation files
+│   ├── DEPLOY.md                  ← Employee deployment guide (no coding required)
+│   ├── SETUP.md                   ← Complete new-developer setup guide
+│   ├── GUIDE.md                   ← Comprehensive platform guide
+│   ├── CSV_FORMAT.md              ← Upload file format reference
+│   ├── LICENSING.md               ← License generation & activation guide
+│   ├── DISTRIBUTION.md            ← Build & deliver customer distributions
+│   ├── ATTRIBUTION.md             ← Third-party licenses and attribution
+│   ├── ENV-COMPARISON.md          ← Dev vs production environment differences
+│   ├── GOOGLE-MAPS.md             ← API key setup and troubleshooting
+│   └── ERROR-MAP.md               ← Error message traceability
 │
 ├── .env.example                   ← Template for environment vars
 ├── requirements.txt               ← Pinned Python packages
 ├── LICENSE                        ← Proprietary software license
-├── LICENSING.md                   ← License generation & activation guide
-├── SETUP.md                       ← Complete new-developer setup guide
-├── DEPLOY.md                      ← Employee deployment guide (no coding required)
 └── .github/
     ├── copilot-instructions.md    ← Always-on AI context
     └── agents/                    ← Copilot agent definitions
@@ -413,7 +418,7 @@ docker compose up -d --build api
 | VROOM | `vroom-solver` | 3000 | `curl -sf http://localhost:3000/health` |
 | API | `lpg-api` | 8000 | `curl http://localhost:8000/health` |
 
-> **Note:** OSRM has no `/health` endpoint. You verify readiness by querying a real coordinate -- the command above queries the nearest road segment to the depot location in Kochi. OSRM requires preprocessed Kerala map data in `data/osrm/`. This is downloaded automatically on first `docker compose up`. See [SETUP.md](SETUP.md) for manual download steps if running OSRM outside Docker.
+> **Note:** OSRM has no `/health` endpoint. You verify readiness by querying a real coordinate -- the command above queries the nearest road segment to the depot location in Kochi. OSRM requires preprocessed Kerala map data in `data/osrm/`. This is downloaded automatically on first `docker compose up`. See [SETUP.md](docs/SETUP.md) for manual download steps if running OSRM outside Docker.
 
 ---
 
@@ -454,7 +459,7 @@ Copy `.env.example` → `.env` and configure:
 
 ## Licensing
 
-The software uses hardware-bound license keys. See [LICENSING.md](LICENSING.md)
+The software uses hardware-bound license keys. See [LICENSING.md](docs/LICENSING.md)
 for the complete guide.
 
 **Quick reference:**
@@ -513,7 +518,7 @@ This allows swapping OSRM → Valhalla, or VROOM → OR-Tools, without changing 
 - **Comments:** Explain *why* (design decisions), not *what*. Link to docs/articles for non-obvious choices.
 - **Tests:** Every new function in `core/` must have tests. `pytest` must pass before every commit.
 - **Imports:** Keep `core/` independent — it must never import from `apps/`.
-- **Setup:** New contributors follow [SETUP.md](SETUP.md) (15–20 min to working environment).
+- **Setup:** New contributors follow [SETUP.md](docs/SETUP.md) (15–20 min to working environment).
 
 ---
 
@@ -521,15 +526,16 @@ This allows swapping OSRM → Valhalla, or VROOM → OR-Tools, without changing 
 
 | Document | Description |
 |----------|-------------|
-| [DEPLOY.md](DEPLOY.md) | Office employee setup and daily use guide |
-| [SETUP.md](SETUP.md) | Developer environment setup |
-| [LICENSING.md](LICENSING.md) | License generation, activation, and lifecycle |
-| [DISTRIBUTION.md](DISTRIBUTION.md) | Build, deliver, and verify customer distributions |
-| [ENV-COMPARISON.md](ENV-COMPARISON.md) | Development vs production environment differences |
-| [GOOGLE-MAPS.md](GOOGLE-MAPS.md) | Google Maps API key setup and troubleshooting |
-| [ATTRIBUTION.md](ATTRIBUTION.md) | Third-party licenses and required attribution |
-| [CSV_FORMAT.md](CSV_FORMAT.md) | Upload file format reference |
-| [GUIDE.md](GUIDE.md) | Comprehensive platform guide |
+| [DEPLOY.md](docs/DEPLOY.md) | Office employee setup and daily use guide |
+| [SETUP.md](docs/SETUP.md) | Developer environment setup |
+| [LICENSING.md](docs/LICENSING.md) | License generation, activation, and lifecycle |
+| [DISTRIBUTION.md](docs/DISTRIBUTION.md) | Build, deliver, and verify customer distributions |
+| [ENV-COMPARISON.md](docs/ENV-COMPARISON.md) | Development vs production environment differences |
+| [GOOGLE-MAPS.md](docs/GOOGLE-MAPS.md) | Google Maps API key setup and troubleshooting |
+| [ATTRIBUTION.md](docs/ATTRIBUTION.md) | Third-party licenses and required attribution |
+| [CSV_FORMAT.md](docs/CSV_FORMAT.md) | Upload file format reference |
+| [GUIDE.md](docs/GUIDE.md) | Comprehensive platform guide |
+| [ERROR-MAP.md](docs/ERROR-MAP.md) | Error message traceability map |
 
 ---
 
@@ -537,7 +543,6 @@ This allows swapping OSRM → Valhalla, or VROOM → OR-Tools, without changing 
 
 | Resource | URL |
 |----------|-----|
-| Design Document | [plan/kerala_delivery_route_system_design.md](plan/kerala_delivery_route_system_design.md) |
 | VROOM API | https://github.com/VROOM-Project/vroom/blob/master/docs/API.md |
 | OSRM HTTP API | https://project-osrm.org/docs/v5.24.0/api/ |
 | Kerala OSM Data | https://download.openstreetmap.fr/extracts/asia/india/kerala.osm.pbf |

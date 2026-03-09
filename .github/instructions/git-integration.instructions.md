@@ -118,7 +118,7 @@ Verification: .planning/phases/{phase}-VERIFICATION.md
 docs: initialize routing-optimization platform
 
 Stack: VROOM + OSRM + PostgreSQL/PostGIS + FastAPI
-Phases: 5 planned (see plan/kerala_delivery_route_system_design.md)
+Phases: See .planning/ROADMAP.md for current phase plan
 ```
 
 ## Branch Strategy

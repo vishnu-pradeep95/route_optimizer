@@ -16,8 +16,8 @@ summaries** — not raw documentation dumps.
 
 For every research request:
 
-1. **Understand the context** — read `plan/kerala_delivery_route_system_design.md` sections
-   relevant to the topic. Check `plan/session-journal.md` for any prior `DECIDED:` entries
+1. **Understand the context** — read `.planning/PROJECT.md` sections
+   relevant to the topic. Check `.planning/STATE.md` for any prior decisions
    that constrain the research.
 
 2. **Fetch primary sources** — use the web tool to get official documentation, GitHub

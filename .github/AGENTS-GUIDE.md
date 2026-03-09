@@ -64,7 +64,7 @@ The Architect can also spawn sub-agents directly via `runSubagent` when it deter
 | 🔍 Deep Research | Deep Researcher | Research a technology/approach in depth |
 | 🧪 Review & Validate | Code Reviewer | Review code changes against project standards |
 | 💬 Explain to Partner | Partner Explainer | Translate technical decisions for non-technical stakeholders |
-| 💾 Save Session | Session Journal | Save context to `plan/session-journal.md` |
+| 💾 Save Session | Session Journal | Save context to `.planning/STATE.md` |
 | 🐛 Debug Issue | Debugger | Scientific debugging with persistent state |
 | 🗺️ Map Codebase | Codebase Mapper | Generate codebase analysis documents |
 | ✅ Verify Phase | Verifier | Verify a phase achieved its goals |
@@ -91,7 +91,7 @@ The Architect can also spawn sub-agents directly via `runSubagent` when it deter
 ### `/resume-work` — Start of Every Session
 
 **Use this first when you open VS Code.** It:
-1. Reads `plan/session-journal.md` for context
+1. Reads `.planning/STATE.md` for context
 2. Checks for interrupted work (debug sessions, uncommitted changes)
 3. Runs a health check (pytest, Docker)
 4. Presents a briefing with recommended next action
@@ -241,9 +241,8 @@ You don't need to install or start these — `npx` handles it automatically.
   codebase/         # Codebase analysis documents
   templates/        # Templates for DEBUG.md, UAT.md, etc.
 
-plan/
-  session-journal.md         # Cross-session memory (primary state)
-  kerala_delivery_route_system_design.md  # Authoritative design doc
+docs/                        # All documentation files
+  DEPLOY.md, SETUP.md, GUIDE.md, CSV_FORMAT.md, etc.
 ```
 
 ---

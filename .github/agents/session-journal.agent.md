@@ -1,6 +1,6 @@
 ---
 name: Session Journal
-description: "Save and restore working context between Copilot sessions. Appends compact structured entries to plan/session-journal.md so the main architect agent can resume where you left off."
+description: "Save and restore working context between Copilot sessions. Manages session context via .planning/STATE.md so the main architect agent can resume where you left off."
 tools:
   ['read', 'edit', 'search', 'todo']
 user-invokable: true
@@ -16,7 +16,7 @@ You manage the **cross-session memory** for the Kerala Delivery Route project.
 ### 1. SAVE — End of Session ("save session" / "journal what we did")
 
 Read the current conversation context and produce a compact journal entry.
-Append it to `plan/session-journal.md` following this exact format:
+Append it to `.planning/STATE.md` (Session Continuity section) following this exact format:
 
 ```markdown
 ## [YYYY-MM-DD] One-Line Session Title
@@ -43,7 +43,7 @@ Append it to `plan/session-journal.md` following this exact format:
 
 ### 2. LOAD — Start of Session ("what did we do last time" / "catch me up")
 
-Read `plan/session-journal.md` and produce a concise briefing:
+Read `.planning/STATE.md` and produce a concise briefing:
 
 1. **Current phase** and overall project status
 2. **Last session summary** (from the most recent entry)
@@ -64,7 +64,7 @@ Over time the journal grows. When it exceeds ~100 entries (or ~2000 lines):
 2. Create a **roll-up summary** covering Phases 0–N that are complete
 3. Replace the old entries for completed phases with the roll-up
 4. Keep the last 10 entries intact (they have the most relevant context)
-5. Save the full archive to `plan/session-journal-archive.md` before truncating
+5. Save the full archive to `.planning/session-journal-archive.md` before truncating
 
 This keeps the active journal small enough to fit in any LLM's context window
 while preserving the full history.
@@ -94,7 +94,7 @@ Combines LOAD with active state detection for a complete session start.
    - Active debug sessions: `ls .planning/debug/*.md 2>/dev/null | grep -v resolved`
    - Incomplete verifications: `ls .planning/phases/*-VERIFICATION.md 2>/dev/null`
    - Uncommitted changes: `git status --short 2>/dev/null | head -10`
-   - Recent file modifications: `find core/ apps/ tests/ -name "*.py" -newer plan/session-journal.md -not -path "*__pycache__*" 2>/dev/null`
+   - Recent file modifications: `find core/ apps/ tests/ -name "*.py" -newer .planning/STATE.md -not -path "*__pycache__*" 2>/dev/null`
 3. **Quick health check:**
    - `source .venv/bin/activate && pytest --tb=no -q 2>&1 | tail -5`
    - `docker compose ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null`

@@ -40,8 +40,8 @@ Spawn the **Verifier** agent as a subagent:
 Verify {scope} in the routing optimization project.
 
 Phase/Module: {what to verify}
-Design doc: plan/kerala_delivery_route_system_design.md
-Session history: plan/session-journal.md
+Project reference: .planning/PROJECT.md
+Project state: .planning/STATE.md
 
 Run the full verification process:
 1. Establish must-haves from the design doc

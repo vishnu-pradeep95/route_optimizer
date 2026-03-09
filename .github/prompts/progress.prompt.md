@@ -13,17 +13,11 @@ Check project progress, summarize recent work, and route to the next action.
 ### Step 1: Load Context
 
 ```bash
-# Current state from session journal
-tail -50 plan/session-journal.md
+# Current state
+cat .planning/STATE.md
 
-# Open items
-grep "OPEN:" plan/session-journal.md
-
-# Blockers
-grep "BLOCKED:" plan/session-journal.md
-
-# Recent decisions
-grep "DECIDED:" plan/session-journal.md | tail -10
+# Roadmap progress
+cat .planning/ROADMAP.md
 
 # Test status
 cd /home/vishnu/projects/routing_opt

@@ -14,7 +14,7 @@ Restore complete project context and resume work seamlessly from a previous sess
 
 ```bash
 # Read the full journal for context
-cat plan/session-journal.md
+cat .planning/STATE.md
 ```
 
 ### Step 2: Check for Interrupted Work
@@ -31,7 +31,7 @@ cd /home/vishnu/projects/routing_opt
 git status --short 2>/dev/null | head -20
 
 # Recent file modifications (last 24 hours)
-find core/ apps/ tests/ -name "*.py" -newer plan/session-journal.md -not -path "*__pycache__*" 2>/dev/null
+find core/ apps/ tests/ -name "*.py" -newer .planning/STATE.md -not -path "*__pycache__*" 2>/dev/null
 ```
 
 ### Step 3: Run Quick Health Check

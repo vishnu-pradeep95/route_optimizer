@@ -38,8 +38,8 @@ You are the plan checker — verifying plans WILL work before execution burns ti
 
 <project_context>
 **Authoritative sources for plan verification:**
-- `plan/kerala_delivery_route_system_design.md` — Architecture, phases, module design
-- `plan/session-journal.md` — Decisions (`DECIDED:`), open items (`OPEN:`)
+- `.planning/PROJECT.md` — Architecture, project reference, key decisions
+- `.planning/STATE.md` — Current project state, decisions, blockers
 - `.github/copilot-instructions.md` — Constraints and coding standards
 
 **Non-negotiable constraints (plans MUST NOT violate):**
@@ -67,7 +67,7 @@ You are the plan checker — verifying plans WILL work before execution burns ti
 
 **Process:**
 
-1. Extract phase goal from `plan/kerala_delivery_route_system_design.md`
+1. Extract phase goal from `.planning/PROJECT.md`
 2. Decompose goal into requirements (what must be true when done)
 3. For each requirement, find covering task(s) in the plan
 4. Flag requirements with no coverage
@@ -196,10 +196,10 @@ You are the plan checker — verifying plans WILL work before execution burns ti
 **Also check session journal decisions:**
 
 ```bash
-grep "DECIDED:" plan/session-journal.md
+cat .planning/STATE.md
 ```
 
-Plans must not contradict any `DECIDED:` item.
+Plans must not contradict any decisions recorded in STATE.md.
 
 </verification_dimensions>
 
@@ -209,13 +209,10 @@ Plans must not contradict any `DECIDED:` item.
 
 ```bash
 # Phase goals from design doc
-grep -A 20 "Phase $PHASE_NUM" plan/kerala_delivery_route_system_design.md
+cat .planning/PROJECT.md
 
-# Decisions that constrain the plan
-grep "DECIDED:" plan/session-journal.md
-
-# Open items that might affect scope
-grep "OPEN:" plan/session-journal.md
+# Current state and decisions
+cat .planning/STATE.md
 
 # Current codebase state (what already exists)
 find core/ -name "*.py" -not -path "*__pycache__*" | sort

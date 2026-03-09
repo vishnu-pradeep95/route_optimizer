@@ -17,22 +17,22 @@ agents:
 handoffs:
   - label: "📋 Create Phase Plan"
     agent: Plan
-    prompt: 'Read plan/kerala_delivery_route_system_design.md. Create a detailed step-by-step implementation plan for the current phase we just discussed. Include every file to create, every Docker command to run, every schema migration, and every validation check. Output as a numbered task list with estimated effort per task.'
+    prompt: 'Read .planning/PROJECT.md. Create a detailed step-by-step implementation plan for the current phase we just discussed. Include every file to create, every Docker command to run, every schema migration, and every validation check. Output as a numbered task list with estimated effort per task.'
     send: false
 
   - label: "🚀 Start Implementation"
     agent: Implementer
-    prompt: 'Implement the next concrete task from the plan we just discussed for the Kerala delivery route optimization system. Follow the constraints and coding standards in your instructions. Check plan/kerala_delivery_route_system_design.md for architecture guidance. Make the change, run any needed commands, confirm success, and list all files created or changed at the end.'
+    prompt: 'Implement the next concrete task from the plan we just discussed for the Kerala delivery route optimization system. Follow the constraints and coding standards in your instructions. Check .planning/PROJECT.md for architecture guidance. Make the change, run any needed commands, confirm success, and list all files created or changed at the end.'
     send: false
 
   - label: "🔍 Deep Research"
     agent: Deep Researcher
-    prompt: 'Research the following topic in depth for the Kerala delivery route system. Fetch official documentation, READMEs, and Docker setup guides. Return a structured summary: TL;DR, options table, recommended approach, setup steps, config snippets, gotchas, and sources. Cross-reference with plan/kerala_delivery_route_system_design.md.'
+    prompt: 'Research the following topic in depth for the Kerala delivery route system. Fetch official documentation, READMEs, and Docker setup guides. Return a structured summary: TL;DR, options table, recommended approach, setup steps, config snippets, gotchas, and sources. Cross-reference with .planning/PROJECT.md.'
     send: false
 
   - label: "🧪 Review & Validate"
     agent: Code Reviewer
-    prompt: 'Review the code changes just made for the Kerala delivery route system. Use your full review checklist: safety/regulatory (CRITICAL), design-doc alignment (WARNING), and code quality (INFO). Read the changed files and cross-reference with plan/kerala_delivery_route_system_design.md. Output in your standard format with counts per severity level.'
+    prompt: 'Review the code changes just made for the Kerala delivery route system. Use your full review checklist: safety/regulatory (CRITICAL), design-doc alignment (WARNING), and code quality (INFO). Read the changed files and cross-reference with .planning/PROJECT.md. Output in your standard format with counts per severity level.'
     send: false
 
   - label: "💬 Explain to Partner"
@@ -42,7 +42,7 @@ handoffs:
 
   - label: "💾 Save Session"
     agent: Session Journal
-    prompt: 'Read our conversation and append a compact journal entry to plan/session-journal.md. Follow the exact format defined in your instructions. Include all decisions made, files changed, and open questions.'
+    prompt: 'Read our conversation and append a compact journal entry to .planning/STATE.md. Follow the exact format defined in your instructions. Include all decisions made, files changed, and open questions.'
     send: true
 
   - label: "🐛 Debug Issue"
@@ -52,17 +52,17 @@ handoffs:
 
   - label: "🗺️ Map Codebase"
     agent: Codebase Mapper
-    prompt: 'Explore the codebase and write structured analysis documents to .planning/codebase/. Focus area will be specified. Cross-reference with plan/kerala_delivery_route_system_design.md for architecture context.'
+    prompt: 'Explore the codebase and write structured analysis documents to .planning/codebase/. Focus area will be specified. Cross-reference with .planning/PROJECT.md for architecture context.'
     send: false
 
   - label: "✅ Verify Phase"
     agent: Verifier
-    prompt: 'Verify the current phase achieved its goal using goal-backward analysis. Check plan/kerala_delivery_route_system_design.md for phase goals. Run three-level verification (exists, substantive, wired) on all artifacts. Run pytest. Check non-negotiable constraints. Write results to .planning/phases/'
+    prompt: 'Verify the current phase achieved its goal using goal-backward analysis. Check .planning/PROJECT.md for phase goals. Run three-level verification (exists, substantive, wired) on all artifacts. Run pytest. Check non-negotiable constraints. Write results to .planning/phases/'
     send: false
 
   - label: "📝 Check Plan"
     agent: Plan Checker
-    prompt: 'Verify the plan we just created will achieve the phase goal before execution. Check requirement coverage, task completeness, dependency correctness, wiring, scope, interface-first compliance, test coverage, and constraint compliance. Reference plan/kerala_delivery_route_system_design.md for phase goals.'
+    prompt: 'Verify the plan we just created will achieve the phase goal before execution. Check requirement coverage, task completeness, dependency correctness, wiring, scope, interface-first compliance, test coverage, and constraint compliance. Reference .planning/PROJECT.md for phase goals.'
     send: false
 ---
 
@@ -78,7 +78,7 @@ working internal app — while treating it as a **learning project** where every
 significant code block teaches the developer *why* it's written that way.
 
 The full research and design document is at:
-`plan/kerala_delivery_route_system_design.md`
+`.planning/PROJECT.md`
 Always read that file when answering architecture or implementation questions.
 Treat it as a **strong starting point with well-researched recommendations**, not a
 locked-in spec — the user is still making final decisions on technology choices and
@@ -88,7 +88,7 @@ implementation details.
 
 ## Session Memory
 
-**At the start of every session**, read `plan/session-journal.md` to restore context
+**At the start of every session**, read `.planning/STATE.md` to restore context
 from previous sessions. This file contains:
 - Decisions already made (grep for `DECIDED:`)
 - Open questions still unresolved (grep for `OPEN:`)
@@ -135,7 +135,7 @@ just run it.
 
 Run the `Code Reviewer` agent as a subagent with a prompt that includes:
 1. A summary of what changed (files, purpose)
-2. Instruction to cross-reference `plan/kerala_delivery_route_system_design.md`
+2. Instruction to cross-reference `.planning/PROJECT.md`
 3. Instruction to use the full review checklist (CRITICAL → WARNING → INFO)
 
 Example delegation prompt:
@@ -144,7 +144,7 @@ Example delegation prompt:
 > Use your full review checklist: safety/regulatory (CRITICAL), security (CRITICAL),
 > design-doc alignment (WARNING), modular architecture (WARNING), educational quality
 > (INFO), and test coverage (INFO). Cross-reference with
-> plan/kerala_delivery_route_system_design.md. Output in your standard format with
+> .planning/PROJECT.md. Output in your standard format with
 > counts per severity level.
 
 ### After the review returns
@@ -464,7 +464,7 @@ Building this system alone requires discipline about scope and sequencing.
 4. **Let AI write the first draft** — use Copilot for boilerplate (API endpoints, SQL schemas, Docker configs), then review and tune manually.
 5. **Test with real data early** — use 1 week of actual delivery data (pseudonymized) to validate the optimizer produces sensible routes.
 6. **Timebox research** — when evaluating tools, spend max 2 hours before choosing. If stuck, use the design doc's recommendation and move on.
-7. **New dev setup** — any new contributor follows `SETUP.md` to get a working environment in 15–20 minutes.
+7. **New dev setup** — any new contributor follows `docs/SETUP.md` to get a working environment in 15–20 minutes.
 
 ---
 
@@ -597,7 +597,7 @@ A comment that explains *why this approach was chosen over alternatives* is inva
 # roads, unpredictable traffic, and three-wheeler speed limitations mean actual
 # times are 20–40% longer. 1.3× is our conservative starting point — we'll
 # calibrate with real GPS data in Phase 1.
-# See: plan/kerala_delivery_route_system_design.md, Section 3
+# See: .planning/PROJECT.md, Section 3
 time_estimate = osrm_time * SAFETY_MULTIPLIER  # SAFETY_MULTIPLIER = 1.3
 ```
 
@@ -987,14 +987,14 @@ Keep main agent context focused by delegating:
 |---|---|
 | Need to read external API docs before writing config | `Deep Researcher` — fetches + structures docs into actionable summaries |
 | Need to analyse existing codebase structure | `Deep Researcher` — read-only scan and map of files |
-| Planning a new feature (any phase) | `Plan` — saves plan to `plan/` before coding |
+| Planning a new feature (any phase) | `Plan` — saves plan to `.planning/` before coding |
 | Implementing a planned task | `Implementer` — writes code, runs commands, confirms success |
 | Multiple independent research questions | `Deep Researcher` × N — run **in parallel** |
 | Code review / constraint validation | `Code Reviewer` — **MANDATORY after every implementation.** Checks safety, design-doc, quality. Invoke automatically — do not ask user. |
 | Need to explain something to non-technical partner | `Partner Explainer` — plain language + diagram + trade-off table |
 | Dead-end or failed approach | Any subagent's failure stays isolated — debrief and try different approach |
-| **End of working session** | `Session Journal` — append compact entry to `plan/session-journal.md` |
-| **Start of new session** | Read `plan/session-journal.md` yourself (don't delegate) |
+| **End of working session** | `Session Journal` — append compact entry to `.planning/STATE.md` |
+| **Start of new session** | Read `.planning/STATE.md` yourself (don't delegate) |
 
 ### Example: Phase 0 Kickoff
 When a user asks "help me set up Phase 0 from scratch":
@@ -1022,13 +1022,16 @@ After any implementation task completes:
 
 ```
 routing_opt/
-  SETUP.md                                   ← new dev environment setup guide
+  docs/                                      ← all documentation files
+    SETUP.md                                 ← new dev environment setup guide
+    DEPLOY.md                                ← employee deployment guide
+    GUIDE.md                                 ← comprehensive platform guide
   requirements.txt                           ← pinned Python packages
   .env.example                               ← template for env vars
-  plan/
-    kerala_delivery_route_system_design.md    ← authoritative design reference
-    session-journal.md                        ← cross-session memory (read at start, append at end)
-    images/
+  .planning/
+    PROJECT.md                               ← authoritative project reference
+    STATE.md                                 ← cross-session state (read at start, update at end)
+    ROADMAP.md                               ← phase roadmap and progress
   .github/
     copilot-instructions.md                   ← always-on context for all Copilot interactions
     agents/

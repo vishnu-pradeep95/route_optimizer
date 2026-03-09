@@ -50,8 +50,8 @@ Project context:
 - Stack: Python 3.12, FastAPI, VROOM, OSRM, PostgreSQL/PostGIS
 - Test command: pytest (from project root, venv at .venv/)
 - Services: Docker Compose (osrm, vroom, postgres containers)
-- Design doc: plan/kerala_delivery_route_system_design.md
-- Session history: plan/session-journal.md
+- Project reference: .planning/PROJECT.md
+- Project state: .planning/STATE.md
 
 Follow the scientific debugging method. Create/update debug file at .planning/debug/{issue-name}.md
 ```

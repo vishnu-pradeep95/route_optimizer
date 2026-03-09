@@ -53,10 +53,10 @@ The `v1.4` argument sets the version in the output filename. Use semantic versio
 | `.git/` | Version control history |
 | `.github/`, `.claude/`, `.vscode/` | CI configs, AI agent configs, editor settings |
 | `tests/` | Developer test suite |
-| `plan/`, `.planning/` | Design docs and session journals |
+| `.planning/` | Design docs and planning artifacts |
 | `.venv/`, `node_modules/`, `__pycache__/` | Environment-specific, rebuilt on install |
 | `scripts/generate_license.py` | License signing tool -- must never reach customers |
-| `GUIDE.md`, `CLAUDE.md`, `pytest.ini` | Developer-only documentation |
+| `docs/GUIDE.md`, `CLAUDE.md`, `pytest.ini` | Developer-only documentation |
 | `.env`, `.env.production`, `.env.production.example` | Secrets and internal templates |
 | `docker-compose.prod.yml` | Included separately or pre-configured for the customer |
 | `dist/`, `backups/`, `data/` | Build artifacts, backups, runtime data |
@@ -71,10 +71,11 @@ The `v1.4` argument sets the version in the output filename. Use semantic versio
 | `infra/` | Dockerfiles, migrations, Caddy config |
 | `scripts/` (minus `generate_license.py`) | Bootstrap, start, backup, machine ID scripts |
 | `docker-compose.yml` | Service stack definition |
-| `README.md`, `DEPLOY.md`, `CSV_FORMAT.md`, `SETUP.md` | User-facing documentation |
-| `DISTRIBUTION.md` | This document |
-| `LICENSING.md` | License activation and lifecycle guide |
-| `ATTRIBUTION.md` | Third-party license attributions |
+| `README.md` | Project overview and quick start |
+| `docs/DEPLOY.md`, `docs/CSV_FORMAT.md`, `docs/SETUP.md` | User-facing documentation |
+| `docs/DISTRIBUTION.md` | This document |
+| `docs/LICENSING.md` | License activation and lifecycle guide |
+| `docs/ATTRIBUTION.md` | Third-party license attributions |
 | `.env.example` | Environment variable template |
 | `license.key` (if present) | Pre-generated license key file |
 

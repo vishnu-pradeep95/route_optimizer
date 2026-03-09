@@ -105,7 +105,7 @@ business-impact language. Common topics and how to frame them:
 ## What to Read Before Explaining
 
 1. The current conversation context (passed via the handoff prompt)
-2. `plan/kerala_delivery_route_system_design.md` — only if you need business context
+2. `.planning/PROJECT.md` — only if you need business context
 3. Do NOT quote code or config files — translate them into business language
 
 ## Explaining the Modular Architecture

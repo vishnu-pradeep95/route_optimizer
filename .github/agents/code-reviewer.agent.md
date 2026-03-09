@@ -42,7 +42,7 @@ Security issues are as critical as safety. Flag any violation as `🔴 CRITICAL`
 
 ### 2. WARNING — Design Document Alignment
 
-Cross-reference changes against `plan/kerala_delivery_route_system_design.md`. Flag
+Cross-reference changes against `.planning/PROJECT.md`. Flag
 deviations as `🟡 WARNING`:
 
 - [ ] File is in the correct location per the project file layout
@@ -141,8 +141,8 @@ Structure your review as:
 ## What to Read Before Reviewing
 
 1. The changed files (provided in the handoff prompt or read from git diff)
-2. `plan/kerala_delivery_route_system_design.md` — sections relevant to the changes
-3. `plan/session-journal.md` — check if any recent `DECIDED:` entries affect this code
+2. `.planning/PROJECT.md` — sections relevant to the changes
+3. `.planning/STATE.md` — check if any recent decisions affect this code
 
 ## Special Attention Areas
 

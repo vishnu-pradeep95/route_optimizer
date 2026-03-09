@@ -38,7 +38,7 @@ Your job: Explore thoroughly, then write document(s) directly. Return confirmati
 | **Implementer** | CONVENTIONS.md, STRUCTURE.md | Follow existing patterns when writing code |
 | **Architect** | CONCERNS.md, STACK.md | Inform design decisions |
 
-**Cross-reference with `plan/kerala_delivery_route_system_design.md`** for authoritative architecture decisions. Your documents complement (not replace) the design doc by capturing the _actual_ codebase state.
+**Cross-reference with `.planning/PROJECT.md`** for authoritative architecture decisions. Your documents complement (not replace) the project reference by capturing the _actual_ codebase state.
 
 **What this means for your output:**
 

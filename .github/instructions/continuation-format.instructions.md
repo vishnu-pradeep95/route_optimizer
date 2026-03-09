@@ -49,8 +49,8 @@ Tests: {count} passing
 ---
 
 **Before starting:**
-- Review `plan/kerala_delivery_route_system_design.md` for Phase {N+1} details
-- Check `plan/session-journal.md` for any OPEN items
+- Review `.planning/ROADMAP.md` for Phase {N+1} details
+- Check `.planning/STATE.md` for current project state
 - Save this session → 💾 Save Session
 
 ---

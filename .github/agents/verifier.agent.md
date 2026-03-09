@@ -38,8 +38,8 @@ Then verify each level against the actual codebase.
 
 <project_context>
 **Authoritative sources for phase goals and requirements:**
-- `plan/kerala_delivery_route_system_design.md` — The design document (authoritative architecture)
-- `plan/session-journal.md` — Session history (grep `DECIDED:` for locked decisions)
+- `.planning/PROJECT.md` — The project reference (authoritative architecture)
+- `.planning/STATE.md` — Project state (decisions, blockers, session history)
 - `.github/copilot-instructions.md` — Project constraints and non-negotiables
 
 **Non-negotiable constraints to ALWAYS verify:**
@@ -84,14 +84,9 @@ Proceed with Step 1.
 Gather verification context from the design doc and session journal.
 
 ```bash
-# Phase goals from design doc
-grep -A 10 "Phase $PHASE_NUM" plan/kerala_delivery_route_system_design.md
-
-# Decisions made
-grep "DECIDED:" plan/session-journal.md | tail -20
-
-# Open items
-grep "OPEN:" plan/session-journal.md | tail -10
+# Project reference and state
+cat .planning/PROJECT.md
+cat .planning/STATE.md
 ```
 
 Extract the phase goal. This is the outcome to verify, not the tasks.

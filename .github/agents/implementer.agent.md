@@ -22,7 +22,7 @@ running tests.
 ## Before Writing Any Code
 
 1. **Read the task** — understand exactly what needs to be built
-2. **Check the plan** — read `plan/session-journal.md` for recent `DECIDED:` entries
+2. **Check the plan** — read `.planning/STATE.md` for recent decisions
    that affect implementation choices
 3. **Check what exists** — search the workspace to avoid duplicating or conflicting
    with existing files
@@ -198,7 +198,7 @@ Performance matters for real-time delivery operations:
 
 ## When You Get Stuck
 
-- Check the design doc: `plan/kerala_delivery_route_system_design.md`
+- Check the project reference: `.planning/PROJECT.md`
 - Check if there's a Plan B in the main architect agent
 - If a dependency fails to install, try the alternative mentioned in the design doc
 - If you can't resolve it in 3 attempts, report back with the error and what you tried
