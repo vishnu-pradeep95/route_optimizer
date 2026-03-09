@@ -517,6 +517,22 @@ This allows swapping OSRM → Valhalla, or VROOM → OR-Tools, without changing 
 
 ---
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [DEPLOY.md](DEPLOY.md) | Office employee setup and daily use guide |
+| [SETUP.md](SETUP.md) | Developer environment setup |
+| [LICENSING.md](LICENSING.md) | License generation, activation, and lifecycle |
+| [DISTRIBUTION.md](DISTRIBUTION.md) | Build, deliver, and verify customer distributions |
+| [ENV-COMPARISON.md](ENV-COMPARISON.md) | Development vs production environment differences |
+| [GOOGLE-MAPS.md](GOOGLE-MAPS.md) | Google Maps API key setup and troubleshooting |
+| [ATTRIBUTION.md](ATTRIBUTION.md) | Third-party licenses and required attribution |
+| [CSV_FORMAT.md](CSV_FORMAT.md) | Upload file format reference |
+| [GUIDE.md](GUIDE.md) | Comprehensive platform guide |
+
+---
+
 ## Key References
 
 | Resource | URL |

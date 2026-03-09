@@ -236,6 +236,7 @@ What it does:
 | `scripts/` (minus generate_license) | Setup, start, backup, machine ID |
 | `docker-compose.yml` | Service stack |
 | `README.md`, `DEPLOY.md`, `CSV_FORMAT.md`, `SETUP.md` | User documentation |
+| `ATTRIBUTION.md` | Third-party license obligations |
 | `.env.example` | Environment template |
 
 ### How to tell if you're running dev or production

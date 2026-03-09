@@ -64,6 +64,8 @@ header "Building distribution: $DIST_NAME-$VERSION"
 
 info "Copying project tree to staging directory..."
 
+# NOTE: ATTRIBUTION.md (third-party license obligations) is deliberately included
+# in the distribution. It is NOT in the exclude list and will be copied automatically.
 rsync -a \
   --exclude='.git/' \
   --exclude='.github/' \
