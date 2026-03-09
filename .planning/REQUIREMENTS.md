@@ -30,8 +30,8 @@ Requirements for Ship-Ready QA milestone. Each maps to roadmap phases.
 
 ### Documentation
 
-- [ ] **DOCS-01**: Distribution workflow documented: build tarball -> generate license -> deliver to customer -> verify install
-- [ ] **DOCS-02**: License lifecycle documented: generate -> deliver -> activate -> monitor grace -> renew -> troubleshoot 503
+- [x] **DOCS-01**: Distribution workflow documented: build tarball -> generate license -> deliver to customer -> verify install
+- [x] **DOCS-02**: License lifecycle documented: generate -> deliver -> activate -> monitor grace -> renew -> troubleshoot 503
 - [x] **DOCS-03**: Production vs development environment comparison documented
 - [x] **DOCS-04**: Google API key troubleshooting guide (Cloud Console setup, key validation, common errors)
 - [ ] **DOCS-05**: Third-party license/attribution audit documented (OSM, OSRM, VROOM, Leaflet, Google Maps terms)
@@ -72,8 +72,8 @@ Requirements for Ship-Ready QA milestone. Each maps to roadmap phases.
 | OPS-01 | Phase 23 | Complete |
 | OPS-02 | Phase 23 | Complete |
 | OPS-03 | Phase 23 | Complete |
-| DOCS-01 | Phase 24 | Pending |
-| DOCS-02 | Phase 24 | Pending |
+| DOCS-01 | Phase 24 | Complete |
+| DOCS-02 | Phase 24 | Complete |
 | DOCS-03 | Phase 24 | Complete |
 | DOCS-04 | Phase 24 | Complete |
 | DOCS-05 | Phase 24 | Pending |
