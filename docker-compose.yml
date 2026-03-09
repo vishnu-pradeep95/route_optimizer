@@ -145,7 +145,13 @@ services:
       - VROOM_ROUTER=osrm
     depends_on:
       osrm:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/3000'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     restart: unless-stopped
 
   # ─── Database Init: auto-run Alembic migrations ──────────────────────
@@ -188,6 +194,7 @@ services:
       dockerfile: infra/Dockerfile.dashboard
       args:
         VITE_BASE_PATH: "/dashboard/"
+        VITE_API_KEY: "${API_KEY:-}"
     container_name: lpg-dashboard-build
     volumes:
       - dashboard_assets:/srv/dashboard
@@ -219,9 +226,9 @@ services:
       dashboard-build:
         condition: service_completed_successfully
       osrm:
-        condition: service_started
+        condition: service_healthy
       vroom:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
 
   # ─── Dashboard dev: Vite hot-reload server (optional) ────────────────
