@@ -321,7 +321,8 @@ docker run --rm -v $(pwd)/data/osrm:/data \
 After preprocessing, `data/osrm/` will contain ~15 files. You can now start OSRM:
 ```bash
 docker compose up -d osrm
-curl http://localhost:5000/health  # Should return {"status":"ok"}
+# OSRM has no /health endpoint — verify by querying nearest road to depot coordinates
+curl -sf http://localhost:5000/nearest/v1/driving/76.2846,9.9716
 ```
 
 ---
@@ -404,3 +405,34 @@ Common new-laptop issues:
   ```
 - **Docker not starting:** On WSL2, Docker needs manual start: `sudo service docker start`
 - **Git clone auth:** Use SSH key or personal access token for private repos
+
+---
+
+## Troubleshooting
+
+### OSRM Not Ready
+
+On **first startup**, OSRM needs to download and preprocess Kerala map data (~150 MB download, ~10-15 minutes processing). During this time, route optimization will fail.
+
+**How to check OSRM init progress:**
+```bash
+# Watch the init container logs (will show download/preprocessing progress)
+docker compose logs osrm-init -f
+
+# Check if init is complete (should show "Exited (0)")
+docker compose ps osrm-init
+```
+
+**How to verify OSRM is ready to serve routes:**
+```bash
+# Check Docker healthcheck status
+docker inspect --format='{{.State.Health.Status}}' osrm-kerala
+
+# Test with a real routing query (depot coordinates in Kochi)
+curl -sf http://localhost:5000/nearest/v1/driving/76.2846,9.9716
+```
+
+**Common OSRM issues:**
+- **Container exits with code 137:** Out of memory. OSRM preprocessing needs ~4 GB RAM. Increase WSL memory (see above).
+- **"file not found" errors:** The `osrm-init` container hasn't finished. Wait for it to exit with code 0.
+- **OSRM starts but returns errors:** Map data may be corrupted. Delete `data/osrm/` and restart: `rm -rf data/osrm && docker compose up -d`

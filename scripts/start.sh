@@ -125,12 +125,28 @@ diagnose_failure() {
         all_running=false
     fi
 
-    # Check OSRM (no reliable healthcheck per research)
+    # Check OSRM
     local osrm_status
     osrm_status=$(docker inspect --format='{{.State.Status}}' osrm-kerala 2>/dev/null || echo "not found")
+    local osrm_health
+    osrm_health=$(docker inspect --format='{{.State.Health.Status}}' osrm-kerala 2>/dev/null || echo "unknown")
     if [ "$osrm_status" != "running" ]; then
         error "OSRM routing engine (osrm-kerala): status=$osrm_status"
-        echo "  Try: docker compose logs osrm --tail=20"
+        # Check if osrm-init is still running (first-time setup)
+        local init_status
+        init_status=$(docker inspect --format='{{.State.Status}}' osrm-init 2>/dev/null || echo "not found")
+        if [ "$init_status" = "running" ]; then
+            warn "OSRM init is still downloading/preprocessing Kerala map data."
+            echo "  This takes ~10-15 minutes on first startup."
+            echo "  Watch progress: docker compose logs osrm-init -f"
+        else
+            echo "  Try: docker compose logs osrm --tail=20"
+        fi
+        all_running=false
+    elif [ "$osrm_health" != "healthy" ]; then
+        warn "OSRM (osrm-kerala): running but not healthy yet (health=$osrm_health)"
+        echo "  OSRM may still be loading map data into memory."
+        echo "  Test manually: curl -sf http://localhost:5000/nearest/v1/driving/76.2846,9.9716"
         all_running=false
     fi
 

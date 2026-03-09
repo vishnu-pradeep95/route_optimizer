@@ -409,11 +409,11 @@ docker compose up -d --build api
 | Service | Container | Port | Health Check |
 |---------|-----------|------|-------------|
 | PostgreSQL + PostGIS | `lpg-db` | 5432 | `pg_isready -U routing -d routing_opt` |
-| OSRM | `osrm-kerala` | 5000 | `curl http://localhost:5000/health` |
-| VROOM | `vroom-solver` | 3000 | — |
+| OSRM | `osrm-kerala` | 5000 | `curl -sf http://localhost:5000/nearest/v1/driving/76.2846,9.9716` |
+| VROOM | `vroom-solver` | 3000 | `curl -sf http://localhost:3000/health` |
 | API | `lpg-api` | 8000 | `curl http://localhost:8000/health` |
 
-> **Note:** OSRM requires preprocessed Kerala map data in `data/osrm/`. This is downloaded automatically on first `docker compose up`. See [SETUP.md](SETUP.md) for manual download steps if running OSRM outside Docker.
+> **Note:** OSRM has no `/health` endpoint. You verify readiness by querying a real coordinate -- the command above queries the nearest road segment to the depot location in Kochi. OSRM requires preprocessed Kerala map data in `data/osrm/`. This is downloaded automatically on first `docker compose up`. See [SETUP.md](SETUP.md) for manual download steps if running OSRM outside Docker.
 
 ---
 
