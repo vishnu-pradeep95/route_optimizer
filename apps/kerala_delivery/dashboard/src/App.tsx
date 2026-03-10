@@ -24,6 +24,7 @@ import { LiveMap } from "./pages/LiveMap";
 import { RunHistory } from "./pages/RunHistory";
 import { FleetManagement } from "./pages/FleetManagement";
 import { fetchHealth } from "./lib/api";
+import type { HealthResponse } from "./types";
 import "./App.css";
 
 /**
@@ -54,9 +55,39 @@ const NAV_ITEMS: { page: Page; icon: React.ComponentType<{ size?: number }>; lab
   { page: "fleet", icon: Truck, label: "Fleet" },
 ];
 
+/** Derive a human-readable status summary from the HealthResponse. */
+function healthSummaryText(health: HealthResponse | null): string {
+  if (!health) return "Checking...";
+  if (!health.services) {
+    // Legacy response without per-service data
+    return health.status === "healthy" || health.status === "ok" ? "All systems operational" : "Offline";
+  }
+  if (health.status === "healthy") return "All systems operational";
+  // Find unhealthy/degraded services for the summary
+  const issues: string[] = [];
+  for (const [name, svc] of Object.entries(health.services)) {
+    if (svc.status !== "connected" && svc.status !== "available" && svc.status !== "configured" && svc.status !== "not_configured") {
+      issues.push(name);
+    }
+  }
+  if (health.status === "unhealthy") {
+    return issues.length > 0 ? `Unhealthy: ${issues.join(", ")}` : "Unhealthy";
+  }
+  return issues.length > 0 ? `Degraded: ${issues.join(", ")}` : "Degraded";
+}
+
+/** Get the dot color class for a service status. */
+function serviceDotClass(status: string): string {
+  if (["connected", "available", "configured"].includes(status)) return "healthy";
+  if (["not_configured"].includes(status)) return "checking";
+  if (["degraded", "timeout"].includes(status)) return "checking";
+  return "unhealthy";
+}
+
 function App() {
   const [activePage, setActivePage] = useState<Page>("upload");
   const [apiHealthy, setApiHealthy] = useState<boolean | null>(null);
+  const [healthData, setHealthData] = useState<HealthResponse | null>(null);
 
   /**
    * Check API health on mount and every 30 seconds.
@@ -68,9 +99,11 @@ function App() {
   const checkHealth = useCallback(async () => {
     try {
       const res = await fetchHealth();
+      setHealthData(res);
       setApiHealthy(res.status === "healthy" || res.status === "ok");
     } catch {
       setApiHealthy(false);
+      setHealthData(null);
     }
   }, []);
 
@@ -105,7 +138,8 @@ function App() {
 
   /** Shared health indicator -- used by both desktop sidebar and mobile drawer. */
   const renderHealth = () => (
-    <div className="sidebar-health">
+    <div className="sidebar-health" data-testid="health-status-bar">
+      {/* Overall status dot and text */}
       <span
         className={`health-dot ${
           apiHealthy === null
@@ -116,12 +150,19 @@ function App() {
         }`}
       />
       <span className="sidebar-health-label">
-        {apiHealthy === null
-          ? "Checking..."
-          : apiHealthy
-            ? "Connected"
-            : "Offline"}
+        {healthSummaryText(healthData)}
       </span>
+      {/* Per-service status indicators -- shown when expanded health data available */}
+      {healthData?.services && (
+        <div className="tw:flex tw:flex-col tw:gap-0.5 tw:mt-1 tw:text-xs tw:opacity-70">
+          {Object.entries(healthData.services).map(([name, svc]) => (
+            <div key={name} className="tw:flex tw:items-center tw:gap-1">
+              <span className={`health-dot ${serviceDotClass(svc.status)}`} style={{ width: 6, height: 6 }} />
+              <span className="sidebar-health-label">{name}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 

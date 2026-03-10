@@ -19,12 +19,17 @@ import {
   fetchRouteDetail,
   fetchGoogleMapsRoute,
   getQrSheetUrl,
+  ApiUploadError,
   type UploadResponse,
   type GoogleMapsRouteResponse,
 } from "../lib/api";
 import type { RouteSummary, RouteDetail, ImportFailure, DuplicateLocationWarning } from "../types";
+import type { ApiError } from "../lib/errors";
+import { isApiError } from "../lib/errors";
 import { StatusBadge, deriveRouteStatus } from "../components/StatusBadge";
-import { FileText, AlertTriangle, Printer, CheckCircle } from "lucide-react";
+import { ErrorBanner } from "../components/ErrorBanner";
+import { ErrorTable } from "../components/ErrorTable";
+import { FileText, Printer, CheckCircle } from "lucide-react";
 import "./UploadRoutes.css";
 
 // --- Import Summary Component ---
@@ -39,7 +44,7 @@ import "./UploadRoutes.css";
  *
  * Uses DaisyUI 5 components with tw: prefix alongside existing CSS patterns.
  */
-function ImportSummary({ uploadResult }: { uploadResult: UploadResponse }) {
+function ImportSummary({ uploadResult, onReupload }: { uploadResult: UploadResponse; onReupload?: () => void }) {
   const [failuresOpen, setFailuresOpen] = useState(false);
   const [warningsOpen, setWarningsOpen] = useState(false);
 
@@ -102,7 +107,7 @@ function ImportSummary({ uploadResult }: { uploadResult: UploadResponse }) {
         </div>
       )}
 
-      {/* Expandable failure detail table */}
+      {/* Failure detail table with download/re-upload actions */}
       {failures.length > 0 && (
         <div className="tw:collapse tw:collapse-arrow tw:bg-base-200 tw:mt-4">
           <input
@@ -114,28 +119,10 @@ function ImportSummary({ uploadResult }: { uploadResult: UploadResponse }) {
             {failures.length} failed row{failures.length !== 1 ? "s" : ""} -- click to expand
           </div>
           <div className="tw:collapse-content">
-            <div className="tw:overflow-x-auto">
-              <table className="tw:table tw:table-sm">
-                <thead>
-                  <tr>
-                    <th>Row</th>
-                    <th>Address</th>
-                    <th>Reason</th>
-                    <th>Stage</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {failures.map((f, idx) => (
-                    <tr key={`fail-${f.row_number}-${idx}`}>
-                      <td>{f.row_number}</td>
-                      <td>{f.address_snippet || "--"}</td>
-                      <td>{f.reason}</td>
-                      <td>{f.stage}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ErrorTable
+              failures={failures}
+              onReupload={onReupload}
+            />
           </div>
         </div>
       )}
@@ -292,7 +279,7 @@ export function UploadRoutes() {
   const [workflowState, setWorkflowState] = useState<WorkflowState>("idle");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [apiError, setApiError] = useState<ApiError | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -334,25 +321,39 @@ export function UploadRoutes() {
     }
   }, []);
 
+  /**
+   * Helper to create a synthetic ApiError for client-side validation errors.
+   * These never hit the backend, so we generate a local error shape.
+   */
+  const makeSyntheticError = (code: string, message: string): ApiError => ({
+    success: false,
+    error_code: code,
+    user_message: message,
+    technical_message: "",
+    request_id: "",
+    timestamp: new Date().toISOString(),
+    help_url: "",
+  });
+
   const validateAndSelectFile = (file: File) => {
     const validExtensions = [".csv", ".xlsx", ".xls"];
     const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
 
     if (!validExtensions.includes(ext)) {
-      setErrorMessage("Please upload a .csv, .xlsx, or .xls file");
+      setApiError(makeSyntheticError("UPLOAD_INVALID_FORMAT", "Please upload a .csv, .xlsx, or .xls file"));
       setWorkflowState("error");
       return;
     }
 
     // 10 MB max (matches backend limit)
     if (file.size > 10 * 1024 * 1024) {
-      setErrorMessage("File too large. Maximum size is 10 MB.");
+      setApiError(makeSyntheticError("UPLOAD_FILE_TOO_LARGE", "File too large. Maximum size is 10 MB."));
       setWorkflowState("error");
       return;
     }
 
     setSelectedFile(file);
-    setErrorMessage("");
+    setApiError(null);
     setWorkflowState("selected");
   };
 
@@ -408,9 +409,16 @@ export function UploadRoutes() {
       setWorkflowState("success");
       setUploadProgress("");
     } catch (err) {
-      setErrorMessage(
-        err instanceof Error ? err.message : "Upload failed. Please try again."
-      );
+      if (err instanceof ApiUploadError) {
+        setApiError(err.apiError);
+      } else if (isApiError(err)) {
+        setApiError(err as ApiError);
+      } else {
+        setApiError(makeSyntheticError(
+          "INTERNAL_ERROR",
+          err instanceof Error ? err.message : "Upload failed. Please try again."
+        ));
+      }
       setWorkflowState("error");
       setUploadProgress("");
     }
@@ -467,7 +475,7 @@ export function UploadRoutes() {
     setRoutes([]);
     setRouteDetails(new Map());
     setQrData(new Map());
-    setErrorMessage("");
+    setApiError(null);
     setExpandedVehicle(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -558,15 +566,16 @@ export function UploadRoutes() {
             </button>
           )}
 
-          {/* Error Display */}
-          {workflowState === "error" && (
-            <div className="error-banner">
-              <span className="error-icon"><AlertTriangle size={18} /></span>
-              <span className="error-text">{errorMessage}</span>
-              <button className="error-retry" onClick={handleReset}>
-                Try Again
-              </button>
-            </div>
+          {/* Error Display -- structured error banner with details toggle */}
+          {workflowState === "error" && apiError && (
+            <ErrorBanner
+              error={apiError}
+              onRetry={handleReset}
+              onDismiss={() => {
+                setApiError(null);
+                setWorkflowState("idle");
+              }}
+            />
           )}
         </div>
       )}
@@ -575,7 +584,12 @@ export function UploadRoutes() {
       {workflowState === "success" && (
         <div className="results-section">
           {/* Import Summary — only shown after a fresh upload with diagnostics */}
-          {uploadResult && <ImportSummary uploadResult={uploadResult} />}
+          {uploadResult && (
+            <ImportSummary
+              uploadResult={uploadResult}
+              onReupload={() => fileInputRef.current?.click()}
+            />
+          )}
 
           {/* Geocoding cost summary — shows cache hits vs API calls (GEO-04) */}
           {uploadResult && <CostSummary uploadResult={uploadResult} />}

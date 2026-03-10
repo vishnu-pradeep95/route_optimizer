@@ -24,13 +24,16 @@ import { fetchRuns, fetchRunRoutes } from "../lib/api";
 import type { OptimizationRun, RouteSummary } from "../types";
 import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
+import { ErrorBanner } from "../components/ErrorBanner";
+import { isApiError } from "../lib/errors";
+import type { ApiError } from "../lib/errors";
 import { ClipboardList } from "lucide-react";
 import "./RunHistory.css";
 
 export function RunHistory() {
   const [runs, setRuns] = useState<OptimizationRun[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<ApiError | null>(null);
 
   /** Currently expanded run -- shows its routes below the row. */
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
@@ -44,11 +47,21 @@ export function RunHistory() {
       setLoading(true);
       const data = await fetchRuns(20);
       setRuns(data.runs);
-      setError(null);
+      setApiError(null);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load run history"
-      );
+      if (isApiError(err)) {
+        setApiError(err as ApiError);
+      } else {
+        setApiError({
+          success: false,
+          error_code: "INTERNAL_ERROR",
+          user_message: err instanceof Error ? err.message : "Failed to load run history",
+          technical_message: "",
+          request_id: "",
+          timestamp: new Date().toISOString(),
+          help_url: "",
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -160,7 +173,7 @@ export function RunHistory() {
 
   // --- Render: Empty state ---
 
-  if (!loading && runs.length === 0 && !error) {
+  if (!loading && runs.length === 0 && !apiError) {
     return (
       <div className="run-history-page">
         <div className="run-history-header">
@@ -186,11 +199,12 @@ export function RunHistory() {
         </button>
       </div>
 
-      {error && (
-        <div className="run-history-error">
-          <span>{error}</span>
-          <button onClick={loadRuns}>Retry</button>
-        </div>
+      {apiError && (
+        <ErrorBanner
+          error={apiError}
+          onRetry={loadRuns}
+          onDismiss={() => setApiError(null)}
+        />
       )}
 
       <div className="run-history-table-wrapper">

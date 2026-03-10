@@ -19,12 +19,15 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { MapRef } from "react-map-gl/maplibre";
-import { MapPin, AlertTriangle } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { StatsBar } from "../components/StatsBar";
 import { VehicleList } from "../components/VehicleList";
 import { RouteMap } from "../components/RouteMap";
 import { EmptyState } from "../components/EmptyState";
+import { ErrorBanner } from "../components/ErrorBanner";
 import { fetchRoutesWithStops, fetchFleetTelemetry } from "../lib/api";
+import { isApiError } from "../lib/errors";
+import type { ApiError } from "../lib/errors";
 import type {
   RouteSummary,
   RouteDetail,
@@ -42,7 +45,7 @@ export function LiveMap() {
   const [latestPings, setLatestPings] = useState<Map<string, TelemetryPing>>(new Map());
   const [unassignedOrders, setUnassignedOrders] = useState(0);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
 
   /** Map ref for programmatic zoom/pan when a vehicle is selected. */
@@ -88,11 +91,21 @@ export function LiveMap() {
         newDetailsMap.set(route.vehicle_id, route);
       }
       setRouteDetailsMap(newDetailsMap);
-      setError(null);
+      setApiError(null);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load route data"
-      );
+      if (isApiError(err)) {
+        setApiError(err as ApiError);
+      } else {
+        setApiError({
+          success: false,
+          error_code: "INTERNAL_ERROR",
+          user_message: err instanceof Error ? err.message : "Failed to load route data",
+          technical_message: "",
+          request_id: "",
+          timestamp: new Date().toISOString(),
+          help_url: "",
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -239,13 +252,14 @@ export function LiveMap() {
 
   return (
     <div className="live-map-page">
-      {/* Error banner — non-blocking, shown above content */}
-      {error && (
-        <div className="live-map-error">
-          <AlertTriangle size={16} className="tw:inline tw:mr-1" />
-          <span>{error}</span>
-          <button onClick={loadRouteData}>Retry</button>
-        </div>
+      {/* Error banner — non-blocking, shown above content, auto-recovers */}
+      {apiError && (
+        <ErrorBanner
+          error={apiError}
+          onRetry={loadRouteData}
+          onDismiss={() => setApiError(null)}
+          autoRecover
+        />
       )}
 
       {/* Stats bar across the top */}

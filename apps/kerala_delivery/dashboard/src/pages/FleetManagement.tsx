@@ -29,6 +29,9 @@ import {
   deleteVehicle,
 } from "../lib/api";
 import { EmptyState } from "../components/EmptyState";
+import { ErrorBanner } from "../components/ErrorBanner";
+import { isApiError } from "../lib/errors";
+import type { ApiError } from "../lib/errors";
 import type { Vehicle } from "../types";
 import "./FleetManagement.css";
 
@@ -130,7 +133,7 @@ export function FleetManagement() {
 
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<ApiError | null>(null);
   /** Transient success message shown after create/update/delete. */
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -161,14 +164,28 @@ export function FleetManagement() {
    * every render, causing an infinite fetch loop.
    * See: https://react.dev/reference/react/useCallback
    */
+  /** Convert an unknown error into a typed ApiError for the ErrorBanner. */
+  const toApiError = (err: unknown, fallback: string): ApiError => {
+    if (isApiError(err)) return err as ApiError;
+    return {
+      success: false,
+      error_code: "INTERNAL_ERROR",
+      user_message: err instanceof Error ? err.message : fallback,
+      technical_message: "",
+      request_id: "",
+      timestamp: new Date().toISOString(),
+      help_url: "",
+    };
+  };
+
   const loadVehicles = useCallback(async () => {
     try {
       setLoading(true);
-      setError(null);
+      setApiError(null);
       const data = await fetchVehicles(activeOnly);
       setVehicles(data.vehicles);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load vehicles");
+      setApiError(toApiError(err, "Failed to load vehicles"));
     } finally {
       setLoading(false);
     }
@@ -197,14 +214,14 @@ export function FleetManagement() {
   const handleCreate = useCallback(async () => {
     // Validate required fields before sending to API
     if (!addForm.vehicle_id.trim()) {
-      setError("Vehicle ID is required.");
+      setApiError(toApiError(null, "Vehicle ID is required."));
       return;
     }
 
     const lat = parseFloat(addForm.depot_latitude);
     const lng = parseFloat(addForm.depot_longitude);
     if (isNaN(lat) || isNaN(lng)) {
-      setError("Depot latitude and longitude must be valid numbers.");
+      setApiError(toApiError(null, "Depot latitude and longitude must be valid numbers."));
       return;
     }
 
@@ -215,7 +232,7 @@ export function FleetManagement() {
     // the safety system. Non-negotiable.
     const speedLimit = parseFloat(addForm.speed_limit_kmh);
     if (!isNaN(speedLimit) && speedLimit > MAX_SPEED_LIMIT_KMH) {
-      setError(`Speed limit cannot exceed ${MAX_SPEED_LIMIT_KMH} km/h (Kerala MVD safety rule).`);
+      setApiError(toApiError(null, `Speed limit cannot exceed ${MAX_SPEED_LIMIT_KMH} km/h (Kerala MVD safety rule).`));
       return;
     }
 
@@ -224,12 +241,12 @@ export function FleetManagement() {
     // Kerala roads.
     const weight = parseFloat(addForm.max_weight_kg);
     if (!isNaN(weight) && (weight <= 0 || weight > MAX_RATED_PAYLOAD_KG)) {
-      setError(`Max weight must be between 1 and ${MAX_RATED_PAYLOAD_KG} kg (Piaggio rated payload).`);
+      setApiError(toApiError(null, `Max weight must be between 1 and ${MAX_RATED_PAYLOAD_KG} kg (Piaggio rated payload).`));
       return;
     }
 
     setSaving(true);
-    setError(null);
+    setApiError(null);
 
     try {
       const safeWeight = isNaN(weight) ? DEFAULT_MAX_WEIGHT_KG : weight;
@@ -252,7 +269,7 @@ export function FleetManagement() {
       // Re-fetch to show the new vehicle in the table
       await loadVehicles();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create vehicle");
+      setApiError(toApiError(err, "Failed to create vehicle"));
     } finally {
       setSaving(false);
     }
@@ -263,19 +280,19 @@ export function FleetManagement() {
     if (!editingId) return;
 
     setSaving(true);
-    setError(null);
+    setApiError(null);
 
     try {
       // --- CRITICAL safety validations (same rules as handleCreate) ---
       const editSpeed = parseFloat(editForm.speed_limit_kmh);
       if (!isNaN(editSpeed) && editSpeed > MAX_SPEED_LIMIT_KMH) {
-        setError(`Speed limit cannot exceed ${MAX_SPEED_LIMIT_KMH} km/h (Kerala MVD safety rule).`);
+        setApiError(toApiError(null, `Speed limit cannot exceed ${MAX_SPEED_LIMIT_KMH} km/h (Kerala MVD safety rule).`));
         setSaving(false);
         return;
       }
       const editWeight = parseFloat(editForm.max_weight_kg);
       if (!isNaN(editWeight) && (editWeight <= 0 || editWeight > MAX_RATED_PAYLOAD_KG)) {
-        setError(`Max weight must be between 1 and ${MAX_RATED_PAYLOAD_KG} kg (Piaggio rated payload).`);
+        setApiError(toApiError(null, `Max weight must be between 1 and ${MAX_RATED_PAYLOAD_KG} kg (Piaggio rated payload).`));
         setSaving(false);
         return;
       }
@@ -295,7 +312,7 @@ export function FleetManagement() {
       setEditingId(null);
       await loadVehicles();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update vehicle");
+      setApiError(toApiError(err, "Failed to update vehicle"));
     } finally {
       setSaving(false);
     }
@@ -312,14 +329,14 @@ export function FleetManagement() {
   const handleDeactivate = useCallback(
     async (vehicleId: string) => {
       setSaving(true);
-      setError(null);
+      setApiError(null);
 
       try {
         const result = await deleteVehicle(vehicleId);
         setSuccessMsg(result.message);
         await loadVehicles();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to deactivate vehicle");
+        setApiError(toApiError(err, "Failed to deactivate vehicle"));
       } finally {
         setSaving(false);
       }
@@ -338,14 +355,14 @@ export function FleetManagement() {
   const handleReactivate = useCallback(
     async (vehicleId: string) => {
       setSaving(true);
-      setError(null);
+      setApiError(null);
 
       try {
         const result = await updateVehicle(vehicleId, { is_active: true });
         setSuccessMsg(result.message);
         await loadVehicles();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to reactivate vehicle");
+        setApiError(toApiError(err, "Failed to reactivate vehicle"));
       } finally {
         setSaving(false);
       }
@@ -451,11 +468,14 @@ export function FleetManagement() {
         </div>
       </div>
 
-      {/* Error banner */}
-      {error && (
-        <div className="tw:alert tw:alert-error tw:mb-0 tw:rounded-none">
-          <span>{error}</span>
-          <button className="tw:btn tw:btn-xs tw:btn-ghost" onClick={() => setError(null)}>Dismiss</button>
+      {/* Error banner -- structured error display */}
+      {apiError && (
+        <div className="tw:mb-0 tw:rounded-none">
+          <ErrorBanner
+            error={apiError}
+            onRetry={loadVehicles}
+            onDismiss={() => setApiError(null)}
+          />
         </div>
       )}
 
@@ -583,7 +603,7 @@ export function FleetManagement() {
       )}
 
       {/* --- Empty state --- */}
-      {!loading && vehicles.length === 0 && !error && (
+      {!loading && vehicles.length === 0 && !apiError && (
         <EmptyState
           icon={Truck}
           title="No vehicles yet"
