@@ -11,7 +11,7 @@ Requirements for v2.1 Licensing & Distribution Security. Each maps to roadmap ph
 
 - [x] **ENF-01**: Dev-mode code stripped from distributed builds (no ENVIRONMENT=development bypass exists in tarball)
 - [x] **ENF-02**: Licensing module compiled to native .so via Cython (replaces decompilable .pyc)
-- [ ] **ENF-03**: Enforcement logic lives in compiled module with single `enforce(app)` entry point (main.py has no inline enforcement)
+- [x] **ENF-03**: Enforcement logic lives in compiled module with single `enforce(app)` entry point (main.py has no inline enforcement)
 - [x] **ENF-04**: HMAC derivation seed rotated (old .pyc seed is compromised)
 
 ### Fingerprinting
@@ -22,7 +22,7 @@ Requirements for v2.1 Licensing & Distribution Security. Each maps to roadmap ph
 
 ### Runtime Protection
 
-- [ ] **RTP-01**: SHA256 integrity manifest of protected files embedded in compiled .so
+- [x] **RTP-01**: SHA256 integrity manifest of protected files embedded in compiled .so
 - [ ] **RTP-02**: Integrity checked at startup and during periodic re-validation
 - [ ] **RTP-03**: License + integrity re-validated every 500 requests (fully offline, no internet required)
 
@@ -74,12 +74,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | ENF-01 | Phase 6 | Complete |
 | ENF-02 | Phase 6 | Complete |
-| ENF-03 | Phase 7 | Pending |
+| ENF-03 | Phase 7 | Complete |
 | ENF-04 | Phase 6 | Complete |
 | FPR-01 | Phase 5 | Complete |
 | FPR-02 | Phase 5 | Complete |
 | FPR-03 | Phase 5 | Complete |
-| RTP-01 | Phase 7 | Pending |
+| RTP-01 | Phase 7 | Complete |
 | RTP-02 | Phase 8 | Pending |
 | RTP-03 | Phase 8 | Pending |
 | LIC-01 | Phase 9 | Pending |
