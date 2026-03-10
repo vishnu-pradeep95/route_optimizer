@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
-status: Executing
-stopped_at: Completed 05-01-PLAN.md (fingerprint formula replacement)
-last_updated: "2026-03-10T20:13:22.000Z"
-last_activity: 2026-03-10 — Completed Phase 5 Plan 1 (fingerprint formula)
+status: executing
+stopped_at: Completed 05-02-PLAN.md (Phase 5 complete)
+last_updated: "2026-03-10T20:19:15.890Z"
+last_activity: 2026-03-10 -- Completed 05-02 docker compose bind mount (Phase 5 done)
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 2
-  completed_plans: 1
+  total_plans: 0
+  completed_plans: 0
+  percent: 17
 ---
 
 # Project State
@@ -20,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** v2.1 Licensing & Distribution Security -- Phase 5 (Fingerprinting Overhaul)
+**Current focus:** v2.1 Licensing & Distribution Security -- Phase 5 complete, ready for Phase 6
 
 ## Current Position
 
-Phase: 5 (first of 6 in v2.1) -- Fingerprinting Overhaul
-Plan: 1 of 2 complete -- next: 05-02 (docker compose bind mount)
+Phase: 5 complete (first of 6 in v2.1) -- Fingerprinting Overhaul DONE
+Plan: 2 of 2 complete -- Phase 5 finished, next: Phase 6 (Enforcement Hardening)
 Status: Executing
-Last activity: 2026-03-10 -- Completed 05-01 fingerprint formula replacement
+Last activity: 2026-03-10 -- Completed 05-02 docker compose bind mount (Phase 5 done)
 
-Progress: [#####░░░░░] 8% (1/12 plans across 6 phases)
+Progress: [##░░░░░░░░] 17% (2/12 plans across 6 phases)
 
 ## Performance Metrics
 
@@ -54,6 +55,7 @@ Progress: [#####░░░░░] 8% (1/12 plans across 6 phases)
 
 - Phase 5-01: Dropped MAC from fingerprint (WSL2 generates random MAC on reboot, microsoft/WSL#5352)
 - Phase 5-01: Used exact match (not similarity scoring) for fingerprint validation
+- Phase 5-02: Read-only bind mount (:ro) for /etc/machine-id to prevent container writes to host identity
 
 See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase details per milestone.
 
@@ -84,9 +86,10 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
 | 05-01 | Fingerprint formula | 5min | 3 | 3 |
+| 05-02 | Docker compose bind mount | 2min | 2 | 2 |
 
 ## Session Continuity
 
-Last session: 2026-03-10
-Stopped at: Completed 05-01-PLAN.md (fingerprint formula replacement)
+Last session: 2026-03-10T20:19:15.889Z
+Stopped at: Completed 05-02-PLAN.md (Phase 5 complete)
 Resume file: None
