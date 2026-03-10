@@ -80,7 +80,7 @@
 
 </details>
 
-### 🚧 v2.1 Licensing & Distribution Security (In Progress)
+### v2.1 Licensing & Distribution Security (In Progress)
 
 **Milestone Goal:** Close all identified loopholes in the licensing and distribution system that allow customers to circumvent license enforcement.
 
@@ -118,12 +118,12 @@ Plans:
   3. Running `python -c "from core.licensing.license_manager import get_machine_fingerprint"` inside a Docker container built from the tarball succeeds (no ImportError)
   4. The HMAC derivation seed in the compiled `.so` differs from the seed in any previously shipped `.pyc` file
   5. `build-dist.sh` completes without errors and produces a tarball with the correct pipeline ordering (strip -> hash -> compile -> validate -> package)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
-- [ ] 06-03: TBD
+- [ ] 06-01-PLAN.md — Refactor main.py ENVIRONMENT checks to production-default (no dev bypass when ENVIRONMENT unset)
+- [ ] 06-02-PLAN.md — Rotate HMAC seed/salt/iterations and clean __init__.py docstring
+- [ ] 06-03-PLAN.md — Cython build pipeline: Dockerfile.build + cython_build.py + upgraded build-dist.sh
 
 ### Phase 7: Enforcement Module
 **Goal**: All enforcement logic lives in a compiled module with a single entry point; main.py contains no inline enforcement code
@@ -219,7 +219,7 @@ Phases execute in numeric order: 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 3. Error Handling Polish | v2.0 | 1/1 | Complete | 2026-03-10 |
 | 4. Documentation Accuracy Refresh | v2.0 | 2/2 | Complete | 2026-03-10 |
 | 5. Fingerprinting Overhaul | v2.1 | 0/2 | Not started | - |
-| 6. Build Pipeline -- Dev-Mode Stripping and Cython | v2.1 | 0/? | Not started | - |
+| 6. Build Pipeline -- Dev-Mode Stripping and Cython | v2.1 | 0/3 | Not started | - |
 | 7. Enforcement Module | v2.1 | 0/? | Not started | - |
 | 8. Runtime Protection | v2.1 | 0/? | Not started | - |
 | 9. License Management | v2.1 | 0/? | Not started | - |
