@@ -17,6 +17,13 @@ Uses FastAPI's TestClient — no real OSRM/VROOM/Google/PostgreSQL calls needed.
 """
 
 import os
+
+# IMPORTANT: Set ENVIRONMENT=development BEFORE importing main.py.
+# Module-level code in main.py reads ENVIRONMENT to configure docs, CORS, HSTS.
+# Production is the default (ENVIRONMENT unset = production behavior).
+# Tests need dev mode (Swagger UI enabled, permissive CORS, no HSTS).
+os.environ.setdefault("ENVIRONMENT", "development")
+
 import uuid
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock, AsyncMock

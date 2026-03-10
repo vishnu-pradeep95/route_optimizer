@@ -146,14 +146,13 @@ async def lifespan(app: FastAPI):
     """
     # SECURITY: warn if API_KEY is unset outside dev mode.
     # Missing API_KEY in production means all POST endpoints are unprotected.
-    env = os.environ.get("ENVIRONMENT", "development")
+    _lifespan_is_dev = os.environ.get("ENVIRONMENT") == "development"
     api_key = os.environ.get("API_KEY", "")
-    if not api_key and env != "development":
+    if not api_key and not _lifespan_is_dev:
         logger.warning(
-            "⚠️  API_KEY is not set and ENVIRONMENT=%s. "
+            "API_KEY is not set in non-development mode. "
             "All protected endpoints (POST + sensitive GET) are UNPROTECTED. "
-            "Set API_KEY in production.",
-            env,
+            "Set API_KEY for production deployments.",
         )
     elif api_key:
         logger.info("API key authentication enabled for POST and sensitive GET endpoints")
@@ -181,13 +180,8 @@ async def lifespan(app: FastAPI):
             GRACE_PERIOD_DAYS - abs(license_info.days_remaining),
         )
     else:
-        # INVALID — but only enforce in production. In dev, just warn.
-        if env == "production":
-            logger.error(
-                "❌ LICENSE INVALID: %s. All endpoints will return 503.",
-                license_info.message,
-            )
-        else:
+        # INVALID — only bypass enforcement in explicit dev mode.
+        if _lifespan_is_dev:
             logger.info(
                 "License not configured (dev mode) — running without license enforcement"
             )
@@ -201,6 +195,11 @@ async def lifespan(app: FastAPI):
                 message="Development mode — no license required",
             )
             app.state.license_info = license_info
+        else:
+            logger.error(
+                "LICENSE INVALID: %s. All endpoints will return 503.",
+                license_info.message,
+            )
 
     # ── Startup health gates (NON-NEGOTIABLE) ────────────────────────
     # Block until PostgreSQL, OSRM, VROOM are healthy (60s timeout).
@@ -230,16 +229,15 @@ async def lifespan(app: FastAPI):
     logger.info("Shutdown — DB engine pool disposed")
 
 
-# SECURITY: Disable Swagger UI and OpenAPI schema in production.
+# SECURITY: Disable Swagger UI and OpenAPI schema in production (default).
 # FastAPI's /docs endpoint exposes every endpoint, parameter schema, and error
 # format to unauthenticated users — giving attackers a complete API map.
-# In development, /docs is invaluable for testing. In production, disable it.
-# Access API docs in production by SSHing to the server and running:
-#   curl http://localhost:8000/docs  (internal-only, not exposed through Caddy)
-_env_name = os.environ.get("ENVIRONMENT", "development")
-_docs_url = "/docs" if _env_name != "production" else None
-_redoc_url = "/redoc" if _env_name != "production" else None
-_openapi_url = "/openapi.json" if _env_name != "production" else None
+# Dev conveniences only activate with explicit ENVIRONMENT=development.
+# Production is the DEFAULT — omitting ENVIRONMENT disables docs.
+_is_dev_mode = os.environ.get("ENVIRONMENT") == "development"
+_docs_url = "/docs" if _is_dev_mode else None
+_redoc_url = "/redoc" if _is_dev_mode else None
+_openapi_url = "/openapi.json" if _is_dev_mode else None
 
 app = FastAPI(
     title="Kerala LPG Delivery Route Optimizer",
@@ -325,7 +323,7 @@ _secweb_options = {
 # HSTS: only in non-development environments to prevent localhost HTTPS lock-in.
 # Caddy already handles HSTS at the proxy level in production, but defense-in-depth
 # at the app layer ensures coverage even if the proxy is misconfigured.
-if _env_name != "development":
+if not _is_dev_mode:
     _secweb_options["hsts"] = {
         "max-age": 31536000,
         "includeSubDomains": True,
@@ -340,7 +338,7 @@ app.add_middleware(PermissionsPolicyMiddleware)
 # make authenticated requests to this API. Use a whitelist from environment.
 # See: https://owasp.org/www-community/attacks/csrf
 _cors_origins_raw = os.environ.get("CORS_ALLOWED_ORIGINS", "")
-if _env_name == "development" and not _cors_origins_raw:
+if _is_dev_mode and not _cors_origins_raw:
     # Dev default: allow common local origins
     _allowed_origins = [
         "http://localhost:8000",
