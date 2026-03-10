@@ -102,11 +102,11 @@
   2. Running `get_machine_id.py` inside the Docker API container produces the same fingerprint as the host script
   3. Rebuilding or recreating the API container (`docker compose up -d --force-recreate api`) does not change the fingerprint
   4. The fingerprint formula uses `/etc/machine-id` and `/proc/cpuinfo` CPU model (not container ID or MAC address)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md — TDD fingerprint formula: MAC decision + tests + implementation in license_manager.py and get_machine_id.py
+- [ ] 05-02-PLAN.md — Docker bind mounts + integration verification of host-container fingerprint match
 
 ### Phase 6: Build Pipeline -- Dev-Mode Stripping and Cython Compilation
 **Goal**: Distributed builds contain no dev-mode bypass and licensing modules are compiled to native machine code
@@ -218,7 +218,7 @@ Phases execute in numeric order: 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 2. Error Handling Infrastructure | v2.0 | 4/4 | Complete | 2026-03-10 |
 | 3. Error Handling Polish | v2.0 | 1/1 | Complete | 2026-03-10 |
 | 4. Documentation Accuracy Refresh | v2.0 | 2/2 | Complete | 2026-03-10 |
-| 5. Fingerprinting Overhaul | v2.1 | 0/? | Not started | - |
+| 5. Fingerprinting Overhaul | v2.1 | 0/2 | Not started | - |
 | 6. Build Pipeline -- Dev-Mode Stripping and Cython | v2.1 | 0/? | Not started | - |
 | 7. Enforcement Module | v2.1 | 0/? | Not started | - |
 | 8. Runtime Protection | v2.1 | 0/? | Not started | - |
