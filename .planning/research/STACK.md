@@ -1,224 +1,165 @@
 # Stack Research
 
-**Domain:** E2E testing, CI/CD pipeline, operational scripts, distribution verification
-**Researched:** 2026-03-08
+**Domain:** Licensing & distribution security hardening for Python/FastAPI application
+**Researched:** 2026-03-10
 **Confidence:** HIGH
-**Scope:** v1.4 milestone only — "Ship-Ready QA". Existing Python/FastAPI/React/Docker/Playwright stack is locked. This document covers ONLY what is new: Playwright E2E test configuration for CI, test reporters, stop/GC scripts, and clean-install verification tooling.
+**Scope:** v2.1 milestone only -- "Licensing & Distribution Security". Existing Python 3.12 / FastAPI / Docker Compose stack is locked. This document covers ONLY what is new: Cython compilation, SHA256 file integrity, stronger machine fingerprinting, periodic re-validation, dev-mode stripping, and license renewal.
 
 ---
 
-## Context: What Is Already in Place (Locked — Do Not Change)
+## Context: What Is Already in Place (Locked -- Do Not Change)
 
 | Component | Status |
 |-----------|--------|
-| `@playwright/test` v1.58.2 | Installed in root `package.json` as devDependency. Lock file exists. |
-| Playwright browsers | Installed locally at `~/.cache/ms-playwright/` (chromium-1208, firefox-1509, webkit-2248). |
-| `.playwright-mcp/` | MCP console logs from manual testing sessions. Not automated test infrastructure. |
-| `package.json` (root) | Exists with `@playwright/test` only. No scripts, no config file yet. |
-| `package-lock.json` (root) | Exists. Tracks `@playwright/test` + transitive deps. |
-| `.github/workflows/ci.yml` | 3 jobs: Python Tests, Dashboard Build, Docker Build. No Playwright job. |
-| `scripts/start.sh` | Daily startup script. Health poll, Docker start, diagnosis. |
-| `scripts/install.sh` | First-time install. Builds images, waits for health. |
-| `scripts/build-dist.sh` | Distribution tarball builder. rsync + .pyc compile + tar. |
-| `tests/` (Python) | 420+ pytest unit/integration tests. Fully mocked (no Docker needed). |
-| No `playwright.config.ts` | Does not exist yet. Must be created. |
-| No `tests/e2e/` directory | No Playwright test files exist yet. |
+| Python 3.12 / FastAPI 0.129.1 | Runtime, locked in `requirements.txt` and `python:3.12-slim` Docker image |
+| `core/licensing/license_manager.py` | Full license validation pipeline (fingerprint, encode, decode, validate). Will be refactored and Cython-compiled to `.so`. |
+| `core/licensing/__init__.py` | Module docstring only. Will be compiled alongside `license_manager.py`. |
+| `scripts/build-dist.sh` | Distribution builder. Currently uses `compileall` for `.pyc`. Will be rewritten for Cython `.so` output. |
+| `scripts/generate_license.py` | License key generator. Stays on developer machine. Needs update for new fingerprint formula. |
+| `scripts/get_machine_id.py` | Customer fingerprint reporter. Needs update for new fingerprint signals. |
+| `apps/kerala_delivery/api/main.py` | Lifespan (lines 162-203) validates license at startup. Middleware (lines 381-427) enforces on every request. Dev-mode bypass at lines 184-203 must be stripped in distribution. |
+| `docker-compose.yml` | API service has no `/etc/machine-id` mount yet. Needs adding. |
+| `docker-compose.license-test.yml` | Isolated production-mode container on port 8001. Needs same mount + new test scenarios. |
+| `hashlib`, `hmac`, `struct`, `uuid`, `platform` | All already imported in `license_manager.py`. No new stdlib imports needed. |
+| 38 E2E tests (Playwright), 426 unit tests (pytest) | Existing test infrastructure. Extend, do not replace. |
 
 ---
 
 ## Recommended Stack
 
-### Playwright E2E Testing
+### Core: Cython Compilation (Loopholes #2, #4)
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| `@playwright/test` | 1.58.2 (already installed) | E2E test framework | Already in `package.json`. Pin to exact version — Playwright Docker images must match this version exactly or browser executables will not be found. |
-| `playwright.config.ts` | N/A | Test configuration | Must be created at project root. Configures `baseURL`, `webServer`, reporters, browser selection. |
-| Chromium only (in CI) | Bundled with Playwright 1.58.2 | Browser for E2E tests | Use `projects: [{ name: 'chromium' }]` in CI. Chromium-only cuts CI time by 60%+ vs running all three browsers. Cross-browser testing is irrelevant for this app — it targets Chrome on Android (driver PWA) and Chrome on Windows (dashboard). |
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| Cython | 3.2.4 | Compile `core/licensing/*.py` to native `.so` shared libraries | Latest stable (Jan 2026). Compiles pure Python `.py` files directly -- no `.pyx` rewrite needed. Existing `dataclass`, `Enum`, `hashlib`, `hmac` usage all works in Cython's pure Python mode. Produces native x86_64 machine code that requires disassembly to reverse (vs `.pyc` which decompiles to near-original source with `uncompyle6`). Build-time dependency only -- never shipped to customer. |
 
-### CI/CD Additions
+**Compilation approach:** Use `cythonize -i core/licensing/*.py` directly in `build-dist.sh`. This is simpler than maintaining a `setup.py` and sufficient for compiling 2 files in one package. Produces files like `license_manager.cpython-312-x86_64-linux-gnu.so` that Python imports automatically.
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| `mcr.microsoft.com/playwright:v1.58.2-noble` | v1.58.2 | Docker image for CI runner | Official Playwright Docker image with all browsers + system deps pre-installed. Eliminates `npx playwright install --with-deps` step (~30s savings). Version MUST match `@playwright/test` in `package.json`. Noble = Ubuntu 24.04 LTS base. |
-| GitHub Actions `actions/upload-artifact@v4` | v4 | Upload test reports | Already used pattern in CI. Upload HTML report + trace files on failure for debugging. 30-day retention is sufficient. |
-| Built-in `github` reporter | Bundled | Failure annotations in PR | Playwright's built-in GitHub Actions reporter adds inline failure annotations to PRs. Zero install — just add `['github']` to reporter array. |
-| Built-in `html` reporter | Bundled | Detailed test report | Self-contained HTML report uploaded as CI artifact. Open locally to debug failures with traces, screenshots, DOM snapshots. Configure `open: 'never'` for CI. |
+**Build-time dependencies:**
 
-### Operational Scripts
+| Dependency | Type | Purpose | Notes |
+|------------|------|---------|-------|
+| `Cython==3.2.4` | pip (build machine only) | Python-to-C transpiler | `pip install Cython==3.2.4` on developer machine. NOT in `requirements.txt` (not shipped). |
+| `gcc` / `build-essential` | apt (build machine only) | C compiler for `.c` to `.so` | Already installed on developer WSL2 system. Already in Dockerfile builder stage. |
+| `python3-dev` | apt (build machine only) | Python headers (`Python.h`) | Provides `Python.h` needed to compile Cython's C output into `.so`. Install on developer machine: `sudo apt-get install python3-dev`. |
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Bash 5.x | Pre-installed | Stop/GC script, verify script | Matches existing script conventions (`set -euo pipefail`, color helpers, `header()`/`info()`/`success()`/`error()` functions). All scripts in `scripts/` use this pattern. |
-| `docker system prune` | Docker CLI | Container/image garbage collection | Built-in Docker command. `--filter until=24h` for time-based cleanup. Safer than manual `rm`. |
-| `docker compose down --remove-orphans` | Docker Compose CLI | Graceful stop | Stops all project containers and removes orphans from previous compose file versions. Already available. |
-| ShellCheck | Pre-installed on ubuntu-latest | Shell script linting in CI | ShellCheck is pre-installed on GitHub Actions `ubuntu-latest` runners. Add a lint step for all `scripts/*.sh` files. Catches quoting bugs, unbound variables, POSIX compatibility issues. |
+**Customer impact:** Zero. The `.so` is self-contained and runs on `python:3.12-slim` without Cython or gcc installed.
 
-### Distribution Verification
+### Core: File Integrity Manifest (Loophole #6)
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Bash + Docker | Already available | Clean-install verification | A script that extracts the tarball to a temp directory, runs `install.sh` inside a fresh Docker container (or validates structure/imports without full Docker orchestration). No new tools needed. |
-| `tar -tzf` | coreutils | Tarball content validation | List tarball contents without extracting. Verify expected files are present and no dev artifacts leaked. Already available everywhere. |
-| `sha256sum` | coreutils | Tarball integrity check | Generate `.sha256` alongside tarball in `build-dist.sh`. Customer can verify integrity. Already available. |
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| `hashlib.file_digest()` | Python 3.11+ stdlib | SHA256 hashing of protected files | Added in Python 3.11, available in our Python 3.12 runtime. Cleaner than manual chunk-based reading. Crypto-grade collision resistance. Zero dependencies. |
 
----
+**Protected files:** `main.py`, `docker-compose.yml`, and any other files where tampering would bypass enforcement.
 
-## Playwright Configuration Design
+**Pattern:**
+1. At build time (`build-dist.sh`): hash protected files after dev-mode stripping, generate a Python dict literal manifest
+2. Inject manifest as a constant into `core/licensing/` source code BEFORE Cython compilation
+3. At runtime: re-hash files and compare against embedded manifest
+4. On mismatch: license validation fails with integrity error
 
-### `playwright.config.ts` — Recommended Structure
+**No new dependencies.** `hashlib` is already imported in `license_manager.py`.
 
-The config must handle two modes:
-1. **Local development**: Reuse a running `docker compose up` stack at `localhost:8000`
-2. **CI**: Start Docker Compose, wait for health, run tests, tear down
+### Core: Stronger Machine Fingerprinting (Loophole #3)
 
-Key decisions:
+All signals use Python stdlib. No new libraries.
 
-| Decision | Choice | Why |
-|----------|--------|-----|
-| `webServer.command` | `docker compose up -d && scripts/wait-for-health.sh` | Playwright's `webServer` option can launch Docker Compose. The `url` check waits for the health endpoint. `reuseExistingServer: !process.env.CI` means local dev skips startup if stack is already running. |
-| `baseURL` | `http://localhost:8000` | API serves both dashboard (`/dashboard/`) and driver PWA (`/driver/`). Single origin, no CORS issues in tests. |
-| `workers` | `1` in CI, default locally | CI stability. This is a small test suite (not hundreds of tests). Single worker avoids Docker Compose resource contention. |
-| `retries` | `2` in CI, `0` locally | CI retries catch transient Docker startup race conditions. Locally, retries hide real bugs. |
-| `timeout` | `30000` (30s) | Default. Docker Compose services are pre-warmed by `webServer.url` health check. Individual test actions should complete in seconds. |
-| `trace` | `'on-first-retry'` | Captures Playwright trace (DOM snapshots, network, console) only when a test is retried. Saves disk space while still providing debugging data for flaky tests. |
-| `screenshot` | `'only-on-failure'` | Captures screenshot on failure for CI artifact debugging. |
-| Test directory | `tests/e2e/` | Separates Playwright tests from existing `tests/` Python pytest directory. Clear boundary. |
-| `testMatch` | `**/*.spec.ts` | Standard Playwright convention. |
+| Signal | Source | Stability | Notes |
+|--------|--------|-----------|-------|
+| `/etc/machine-id` | `open("/etc/machine-id").read().strip()` | HIGH -- survives reboots, stable across container recreates | 32-char hex. Verified present and populated on target WSL2 system (`9ea32533cbc847218443c7139d7ce34b`). Bind-mounted read-only into Docker container. |
+| `/proc/cpuinfo` model name | `open("/proc/cpuinfo")` + filter `model name` | HIGH -- tied to physical hardware | Verified accessible in WSL2 (`AMD Ryzen 9 9955HX3D 16-Core Processor`). Docker containers see host CPU through `/proc`. Cannot change without swapping CPU. |
+| MAC address | `uuid.getnode()` | MEDIUM -- stable across reboots, spoofable | Already used. Keep as existing signal. |
+| hostname | `platform.node()` | LOW -- easily user-changeable | Already used. Keep but consider lowest weight. Dropping it would break backward compatibility unnecessarily. |
 
-### Reporter Configuration for CI
+**Drop:** `_get_docker_container_id()`. Container ID changes on every `docker compose down && docker compose up`, making the fingerprint unstable. This was identified as Loophole #3.
 
-```typescript
-reporter: process.env.CI
-  ? [['github'], ['html', { open: 'never' }]]
-  : [['list']],
-```
-
-- **CI**: `github` reporter for PR annotations + `html` for detailed artifact report
-- **Local**: `list` reporter for readable terminal output
-
-Do NOT use `@estruyf/github-actions-reporter`. It is a third-party package (last updated over a year ago) that adds a summary table to GitHub Actions. The built-in `github` reporter already provides inline failure annotations, which is more useful for a small test suite. Avoid unnecessary dependencies.
-
----
-
-## CI Pipeline Design
-
-### New Job: `e2e`
-
-Add a fourth job to `.github/workflows/ci.yml`. This job:
-1. Runs on `ubuntu-latest`
-2. Uses the Playwright Docker image (`mcr.microsoft.com/playwright:v1.58.2-noble`) as the container
-3. Needs Docker Compose for the application stack (Docker-in-Docker or service containers)
-
-**Critical constraint**: The application requires Docker Compose to run (API + DB + OSRM + VROOM). Running E2E tests in CI means either:
-
-- **Option A: Docker-in-Docker** — Run tests inside the Playwright Docker image with Docker Compose available. Complex, fragile.
-- **Option B: Direct install on runner** — Install Playwright browsers on the ubuntu-latest runner with `npx playwright install --with-deps chromium`. Docker Compose is available natively on GitHub Actions runners. This is simpler and more reliable.
-
-**Recommendation: Option B (direct install on runner)**. Because this app needs Docker Compose for its own services (db, osrm, vroom, api), running tests on the bare `ubuntu-latest` runner where Docker is natively available is far simpler than Docker-in-Docker. The Playwright Docker image is designed for apps that run outside Docker — not for apps that ARE Docker Compose stacks.
-
-### CI Job Structure
+**Docker Compose change:** Add `/etc/machine-id` as read-only bind mount to `api` service:
 
 ```yaml
-e2e:
-  name: E2E Tests
-  runs-on: ubuntu-latest
-  timeout-minutes: 15
-  # Only run on push to main (not PRs — too slow, needs Docker builds)
-  if: github.event_name == 'push'
-  needs: [test, dashboard]  # Run after unit tests pass
-
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: 'npm'
-    - run: npm ci
-    - run: npx playwright install --with-deps chromium
-    - name: Build and start application
-      run: docker compose up -d --build
-      env:
-        GOOGLE_MAPS_API_KEY: ""  # No geocoding in E2E tests
-        API_KEY: "test-api-key"
-        ENVIRONMENT: "development"
-    - name: Wait for health
-      run: |
-        timeout 120 bash -c 'until curl -sf http://localhost:8000/health; do sleep 3; done'
-    - run: npx playwright test
-    - uses: actions/upload-artifact@v4
-      if: ${{ !cancelled() }}
-      with:
-        name: playwright-report
-        path: playwright-report/
-        retention-days: 30
+# In docker-compose.yml, under api.volumes:
+volumes:
+  - ./data:/app/data
+  - dashboard_assets:/srv/dashboard:ro
+  - /etc/machine-id:/etc/machine-id:ro  # NEW: stable machine fingerprint
 ```
 
-**Why `if: github.event_name == 'push'` only**: E2E tests require building Docker images (~2 min) + starting the full stack (~1-2 min). This is too slow for every PR commit. Unit tests and dashboard build catch most regressions. E2E runs on merge to main as a safety net.
+Same mount needed in `docker-compose.license-test.yml` for `api-license-test` service.
 
-### ShellCheck Job
+### Core: Periodic Re-Validation (Loophole #5)
 
-Add a lightweight lint job for shell scripts:
+No new dependencies. Implementation uses module-level counter inside compiled `.so`.
+
+| Component | Approach | Why |
+|-----------|----------|-----|
+| Request counter | Module-level integer in `license_manager.py` (compiled to `.so`) | Lives inside native code, harder to patch than `app.state`. Cannot be easily zeroed by editing Python source. |
+| Re-validation trigger | Every N=100 requests, re-run `validate_license()` | Balance between security (catch expired/tampered mid-runtime) and performance (validation is fast but not free). 100 requests is ~10-15 minutes of typical usage. |
+| Integrity re-check | Same N=100 interval, re-hash protected files | Catches file modifications made while the server is running. |
+| State update | Update `app.state.license_info` in middleware if status changes | Existing middleware pattern reads `app.state.license_info`. Re-validation updates it. |
+
+### Core: Dev-Mode Stripping (Loophole #1)
+
+No new dependencies. Build-time `sed` or Python string manipulation in `build-dist.sh`.
+
+| Approach | Tool | Notes |
+|----------|------|-------|
+| Remove dev-mode `if/else` block from `main.py` | `sed` in `build-dist.sh` | Strips lines 184-203 (the `else` branch that overrides INVALID to VALID in dev mode). Shipped `main.py` always enforces licensing. |
+| Move enforcement into compiled module | Refactor in Python | `main.py` calls `licensing.enforce(app)` which registers middleware. All enforcement logic lives in compiled `.so`. Even if customer edits `main.py` to skip the call, integrity check catches it. |
+
+### Core: License Renewal
+
+No new dependencies. Enhancement to `scripts/generate_license.py` (developer-side tool).
+
+| Change | Implementation | Notes |
+|--------|----------------|-------|
+| `--renew` flag | New argument in `generate_license.py` | Takes existing customer_id + fingerprint (or reads from existing key), generates new key with extended expiry. |
+| Customer workflow | Replace `license.key` file, restart API | Same as initial activation. No protocol changes. Offline operation preserved. |
+| Renewal validation | Decode old key to extract customer_id + fingerprint, encode new key with new expiry | Reuses existing `encode_license_key()` and `decode_license_key()`. |
+
+---
+
+## Installation
+
+### Developer machine (build-time)
+
+```bash
+# Cython -- build-time only, NOT added to requirements.txt
+pip install Cython==3.2.4
+
+# System packages (if not already present)
+sudo apt-get install -y build-essential python3-dev
+```
+
+### Docker changes
 
 ```yaml
-shellcheck:
-  name: Shell Lint
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - name: Run ShellCheck
-      run: shellcheck scripts/*.sh
+# docker-compose.yml -- add to api service volumes
+- /etc/machine-id:/etc/machine-id:ro
+
+# docker-compose.license-test.yml -- add to api-license-test service volumes
+- /etc/machine-id:/etc/machine-id:ro
 ```
 
-ShellCheck is pre-installed on ubuntu-latest. No action or install step needed.
+### Customer machine
 
----
-
-## Stop/GC Script Design
-
-### No New Tools Needed
-
-The stop and GC script uses only Docker CLI commands that are already available:
-
-| Command | Purpose |
-|---------|---------|
-| `docker compose down --remove-orphans` | Stop all project containers, remove orphans |
-| `docker compose down -v` | Additionally remove named volumes (pgdata, dashboard_assets) — destructive, needs confirmation |
-| `docker image prune -f --filter "label=com.docker.compose.project"` | Remove dangling images from this project |
-| `docker builder prune -f` | Clear build cache |
-| `docker system df` | Show disk usage before/after GC |
-| `truncate -s 0` on log files | Clear container logs without removing files |
-
-Pattern: The script should default to a safe stop (no volume deletion) and offer a `--deep` flag for full cleanup including volumes and build cache.
-
----
-
-## Clean-Install Verification Design
-
-### No New Tools Needed
-
-Verification is a bash script that validates the tarball's contents without requiring a full Docker orchestration:
-
-1. **Structure check**: Extract to temp dir, verify critical files exist (`docker-compose.yml`, `scripts/install.sh`, `scripts/bootstrap.sh`, `infra/Dockerfile`, `.env.example`)
-2. **No dev artifacts check**: Verify `.git/`, `tests/`, `.planning/`, `.claude/`, `node_modules/` are NOT in the tarball
-3. **License module check**: Verify `core/licensing/__init__.pyc` and `core/licensing/license_manager.pyc` exist, and `.py` source does NOT exist
-4. **Import check**: `PYTHONPATH=<extracted> python3 -c "import core.licensing; import core.licensing.license_manager"` (already done in build-dist.sh, but verify after tarball extraction too)
-5. **Compose syntax check**: `docker compose -f <extracted>/docker-compose.yml config --quiet` validates the compose file parses
-
-These are all shell commands using existing tools.
+**No changes.** No new pip packages, no new apt packages. The `.so` file runs on existing `python:3.12-slim` Docker image.
 
 ---
 
 ## Alternatives Considered
 
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| CI Playwright runner | `npx playwright install --with-deps chromium` on ubuntu-latest | `mcr.microsoft.com/playwright:v1.58.2-noble` Docker image | App itself needs Docker Compose. Docker-in-Docker is fragile. Direct install on runner where Docker is native is simpler. |
-| CI reporter | Built-in `github` + `html` | `@estruyf/github-actions-reporter` | Third-party dep, last updated 1+ year ago. Built-in `github` reporter provides PR annotations. HTML report covers detailed debugging. No benefit to adding a third-party package. |
-| Test browsers | Chromium only | Chromium + Firefox + WebKit | Target users are Chrome on Android (drivers) and Chrome on Windows (office). Cross-browser testing adds CI time for zero coverage gain. |
-| Shell linting | ShellCheck (pre-installed) | `shfmt` (formatter) | ShellCheck catches bugs. shfmt enforces style. For 9 scripts, manual style consistency is fine. Add shfmt later if the script count grows. |
-| Tarball verification | Bash script with `tar -tzf` | Container-based clean install test | Full Docker orchestration in CI for tarball verification is overkill for v1.4. Structure + import checks catch 95% of distribution bugs. |
-| E2E test runner trigger | Push to main only | Every PR | Docker build + stack startup adds 3-5 min to CI. Unit tests + dashboard build on PRs, E2E on merge is the right balance for a solo/small team. |
+| Category | Recommended | Alternative | Why Not Alternative |
+|----------|-------------|-------------|---------------------|
+| Code protection | Cython 3.2.4 (`.so`) | PyArmor obfuscation | Runtime dependency, license cost ($300+/yr), known generic bypass tools, security-through-obfuscation. Cython produces real machine code. |
+| Code protection | Cython 3.2.4 (`.so`) | Nuitka full-app compile | Compiles entire app to standalone binary -- breaks Docker workflow, massive build complexity, 10+ minute builds. We only need 2 files compiled. |
+| Code protection | Cython 3.2.4 (`.so`) | `compileall` (`.pyc`) | Current approach. Trivially decompilable. `uncompyle6 license_manager.pyc` recovers near-original source in seconds. Not a real barrier. |
+| Build method | `cythonize -i` CLI | `setup.py build_ext` | `setup.py` adds a file to maintain for no benefit. We compile 2 files in one package. `cythonize -i` is a one-liner. |
+| File hashing | `hashlib.file_digest()` (stdlib) | `xxhash` (fast non-crypto hash) | Integrity checking needs collision resistance. SHA256 is crypto-grade. Speed irrelevant -- we hash 3 files. |
+| CPU info | `open("/proc/cpuinfo")` (5 lines) | `py-cpuinfo` library | External dependency for trivial file parsing. We need one field (`model name`). |
+| Machine ID | `/etc/machine-id` (file read) | `dbus-uuidgen` / `dmidecode` | Additional tools that may not be installed. `/etc/machine-id` is universally present on systemd Linux and verified on target WSL2. |
+| Re-validation | Request-counting (every Nth) | Background timer (`asyncio.create_task`) | Timer can be killed, paused by debugger, or blocked by event loop. Request counting is deterministic and lives in compiled code. |
+| License server | Offline HMAC validation | Call-home license server | Kerala has patchy internet. Offline validation is a hard requirement from PROJECT.md constraints. |
+| Signing library | `hmac` + `hashlib` (stdlib) | `cryptography` / `PyNaCl` | Already using stdlib HMAC-SHA256 with PBKDF2 key derivation. `cryptography` adds OpenSSL dependency for zero practical gain at our threat level. |
 
 ---
 
@@ -226,49 +167,31 @@ These are all shell commands using existing tools.
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| Cypress | Playwright is already installed and configured. Cypress adds a second E2E framework with different API, different config, different CI setup. | Playwright (already in package.json) |
-| `@playwright/experimental-ct-react` | Component testing framework. Dashboard components are straightforward React + DaisyUI. E2E covers the integration. Unit tests cover logic. Component testing is a third layer with minimal marginal value. | E2E tests for integration, pytest for logic |
-| Playwright Test for Visual Regression | `toHaveScreenshot()` requires baseline images checked into git, platform-specific rendering differences, and careful threshold tuning. Overkill for this app. | Manual visual checks for subjective UX |
-| `docker-compose-wait` or `wait-for-it.sh` | Third-party wait scripts. A simple `timeout + curl` loop does the same thing in 2 lines of bash. Already proven in `scripts/start.sh`. | `timeout 120 bash -c 'until curl -sf ...; do sleep 3; done'` |
-| Testcontainers for Node.js | Programmatic Docker management for tests. Adds complexity — Playwright's `webServer` config handles starting Docker Compose before tests. | Playwright `webServer` config |
-| `act` (run GitHub Actions locally) | Local CI simulation tool. Useful for complex workflows, but this CI is simple (4 jobs, no matrix). Run Playwright locally with `npx playwright test` against a running stack. | `npx playwright test` locally |
-| New npm packages for reporting | `allure-playwright`, `playwright-html-reporter`, etc. Built-in reporters are sufficient. Adding packages means version management, security updates, and dependency sprawl for marginal formatting improvements. | Built-in `github` + `html` reporters |
-| Separate `docker-compose.test.yml` | A test-specific compose override. The existing `docker-compose.yml` works for E2E with environment variable overrides. Adding a second compose file means keeping two files in sync. | Environment variables in CI (`GOOGLE_MAPS_API_KEY=""`, `API_KEY="test-api-key"`) |
+| PyArmor / PyInstaller / py2exe | Obfuscation theater. Known bypass tools exist for all of them. Adds runtime overhead and dependencies to shipped code. | Cython `.so` (real machine code, no runtime dependency) |
+| `py-cpuinfo` library | External dependency for 5 lines of file reading. We only need the `model name` field from `/proc/cpuinfo`. | `open("/proc/cpuinfo")` with line filtering |
+| `cryptography` / `PyNaCl` | Heavy dependencies (OpenSSL binding) for signing. Already have HMAC-SHA256 via stdlib which is sufficient for offline license validation at our threat level. | `hmac` + `hashlib` (stdlib, already used) |
+| Docker container ID in fingerprint | Ephemeral -- changes on every `docker compose down && up`. Causes fingerprint instability, making licenses appear invalid after routine restarts. This IS the bug we are fixing. | `/etc/machine-id` (stable, survives container lifecycle) |
+| Background validation timer | Async task that can be killed, paused, or starved. Harder to reason about than synchronous check. Requires graceful shutdown handling. | Request-counting re-validation in middleware (deterministic, compiled) |
+| Any call-home / phone-home mechanism | Hard requirement: offline operation (Kerala internet constraints). Adds server infrastructure. | Offline HMAC validation with embedded integrity manifest |
+| `Cython` in `requirements.txt` | Cython is a build-time tool. Including it in requirements.txt would install it on the customer's machine, wasting space and leaking build tooling. | Install separately on developer machine only |
+| Separate `requirements-build.txt` | Over-engineering for one build dependency. `pip install Cython==3.2.4` in `build-dist.sh` is clear and self-documenting. | Inline `pip install` in build script |
 
 ---
 
-## Installation
+## Build Pipeline Changes (build-dist.sh)
 
-### Root package.json Changes
+The build script needs these ordered steps. Order is critical because manifest generation must happen AFTER code stripping but BEFORE Cython compilation.
 
-```bash
-# Already installed — no new packages needed for Playwright
-npm ls @playwright/test  # Should show 1.58.2
-
-# Install Playwright browsers (if not already cached)
-npx playwright install chromium
 ```
-
-### New npm Scripts to Add
-
-```json
-{
-  "scripts": {
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "test:e2e:headed": "playwright test --headed"
-  }
-}
+1. Copy project tree to staging (existing)
+2. NEW: Strip dev-mode bypass block from staged main.py
+3. NEW: Generate SHA256 manifest of protected files (main.py, docker-compose.yml)
+4. NEW: Inject manifest into licensing source code as constant
+5. CHANGED: Compile core/licensing/*.py with Cython (replaces compileall)
+6. Remove .py source from licensing module (existing pattern)
+7. NEW: Validate .so imports (replaces .pyc import validation)
+8. Create tarball (existing)
 ```
-
-### CI Browser Installation
-
-```bash
-# In GitHub Actions (no Docker image needed)
-npx playwright install --with-deps chromium
-```
-
-The `--with-deps` flag installs system-level dependencies (libgbm, libasound, etc.) that Chromium needs on a fresh Ubuntu runner. The `chromium` argument installs only Chromium (not Firefox + WebKit), saving ~200MB download and ~30s.
 
 ---
 
@@ -276,27 +199,57 @@ The `--with-deps` flag installs system-level dependencies (libgbm, libasound, et
 
 | Package | Compatible With | Notes |
 |---------|-----------------|-------|
-| `@playwright/test` 1.58.2 | Node.js 18, 20, 22 | Node 22 is used in CI (matches dashboard job). |
-| Playwright browsers (chromium-1208) | `@playwright/test` 1.58.2 only | Browser version is tied to Playwright version. Upgrading Playwright requires `npx playwright install` to get new browsers. |
-| `mcr.microsoft.com/playwright:v1.58.2-noble` | Ubuntu 24.04 LTS | Not used in CI (see rationale above), but available if Docker-in-Docker is ever needed. |
-| ShellCheck | Pre-installed on ubuntu-latest | Version varies with runner image. No version pinning needed — ShellCheck is backward-compatible for standard checks. |
-| `docker compose` | v2.x on ubuntu-latest | GitHub Actions runners include Docker Compose v2. Same as local development. |
+| Cython 3.2.4 | Python 3.8-3.14 | Full Python 3.12 support confirmed. Must compile on same Python minor version as runtime. |
+| Cython `.so` output | `python:3.12-slim` Docker image | Filename includes Python version and platform: `license_manager.cpython-312-x86_64-linux-gnu.so`. Must match exactly. |
+| Cython `.so` output | Developer WSL2 (x86_64) to Docker `python:3.12-slim` (x86_64) | Same architecture (x86_64), same Python (3.12). Compatible. If developer machine ever changes to ARM, must cross-compile or compile inside Docker. |
+| `/etc/machine-id` | WSL2 Ubuntu, bare metal Linux, Debian, Fedora | Universally present on systemd-based Linux. May be empty on WSL1 (not our target). Verified populated on target system. |
+| `/proc/cpuinfo` | All Linux environments including WSL2, Docker | Docker containers see host `/proc/cpuinfo`. No special mounting needed -- it is always accessible. |
+| `hashlib.file_digest()` | Python 3.11+ | Added in Python 3.11. Our runtime is Python 3.12. Safe to use. |
+| New fingerprint formula | Existing license keys | BREAKING CHANGE. New formula (machine_id + cpu_model + mac + hostname replacing container_id) produces different fingerprints. All existing customer licenses must be regenerated. |
+
+---
+
+## Critical Integration Notes
+
+### BREAKING CHANGE: Fingerprint Migration
+
+Changing the fingerprint formula invalidates all existing licenses. Both `get_machine_id.py` (customer side) and `generate_license.py` (developer side) must be updated simultaneously. All customer licenses must be regenerated with the new fingerprint. Plan a coordinated rollout.
+
+### Build Order Dependency
+
+The SHA256 manifest must be generated AFTER dev-mode stripping (so the hash reflects the shipped `main.py`, not the source `main.py`) but BEFORE Cython compilation (so the manifest is embedded in the `.so`). Getting this order wrong means either: (a) integrity check passes on tampered files (manifest reflects wrong version), or (b) manifest is not in the compiled module.
+
+### Platform Lock
+
+The `.so` is compiled for `cpython-312-x86_64-linux-gnu`. If the developer machine or Docker base image changes Python version (3.13) or architecture (ARM), the `.so` must be recompiled. Consider adding a platform assertion in `build-dist.sh`:
+```bash
+python3 -c "import sys; assert sys.version_info[:2] == (3, 12), f'Need Python 3.12, got {sys.version}'"
+```
+
+### Cython and `__init__.py`
+
+Cython compiles `__init__.py` to `__init__.cpython-312-x86_64-linux-gnu.so`. Python's import system finds this automatically when the `.py` is removed. The existing import validation command (`python3 -c "import core.licensing"`) works unchanged -- it just loads the `.so` instead of `.pyc`.
+
+### Request Counter Persistence
+
+The Nth-request counter is a module-level variable in the compiled `.so`. It resets to zero on every server restart. This is acceptable -- the primary threat is license expiry or file tampering during long-running sessions, not across restarts (startup validation catches those).
 
 ---
 
 ## Sources
 
-- [Playwright CI documentation](https://playwright.dev/docs/ci) — GitHub Actions setup, Docker image recommendations, caching guidance. HIGH confidence.
-- [Playwright CI intro](https://playwright.dev/docs/ci-intro) — Recommended GitHub Actions YAML, `--with-deps` flag, artifact upload. HIGH confidence.
-- [Playwright Docker documentation](https://playwright.dev/docs/docker) — Official Docker images, version pinning, `--ipc=host` flag. HIGH confidence.
-- [Playwright test reporters documentation](https://playwright.dev/docs/test-reporters) — Built-in reporters (github, html, blob, list, dot), configuration syntax. HIGH confidence.
-- [Playwright webServer documentation](https://playwright.dev/docs/test-webserver) — `command`, `url`, `reuseExistingServer`, `timeout` options. HIGH confidence.
-- [Microsoft Artifact Registry](https://mcr.microsoft.com/en-us/artifact/mar/playwright) — Docker image tags for v1.58.2-noble. HIGH confidence.
-- [@estruyf/github-actions-reporter on npm](https://www.npmjs.com/package/@estruyf/github-actions-reporter) — Third-party reporter, last published 1+ year ago. MEDIUM confidence (not recommended).
-- [ShellCheck GitHub Wiki](https://www.shellcheck.net/wiki/GitHub-Actions) — Pre-installed on ubuntu-latest, direct usage. HIGH confidence.
-- Existing `ci.yml`, `package.json`, `docker-compose.yml`, `scripts/` in this repo — reviewed directly. HIGH confidence (source of truth).
+- [Cython 3.2.4 on PyPI](https://pypi.org/project/Cython/) -- Latest stable version confirmed (HIGH confidence)
+- [Cython Building Docs](https://cython.readthedocs.io/en/latest/src/quickstart/build.html) -- `cythonize -i` workflow for `.py` files (HIGH confidence)
+- [Cython Source Files and Compilation](https://cython.readthedocs.io/en/latest/src/userguide/source_files_and_compilation.html) -- Pure Python compilation, glob patterns, parallel builds (HIGH confidence)
+- [Cython Pure Python Mode](https://cython.readthedocs.io/en/latest/src/tutorial/pure.html) -- Standard Python features (dataclass, enum, hashlib) work without `.pyx` (HIGH confidence)
+- [machine-id(5) man page](https://man7.org/linux/man-pages/man5/machine-id.5.html) -- 32-char hex, stable identifier (HIGH confidence)
+- [WSL /etc/machine-id issue #6347](https://github.com/microsoft/WSL/issues/6347) -- WSL2 machine-id may be empty on some configurations (MEDIUM confidence; verified populated on OUR target system)
+- [Docker Bind Mounts Docs](https://docs.docker.com/engine/storage/bind-mounts/) -- Read-only mount syntax `:ro` (HIGH confidence)
+- [Python hashlib docs](https://docs.python.org/3/library/hashlib.html) -- `file_digest()` available in 3.11+ (HIGH confidence)
+- [Cython reverse engineering discussion](https://groups.google.com/g/cython-users/c/Zd7HZ9UW_ew) -- `.so` significantly harder to reverse than `.pyc` (MEDIUM confidence, community consensus)
+- [Cython multi-stage Docker gist](https://gist.github.com/operatorequals/a1264ad67b3b9a08651c9736bbfe26b0) -- Pattern for Cython in Docker builds (MEDIUM confidence)
+- Local verification on target WSL2 system: `/etc/machine-id` populated, `/proc/cpuinfo` accessible, Docker bind mount of machine-id tested successfully, `pip index versions Cython` confirmed 3.2.4 (HIGH confidence)
 
 ---
-
-*Stack research for: Kerala LPG Delivery Route Optimizer v1.4 — Ship-Ready QA*
-*Researched: 2026-03-08*
+*Stack research for: Kerala LPG Delivery Route Optimizer v2.1 -- Licensing & Distribution Security*
+*Researched: 2026-03-10*

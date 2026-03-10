@@ -1,496 +1,287 @@
 # Pitfalls Research
 
-**Domain:** Ship-Ready QA -- Playwright E2E tests, CI/CD browser integration, stop/GC scripts, distribution verification, license lifecycle docs for Docker Compose route optimization app
-**Researched:** 2026-03-08
-**Confidence:** HIGH (Playwright CI patterns verified against official docs; Docker signal handling verified against Docker docs; .pyc compatibility verified against CPython PEP 3147 and issue trackers; stop script patterns verified against Docker Compose documentation)
+**Domain:** Licensing & Distribution Security -- Cython compilation, file integrity checking, machine fingerprinting, periodic re-validation, dev-mode stripping, and license renewal for an existing FastAPI/Docker application on WSL2
+**Researched:** 2026-03-10
+**Confidence:** HIGH for Cython/.so pitfalls (verified against Cython docs, FastAPI issue tracker, CPython naming conventions); HIGH for WSL2 fingerprinting instability (verified against WSL GitHub issue tracker); MEDIUM for integrity manifest bypass patterns (general security principles, not project-specific verification); HIGH for async middleware counter pitfalls (verified against FastAPI concurrency docs)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Playwright Tests Start Before Docker Compose Services Are Actually Ready
+### Pitfall 1: Cython .so Files Are Python-Version-AND-Platform-Locked
 
 **What goes wrong:**
-Playwright's `webServer` config detects when a port opens and immediately starts running tests. But Docker Compose opens the mapped port on the host as soon as the container starts -- before the application process inside the container is actually listening. This creates a race condition: Playwright detects port 8000 is open, sends its first request, and gets `ECONNREFUSED` because uvicorn has not finished booting inside the container. The test fails with a timeout error that looks like a test bug, not a startup timing issue.
+Cython compiles `.py` files into native `.so` shared libraries with names like `license_manager.cpython-312-x86_64-linux-gnu.so`. This name encodes the exact Python minor version (3.12) and platform (x86_64 Linux). If the build machine uses Python 3.12 but the Docker image upgrades to Python 3.13 (even a minor bump like `python:3.12-slim` -> `python:3.13-slim`), the `.so` file will not import. Python's import machinery looks for the platform-tagged name first and silently skips files that don't match.
 
-This is worse in this project because the API depends on `db-init` (Alembic migrations) and `dashboard-build` completing first. The full startup chain is: db healthy -> db-init migrations -> osrm-init -> osrm started -> vroom started -> dashboard-build done -> API boots. This takes 10-60 seconds depending on cold/warm state, with OSRM init potentially taking 15+ minutes on first run.
+This is worse than the current `.pyc` approach. `.pyc` files have a magic number check that produces a clear error message. `.so` files simply aren't found by the import system -- you get `ModuleNotFoundError: No module named 'core.licensing.license_manager'` with zero indication that the problem is a version mismatch.
 
 **Why it happens:**
-Docker's port forwarding operates at the network level, not the application level. The port-open signal is not equivalent to "service is ready." Developers test locally where services are already warm, so they never hit the cold-start race.
+The current Dockerfile uses `python:3.12-slim` and the build script uses the host's Python. Developers assume "Python 3" is enough. But Cython's `cythonize()` and `setuptools.build_ext` produce ABI-tagged `.so` files that are pinned to the exact CPython version and ABI flags. Even a rebuild on the same machine with a different Python patch version (3.12.3 vs 3.12.5) is fine (same ABI tag), but 3.12 vs 3.13 is not.
 
 **How to avoid:**
-Do NOT use Playwright's `webServer` config to start Docker Compose. Instead:
-1. Use a `globalSetup` script that runs `docker compose up -d` and then polls the `/health` endpoint with curl/fetch until it returns 200, with a configurable timeout (90 seconds for warm, 300 seconds for cold with OSRM init).
-2. In `playwright.config.ts`, set `baseURL: 'http://localhost:8000'` and rely on the `globalSetup` having already verified the service is healthy.
-3. Add a `globalTeardown` that optionally runs `docker compose down` (controlled by an env var like `KEEP_SERVICES=true` for development).
-
-Example `globalSetup`:
-```typescript
-async function globalSetup() {
-  execSync('docker compose up -d', { stdio: 'inherit' });
-  const maxWait = 90_000;
-  const start = Date.now();
-  while (Date.now() - start < maxWait) {
-    try {
-      const res = await fetch('http://localhost:8000/health');
-      if (res.ok) return;
-    } catch { /* not ready */ }
-    await new Promise(r => setTimeout(r, 2000));
-  }
-  throw new Error('Services did not become healthy');
-}
-```
+1. **Compile inside the same Docker image** used for runtime. Add a build stage to the Dockerfile or use a separate build script that runs `python setup.py build_ext --inplace` inside a `python:3.12-slim` container. Never compile on the host and copy into Docker.
+2. **Pin the exact Python minor version** in both Dockerfile (`FROM python:3.12-slim`) and build script. Add a version check at the top of `build-dist.sh`: `python3 -c "import sys; assert sys.version_info[:2] == (3, 12), f'Need Python 3.12, got {sys.version_info}'"`.
+3. **Test the import inside the Docker container** as part of the build pipeline, not just on the host. The existing import validation step (`PYTHONPATH="$STAGE" python3 -c "import core.licensing..."`) must run inside the target Docker image.
 
 **Warning signs:**
-- Tests pass locally (services already running) but fail in CI (cold start)
-- Intermittent `ECONNREFUSED` or `net::ERR_CONNECTION_REFUSED` in first test
-- Tests pass when re-run immediately after failure (services warmed up from first attempt)
+- `ModuleNotFoundError` for `core.licensing` in the container but works on the host
+- `.so` filename in the staging directory doesn't match the Python version in the Docker image
+- `build-dist.sh` runs on a host with a different Python version than the Dockerfile's base image
 
-**Phase to address:** Playwright E2E setup phase -- must be the first thing configured before writing any tests.
+**Phase to address:**
+Phase 1 (Cython compilation pipeline) -- this must be validated before any other feature is built on top of the compiled module.
 
 ---
 
-### Pitfall 2: Playwright Tests Flaky in GitHub Actions Due to CI Resource Constraints
+### Pitfall 2: WSL2 MAC Address Changes on Every Reboot, Breaking Fingerprints
 
 **What goes wrong:**
-Tests pass reliably on the developer's machine but fail intermittently in GitHub Actions. The symptoms are: timeouts on `page.waitForSelector`, elements not found after navigation, screenshots showing half-rendered pages, and `TimeoutError: locator.click: Timeout 30000ms exceeded`. This happens because GitHub Actions shared runners have 2 vCPUs and 7 GB RAM, which must run 4 Docker containers (API, DB, OSRM, VROOM) AND a Chromium browser simultaneously. The containers consume 2-4 GB RAM, leaving Chromium resource-starved.
+The current `get_machine_fingerprint()` uses `uuid.getnode()` (MAC address) as a primary fingerprint signal. In WSL2, the virtual network adapter's MAC address changes on every WSL restart or Windows reboot. This is a known, long-standing WSL2 issue (microsoft/WSL#5352, microsoft/WSL#5291). The fingerprint computed at license-generation time will not match the fingerprint computed after a reboot, causing the license to fail validation with "License key is not valid for this machine."
+
+Compounding the problem: Python's `uuid.getnode()` may not even return the real MAC address when built with `libuuid` -- it can return a random number that is cached per-process but not persistent across restarts (cpython/cpython#132710).
 
 **Why it happens:**
-Developer machines typically have 8-16 GB RAM and 4+ cores, giving ample headroom. CI runners are shared, throttled, and have variable I/O performance. Animations that complete in 50ms locally take 200ms+ in CI. Database queries that return in 5ms locally take 50ms in CI under load.
+WSL2 runs as a lightweight VM with a virtual Hyper-V network adapter. Microsoft intentionally randomizes the MAC address on each start for network isolation. This was a design choice, not a bug, and there is no official fix. Setting a static MAC address manually breaks internet connectivity in WSL2.
 
 **How to avoid:**
-1. Run Playwright in CI with `--workers=1` to avoid concurrent browser contexts competing with Docker containers for limited CPU/RAM.
-2. Use `expect(locator).toBeVisible({ timeout: 15000 })` instead of default timeouts -- CI needs 2-3x longer than local.
-3. Set `retries: 2` in `playwright.config.ts` for CI only: `retries: process.env.CI ? 2 : 0`.
-4. Enable traces on first retry: `trace: 'on-first-retry'` -- this captures screenshots, DOM snapshots, and network logs for debugging.
-5. Upload trace artifacts in the GitHub Actions workflow so failures can be debugged post-run.
-6. Use `mcr.microsoft.com/playwright:v{version}-noble` Docker image in CI to avoid browser installation time (saves 1-2 minutes and 400MB download).
-7. Do NOT run E2E tests alongside the Docker Build CI job -- they need separate runners or sequential execution.
+1. **Drop MAC address from the fingerprint entirely** for WSL2 deployments. The v2.1 plan already calls for this (replacing container_id with /etc/machine-id + /proc/cpuinfo), but the MAC address must also be removed, not just supplemented.
+2. **Use `/etc/machine-id` as the primary stable signal.** WSL2's `/etc/machine-id` is generated once during distro installation and persists across reboots. Bind-mount it read-only into the Docker container.
+3. **Use CPU model string from `/proc/cpuinfo`** (e.g., `model name : Intel(R) Core(TM) i7-10750H`) as a secondary signal. This is stable across reboots and reflects the actual hardware. Do NOT use clock speed (`cpu MHz`) which fluctuates with power management.
+4. **Use hostname as a tertiary signal**, but document that changing the WSL hostname invalidates the license (acceptable -- customers rarely change hostnames).
 
 **Warning signs:**
-- Tests pass locally 100% but fail 20-40% of the time in CI
-- Failures always involve timeouts, never assertion mismatches
-- Adding `await page.waitForTimeout(1000)` "fixes" it (this is a band-aid, not a fix)
+- License works after fresh generation but fails after Windows reboot
+- `get_machine_id.py` produces different output each time it runs
+- Customer reports "license stopped working" with no code changes
 
-**Phase to address:** CI/CD pipeline integration phase -- configure Playwright CI with proper timeouts and artifact upload before merging E2E tests.
+**Phase to address:**
+Phase 2 (Fingerprinting hardening) -- must be implemented before shipping any builds to customers, and before license renewal is implemented (otherwise renewal keys will also be unstable).
 
 ---
 
-### Pitfall 3: .pyc Distribution Breaks When Build Machine and Docker Image Use Different Python Minor Versions
+### Pitfall 3: Cython Cannot Compile FastAPI Async Route Handlers
 
 **What goes wrong:**
-`build-dist.sh` compiles `core/licensing/*.py` to `.pyc` using the developer's local Python. The resulting `.pyc` files embed a "magic number" that identifies the exact Python version (e.g., 3.12.3). The Docker image uses `python:3.12-slim` which resolves to the latest 3.12.x patch. If the developer's local Python is 3.12.3 but the Docker image pulls 3.12.7, the magic numbers differ. Python refuses to import the `.pyc` with `ImportError: bad magic number`.
+If you accidentally try to compile `main.py` or any module containing `async def` route handlers with Cython, the compiled code will silently break. Cython-compiled async functions don't pass `asyncio.iscoroutinefunction()` checks, which FastAPI uses internally to determine whether to `await` a handler's return value. The result: handlers return raw coroutine objects instead of awaited responses, producing `TypeError("'coroutine' object is not iterable")` or `TypeError('vars() argument must have __dict__ attribute')` at runtime.
 
-This is especially dangerous because:
-- The build appears to succeed (import validation in `build-dist.sh` runs on the same local Python that compiled it).
-- The failure only manifests when the customer extracts the tarball and runs `docker compose up`.
-- The error message ("bad magic number") is incomprehensible to office staff.
-- Python 3.12 has had multiple magic number changes across patch releases.
+This has been a documented issue since FastAPI#1921 (2020) and remains unfixed in FastAPI itself. Cython 3.0+ partially addresses it, but the `iscoroutinefunction` mismatch persists in some introspection paths.
 
 **Why it happens:**
-CPython .pyc magic numbers change with each minor release AND can change with patch releases when bytecode format changes. `python:3.12-slim` without a pinned patch version is a moving target. The developer's local Python and the Docker image's Python are independently updated.
+The v2.1 scope is to compile only `core/licensing/` -- which contains synchronous functions only. But during implementation, there's a temptation to also compile the enforcement middleware in `main.py` (which is `async def`) or to move enforcement logic into an async function inside the licensing module. Any async code in the compiled module will hit this bug.
 
 **How to avoid:**
-1. Pin the Docker image to a specific patch version: `python:3.12.3-slim` (not just `3.12-slim`).
-2. OR (better): compile .pyc inside the Docker build, not on the developer's machine. Add a step to `build-dist.sh` that uses Docker to compile:
-   ```bash
-   docker run --rm -v "$STAGE:/app" python:3.12-slim \
-     python -m compileall -b -f -q /app/core/licensing/
-   ```
-3. Add a version check to `build-dist.sh` that verifies the local Python version matches the Dockerfile's base image version.
-4. The import validation step in `build-dist.sh` already tests against local Python -- but add a Docker-based validation too: run the import inside the same Docker image.
+1. **Strict scope: compile ONLY `core/licensing/` and nothing else.** The licensing module (`license_manager.py`, `__init__.py`) contains zero async code -- it's all synchronous (hashlib, hmac, struct, file I/O). Keep it that way.
+2. **Never add `async def` to any file that will be Cython-compiled.** The enforcement middleware must stay in `main.py` as plain Python. The compiled module should expose synchronous validation functions that the middleware calls.
+3. **Add a lint check in `build-dist.sh`** that greps for `async def` in files targeted for Cython compilation and fails the build if found: `grep -r "async def" core/licensing/ && { echo "ERROR: async code in licensing module will break Cython"; exit 1; }`.
 
 **Warning signs:**
-- `build-dist.sh` runs `python3 -m compileall` without checking the Python version
-- Dockerfile uses `python:3.12-slim` (unpinned patch version)
-- Import validation only runs locally, not inside the target Docker image
-- Customer reports "the system worked until we ran a Docker update"
+- `TypeError: 'coroutine' object is not iterable` in production logs
+- License validation works in unit tests (pure Python) but fails in Docker (compiled)
+- Endpoints return empty 500 errors with no clear traceback
 
-**Phase to address:** Distribution verification phase -- fix .pyc compilation strategy before building any customer tarballs.
+**Phase to address:**
+Phase 1 (Cython compilation pipeline) -- enforce with a build-time check so this can never slip in during later phases.
 
 ---
 
-### Pitfall 4: Stop Script Uses `docker compose down -v` and Destroys Production Database
+### Pitfall 4: Dev-Mode Code Stripping Leaves Syntactically Invalid Python
 
 **What goes wrong:**
-A stop/GC script intended for cleanup uses `docker compose down -v` (the `-v` flag removes named volumes). The `pgdata` volume contains the PostgreSQL database with all order history, geocode cache, delivery records, and route data. One accidental run of the stop script -- or a developer habit from using it in testing -- destroys all production data with no recovery path. The `-v` flag is a single character that causes irreversible data loss.
+The plan calls for `build-dist.sh` to remove the `if env == "development"` block from `main.py` before packaging. Naive text-based stripping (using `sed` or similar) can leave syntactically broken Python if the if/else structure is not perfectly handled. For example, removing the `else:` branch of `if env == "production":` / `else:` leaves an orphaned `if` with no body, or removing the wrong lines breaks indentation. The tarball ships, the Docker container starts, and `main.py` fails to parse -- the entire API is down with `SyntaxError`.
 
-The existing `reset.sh` script already has this footgun: it offers `docker compose down -v` as an option. If a stop/GC script reuses this pattern without safeguards, the same risk applies.
+This is especially dangerous because the current dev-mode block (main.py lines 184-203) creates a replacement `LicenseInfo` object inside the `else:` branch. Simply deleting those lines leaves the `if license_info.status == LicenseStatus.INVALID:` branch's `else:` clause empty.
 
 **Why it happens:**
-Developers use `docker compose down -v` routinely in development to get a clean slate. It becomes muscle memory. Stop scripts often start as copies of reset scripts. The `-v` flag is easy to include by accident or by habit. Docker provides no confirmation prompt for volume removal.
+Text-based code manipulation is fragile. The developer writes a `sed` command that works for the current code, but any reformatting, added comments, or minor refactoring breaks the regex. There's no feedback loop -- the build script "succeeds" but produces invalid Python.
 
 **How to avoid:**
-1. The stop script must use `docker compose stop` (not `down`) for graceful shutdown. `stop` halts containers but preserves everything.
-2. If garbage collection of containers is needed, use `docker compose down` WITHOUT `-v`. This removes containers and networks but preserves volumes.
-3. Never include `-v` in any script except the explicit reset/nuke script, which must require confirmation (the existing `reset.sh` already has this, which is good).
-4. Name the scripts clearly: `stop.sh` (daily shutdown), `reset.sh` (nuclear option with confirmation). Never have a script that ambiguously does both.
-5. Add a safety check: if the `pgdata` volume has data, refuse to remove it without explicit confirmation:
-   ```bash
-   if docker volume inspect routing_opt_pgdata &>/dev/null; then
-     error "Database volume exists. Use reset.sh --all to remove data."
-     exit 1
-   fi
-   ```
+1. **Use AST-based transformation, not text manipulation.** Write a small Python script that uses the `ast` module to parse `main.py`, identify and remove the dev-mode branch, and write valid Python back. This is robust against formatting changes.
+2. **Alternatively, restructure `main.py` before v2.1** so the dev-mode code is isolated behind a clear sentinel marker (e.g., `# BEGIN_DEV_ONLY` / `# END_DEV_ONLY`) that can be reliably stripped with a simple line-range delete.
+3. **Validate the stripped `main.py` parses correctly** in `build-dist.sh`: `python3 -c "import ast; ast.parse(open('$STAGE/apps/kerala_delivery/api/main.py').read())"`. This catches syntax errors immediately.
+4. **Run the existing unit test suite against the staged directory** before packaging. If `main.py` is broken, tests will fail.
 
 **Warning signs:**
-- Stop script contains `docker compose down -v` or `docker compose down --volumes`
-- Stop and reset functionality combined in one script
-- No confirmation before volume removal
-- Script tested only on dev machine where data loss is inconsequential
+- `SyntaxError` when the API container starts (check Docker logs)
+- Build script succeeds but `python3 -c "import ..."` against the staged directory fails
+- Customer reports "API won't start after update"
 
-**Phase to address:** Stop/GC script phase -- design stop.sh as a safe shutdown from the start, completely separate from reset.sh.
+**Phase to address:**
+Phase 1 (Dev-mode stripping) -- implement and validate before the Cython compilation phase, because the stripped `main.py` is what gets integrity-checked.
 
 ---
 
-### Pitfall 5: Clean Install Verification Tests the Developer's Cached State, Not a Fresh Machine
+### Pitfall 5: Integrity Manifest Becomes Stale After Docker Compose Edits
 
 **What goes wrong:**
-The developer runs "clean install verification" by: (1) extracting the tarball, (2) running `install.sh`, (3) seeing it work. But the machine already has: Docker images cached (no download), OSRM data in `data/osrm/` (no 15-minute preprocessing), `.env` from a previous install (no prompts), Python 3.12 installed, and the Google Maps API key set. The "clean install" test misses every first-run problem because nothing is actually first-run.
+The SHA256 integrity manifest is generated at build time and baked into the compiled `.so`. It covers `main.py`, `middleware.py`, and `docker-compose.yml`. But the customer might legitimately edit `docker-compose.yml` to change environment variables (e.g., `POSTGRES_PASSWORD`, `GOOGLE_MAPS_API_KEY`, port mappings). Any edit to a manifest-covered file triggers an integrity failure, and the license stops working. The customer sees "License expired or invalid" with no indication that a config file edit caused it.
 
 **Why it happens:**
-Testing clean install on the same machine you develop on is the default behavior. Creating a truly fresh environment requires a separate VM/WSL instance, which adds friction. Developers unconsciously avoid this because they know the fresh install takes 15-20 minutes (OSRM download + preprocessing).
+The manifest design treats all file modifications as tampering. But `docker-compose.yml` contains both infrastructure config (which customers must customize) and security-critical config (which should not be modified). There's no way to distinguish between the two after the manifest is generated.
 
 **How to avoid:**
-1. Test in a fresh WSL instance: `wsl --install -d Ubuntu-24.04 --name test-clean-install` (creates a separate WSL instance with no Docker, no Python, no project files).
-2. Create a verification checklist that must be run on the fresh instance:
-   - [ ] Extract tarball to `~/routing_opt`
-   - [ ] Run `./scripts/bootstrap.sh` (not from the repo -- from the tarball)
-   - [ ] Verify OSRM downloads and preprocesses (15+ min)
-   - [ ] Verify API starts and `/health` returns 200
-   - [ ] Upload a CSV and verify routes generate
-   - [ ] Open driver PWA and verify map loads
-3. Automate what can be automated: a CI job that extracts the tarball into a fresh Docker container (not the project's containers) and runs the install script.
-4. Test without the Google Maps API key to verify graceful degradation.
+1. **Exclude `docker-compose.yml` from the integrity manifest.** It's not a code file -- it's a config file that customers must edit. Protecting it adds friction without security benefit (the real enforcement is in the compiled `.so`).
+2. **Only manifest files that contain enforcement logic:** `main.py`, any middleware files that import from `core.licensing`, and the `core/licensing/__init__.py` stub (if one exists after compilation). These are the files where someone would try to bypass licensing.
+3. **Provide clear, specific error messages** when integrity check fails: "File X has been modified (expected hash: abc..., actual: def...). If you need to customize configuration, edit .env instead of docker-compose.yml." This prevents customer confusion.
+4. **Consider using `.env` for all customer-configurable values** and making `docker-compose.yml` read-only in the distribution. The existing `.env.example` pattern already supports this.
 
 **Warning signs:**
-- "Clean install verified" but OSRM data directory already existed
-- Verification done on the same machine as development
-- Install script never tested non-interactively (piped stdin)
-- No verification of the tarball contents against expected file list
+- Customer reports license failure after changing database password
+- Integrity check fails on first boot because the customer followed setup instructions that involve editing docker-compose.yml
+- Support tickets spike after distribution updates
 
-**Phase to address:** Clean install verification phase -- must create a separate test environment before declaring the tarball verified.
+**Phase to address:**
+Phase 3 (Integrity manifest) -- the manifest file list must be carefully chosen during design, not as an afterthought.
 
 ---
 
-### Pitfall 6: Playwright E2E Tests Require Google Maps API Key That Does Not Exist in CI
+### Pitfall 6: Request-Counter Re-Validation Blocks the Event Loop on Synchronous License Check
 
 **What goes wrong:**
-The E2E test for the upload flow requires: upload CSV -> geocode addresses -> optimize routes -> display on map. Geocoding calls the Google Maps API, which requires a valid API key. In CI (GitHub Actions), there is no API key configured. The upload flow fails at geocoding with `REQUEST_DENIED`, and the test fails -- not because the UI is broken, but because an external dependency is missing.
+The periodic re-validation plan calls for the compiled middleware to re-run license validation every N requests. The current `validate_license()` function performs synchronous file I/O (reading `license.key`) and hashing operations. If called directly from an `async def` middleware handler, it blocks the asyncio event loop for the duration of the validation (10-50ms for SHA256 hashing of manifest files + file reads). During that time, ALL concurrent requests are stalled -- not just the one that triggered re-validation.
 
-This is compounded by the existing problem noted in the milestone context: the Google Maps API key is currently broken with `REQUEST_DENIED`. E2E tests will fail even locally if the key is not working.
+With 2 uvicorn workers and ~100 concurrent requests during peak delivery hours, a 50ms block means 100 requests wait 50ms extra. At every-100th-request validation, this happens once per second at 100 req/s. The cumulative effect is noticeable latency spikes in the driver PWA.
 
 **Why it happens:**
-E2E tests by nature exercise the full stack, including external API dependencies. Developers either hardcode their API key locally or forget that CI has no access to it. Storing the API key in GitHub Secrets and passing it to the test environment seems like the fix, but it incurs real costs (each CI run geocodes addresses) and creates a dependency on Google's uptime for CI reliability.
+FastAPI's `async def` middleware runs on the main event loop thread. Unlike `def` endpoints (which run in a threadpool), middleware has no automatic threadpool offloading. Developers assume "it's just a hash check, it's fast" -- but file I/O + SHA256 of multiple files adds up, especially on Docker's overlayfs.
 
 **How to avoid:**
-1. E2E tests must use a mock geocoding backend, not the real Google API. Options:
-   - Seed the database with pre-geocoded addresses before running tests (skip the geocoding step entirely).
-   - Use an API test fixture that overrides the geocoding endpoint to return canned responses.
-   - Pre-populate the geocode cache in the test database so geocoding hits the cache, not Google.
-2. Have exactly ONE integration test that verifies Google Geocoding API connectivity -- run it locally with a real key, skip it in CI (`test.skip(process.env.CI)`).
-3. Store the Google Maps API key as a GitHub Secret only for the geocoding integration test, not for all E2E tests.
-4. Add a `/health` response field that shows geocoding status (e.g., `"geocoding": "configured"` vs `"geocoding": "not configured"`) so tests can assert on it.
+1. **Run the re-validation in a threadpool** using `asyncio.get_event_loop().run_in_executor(None, validate_and_check_integrity)`. This offloads the synchronous work to a thread, keeping the event loop responsive.
+2. **Cache the validation result** with a timestamp. Instead of re-running full validation on every Nth request, check "has it been M seconds since last validation?" and only re-validate if both the request count AND time threshold are met. This bounds the worst-case frequency.
+3. **Keep the counter as a simple integer in the compiled module.** In CPython, integer increment (`counter += 1`) is atomic due to the GIL, even with multiple uvicorn workers (each worker is a separate process with its own counter, which is fine -- each process validates independently).
+4. **Set N to a reasonable value** like 500-1000 requests, not 10 or 50. At 100 req/s peak, N=500 means re-validation every 5 seconds -- more than sufficient to catch a mid-runtime license change.
 
 **Warning signs:**
-- E2E tests pass locally (API key in `.env`) but fail in CI (no key)
-- CI workflow does not set `GOOGLE_MAPS_API_KEY` secret
-- Tests rely on real geocoding results instead of seeded/cached data
-- CI costs increase as more tests trigger geocoding API calls
+- Latency spikes every N requests in driver PWA network tab
+- Uvicorn logs show "WARNING: ... took longer than expected" for middleware
+- `asyncio` debug mode reports "Executing ... took 0.050 seconds"
 
-**Phase to address:** Playwright E2E setup phase -- establish the mocking/seeding strategy before writing any test that touches the upload flow.
+**Phase to address:**
+Phase 4 (Periodic re-validation) -- must use threadpool executor from the start, not retrofitted after performance complaints.
 
 ---
 
-### Pitfall 7: License Lifecycle Documentation Assumes Technical Reader for Non-Technical Customer
+### Pitfall 7: Cython Build Produces Architecture-Mismatched .so for Docker
 
 **What goes wrong:**
-License lifecycle documentation (generate -> deliver -> activate -> renew -> troubleshoot) is written with developer terminology: "HMAC validation," "hardware-bound key," "magic bytes." The first customer is a Vatakara HPCL office with non-technical staff. They receive a `license.key` file and instructions to "place it in the project root." They do not know what a "project root" is, or how to place a file in a WSL Linux directory from Windows.
+If `build-dist.sh` runs on an ARM Mac (Apple Silicon) or any non-x86_64 host, the compiled `.so` will be for the wrong architecture. The Docker container runs `python:3.12-slim` which is x86_64 Linux (or matches the Docker host platform). A `.so` compiled natively on macOS/ARM will produce `license_manager.cpython-312-aarch64-linux-gnu.so` or `license_manager.cpython-312-darwin.so`, which the x86_64 container cannot load.
 
-Worse, when the license expires or the hardware changes (new laptop), the error message says something like "License validation failed" with no instructions on what to do. The customer calls support, and there is no documented procedure for the support person to follow.
-
-**Why it happens:**
-License systems are built by developers for developers. The documentation describes the mechanism (HMAC, hardware binding) rather than the user workflow (what to do when you see an error). First-customer documentation is always the hardest because there is no feedback loop yet.
-
-**How to avoid:**
-1. Write TWO documents: one for the developer (how the licensing system works internally) and one for the customer (what to do when X happens).
-2. Customer-facing license doc must cover:
-   - "Your license expires on [date]. You will see a yellow warning 30 days before." (if applicable)
-   - "If you see 'License expired,' contact [phone/email] with your license ID."
-   - "If you moved to a new computer, your license key needs to be re-issued. Contact [phone/email]."
-   - "Where is my license file?" -> `C:\Users\[name]` in WSL becomes `~/routing_opt/license.key` -- show the Windows path equivalent.
-3. Add a license status indicator to the dashboard UI (green = valid, yellow = expiring soon, red = expired/invalid) with a plain-English message.
-4. The license troubleshooting guide must include the exact error messages and their meanings, not generic descriptions.
-
-**Warning signs:**
-- License docs mention HMAC, hardware fingerprinting, or bytecode
-- No mapping from error messages to customer actions
-- License file delivery instructions assume Linux terminal familiarity
-- No "contact support" procedure documented for license issues
-
-**Phase to address:** License lifecycle documentation phase -- write the customer-facing document first, then the developer reference.
-
----
-
-### Pitfall 8: Tarball Missing Critical Files Due to rsync Exclusion Overshoot
-
-**What goes wrong:**
-`build-dist.sh` uses `rsync --exclude` to strip developer artifacts. Adding a new exclude pattern (e.g., `--exclude='*.test.*'` to remove test files) accidentally catches production files that match the pattern. Or a new directory added to the project is not explicitly included and gets silently excluded by a broad pattern. The tarball builds successfully, the import validation passes (it only checks `core/licensing`), but the API fails at runtime because a template file, migration script, or configuration file is missing.
-
-Specific risks for this project:
-- `--exclude='data/'` removes the empty `data/` directory, but the API expects `data/` to exist at `/app/data` for uploads.
-- `--exclude='scripts/generate_license.py'` correctly excludes the license generator, but if other scripts are added in `scripts/`, they might need to be explicitly included.
-- `.env.example` is included but not verified to have correct placeholder values.
-- Alembic migration files (`infra/alembic/`) must be included or the `db-init` container fails.
+This is not currently a problem (deployment is WSL2 on x86_64), but it will bite if the developer works on a Mac or if the build pipeline moves to GitHub Actions (which uses x86_64 Linux runners by default but may switch to ARM).
 
 **Why it happens:**
-Exclusion-based packaging (exclude what you do not want) is fragile because new files are included by default until someone adds an exclusion. Inclusion-based packaging (include only what you want) is safer but requires updating the include list when new files are added. `build-dist.sh` uses exclusion. There is no post-build verification that the tarball contains everything needed.
+Cython compiles to native code, unlike `.pyc` which is platform-independent bytecode. The current `.pyc` approach works everywhere because CPython's bytecode is architecture-agnostic. Switching to `.so` breaks this portability.
 
 **How to avoid:**
-1. Add a manifest verification step to `build-dist.sh` that checks for required files after staging:
-   ```bash
-   REQUIRED_FILES=(
-     "docker-compose.yml"
-     "infra/Dockerfile"
-     "infra/Dockerfile.dashboard"
-     "alembic.ini"
-     "infra/alembic/env.py"
-     "scripts/install.sh"
-     "scripts/start.sh"
-     "scripts/bootstrap.sh"
-     "apps/kerala_delivery/api/main.py"
-     "apps/kerala_delivery/driver_app/index.html"
-     "core/licensing/__init__.pyc"
-     "core/licensing/license_manager.pyc"
-     ".env.example"
-   )
-   for f in "${REQUIRED_FILES[@]}"; do
-     [ -f "$STAGE/$f" ] || { error "Missing required file: $f"; exit 1; }
-   done
-   ```
-2. Add a tarball-contents smoke test: extract to a temp directory and verify the file tree matches expectations.
-3. If adding new rsync excludes, always test by running `build-dist.sh` and then extracting the tarball and diffing against expected contents.
+1. **Always compile inside the target Docker container**, not on the host. Use a Docker-based build step: `docker run --rm -v $(pwd):/app -w /app python:3.12-slim pip install cython && python setup.py build_ext --inplace`. This guarantees the `.so` matches the runtime environment.
+2. **Add an architecture check in `build-dist.sh`** that verifies the `.so` file's ELF header matches the target: `file "$STAGE/core/licensing/license_manager*.so" | grep -q "x86-64" || { echo "ERROR: .so is not x86_64"; exit 1; }`.
+3. **Document the build requirement**: "Must build on x86_64 Linux or inside Docker."
 
 **Warning signs:**
-- `build-dist.sh` has more than 15 `--exclude` patterns (complexity increases error risk)
-- No post-staging file verification step
-- Tarball tested by "it builds" not "it contains everything"
-- New files added to the project without updating `build-dist.sh` verification
+- `ImportError: ... wrong ELF class` or `invalid ELF header` in container logs
+- `.so` filename contains `darwin` or `aarch64` instead of `x86_64-linux-gnu`
+- Build works on developer's machine but fails in Docker
 
-**Phase to address:** Distribution verification phase -- add manifest check to `build-dist.sh` before building the v1.4 tarball.
-
----
-
-### Pitfall 9: Stop Script Sends SIGKILL to PostgreSQL Before Dirty Pages Are Flushed
-
-**What goes wrong:**
-Docker's default grace period is 10 seconds. `docker compose stop` sends SIGTERM, waits 10 seconds, then sends SIGKILL. PostgreSQL needs time to flush dirty pages, complete in-flight transactions, and write checkpoint records. If PostgreSQL is mid-write when SIGKILL arrives, the database may need recovery on next startup (adding 30-60 seconds to boot time) or, in worst cases, suffer minor data corruption.
-
-For this project, PostgreSQL holds delivery records, geocode cache, and route history. Data loss or corruption here means re-importing and re-geocoding all addresses (which costs real money via Google API calls).
-
-**Why it happens:**
-The default `stop_grace_period` of 10 seconds is designed for stateless web services. Databases need more time. Developers test stop/start with small datasets where PostgreSQL flushes instantly, so they never hit the timeout.
-
-**How to avoid:**
-1. Set `stop_grace_period: 30s` for the `db` service in `docker-compose.yml`:
-   ```yaml
-   db:
-     stop_grace_period: 30s
-   ```
-2. The stop script should stop services in dependency-reverse order: API first (stops accepting requests), then VROOM/OSRM (stateless, can be killed), then PostgreSQL last (needs graceful shutdown time).
-3. Use `docker compose stop` (not `down`) in the stop script. `stop` sends SIGTERM and respects grace period. `down` also removes containers, which is unnecessary for daily shutdown.
-4. Verify PostgreSQL receives SIGTERM correctly: the `postgis/postgis:16-3.5` image should handle this natively, but confirm with `docker compose stop db && docker compose logs db --tail=5` -- look for "received fast shutdown request."
-
-**Warning signs:**
-- `docker compose logs db` shows "redo" or "recovery" messages on startup (indicates unclean previous shutdown)
-- Stop script uses `docker compose down` instead of `docker compose stop`
-- No `stop_grace_period` configured for the db service
-- PostgreSQL startup takes 30+ seconds (recovery in progress)
-
-**Phase to address:** Stop/GC script phase -- configure grace period when writing the stop script.
-
----
-
-### Pitfall 10: E2E Tests Leak State Between Test Runs, Causing Order-Dependent Failures
-
-**What goes wrong:**
-An E2E test uploads a CSV file and creates routes. The next test expects a clean state but finds leftover data from the previous test. Results: test 2 sees unexpected orders in the route list, vehicle selection shows vehicles already assigned, or the "no deliveries" empty state never appears because the database has stale data. Tests pass when run individually but fail when run as a suite.
-
-**Why it happens:**
-E2E tests against a real database accumulate state. Unlike unit tests (which mock the database), E2E tests write real data through the API. Without explicit cleanup, each test inherits the previous test's data. This is the #1 source of flaky E2E test suites.
-
-**How to avoid:**
-1. Reset database state before each test file (not each individual test -- too slow). Use a `beforeAll` hook that calls a test-only API endpoint to truncate tables, or run an SQL script via `docker compose exec db psql -c "TRUNCATE orders, routes, route_assignments, route_stops CASCADE"`.
-2. Alternatively, use database transactions: start a transaction before each test and roll it back after. This is faster but harder to implement with E2E tests because the API runs in a separate process.
-3. Add a test-only `/api/test/reset` endpoint (guarded by `ENVIRONMENT=test`) that truncates all tables. This is the pragmatic approach for a project with one test database.
-4. Never depend on test execution order. Each test must set up its own preconditions.
-
-**Warning signs:**
-- Tests pass in isolation (`npx playwright test upload.spec.ts`) but fail as a suite
-- Test failures mention unexpected data counts ("expected 0 routes, got 3")
-- Adding `--workers=1` "fixes" failures (sequential execution reduces but does not eliminate state leakage)
-- Rerunning the same failing test immediately after failure passes (state was cleaned up by the failed test's side effects)
-
-**Phase to address:** Playwright E2E setup phase -- establish the state management strategy before writing any test that modifies data.
+**Phase to address:**
+Phase 1 (Cython compilation pipeline) -- the build must be containerized from day one.
 
 ---
 
 ## Technical Debt Patterns
 
-Shortcuts that seem reasonable but create long-term problems.
-
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Compiling .pyc on developer machine instead of in Docker | Faster build-dist.sh, no Docker dependency for build | .pyc magic number mismatch when Docker image Python version drifts | Never for customer distribution -- always compile in Docker |
-| `docker compose down` in stop script | Clean container state | Removes containers unnecessarily; adds 5-10s to next startup (containers must be recreated) | Only in reset script, never in daily stop |
-| Hardcoding `localhost:8000` in Playwright tests | Quick setup | Tests cannot run against a different host/port; breaks if port changes | Acceptable if `baseURL` is set in config, not per-test |
-| Skipping E2E tests in CI to speed up pipeline | CI runs 2 minutes faster | Silent regressions in UI flows; defeats the purpose of E2E tests | Never once E2E tests are added; use parallelism instead |
-| No database reset between E2E test files | Tests run faster | Order-dependent failures, flaky suite, developer distrust of tests | Never -- test isolation is non-negotiable |
-| Using `page.waitForTimeout(2000)` instead of proper waits | Fixes flaky test immediately | Creates slow, fragile tests; masks real timing bugs | Only as temporary debugging aid, never in committed code |
-
----
+| Compiling `.so` on host instead of in Docker | Faster build iteration | Breaks on any platform mismatch; silent import failures | Never for distribution builds; OK for local testing only |
+| Text-based sed stripping of dev-mode code | Simple, no Python dependency in build | Breaks on any reformatting; no syntax validation | Never -- use AST-based or sentinel-based approach |
+| Including docker-compose.yml in integrity manifest | More files "protected" | Customer edits break license; support burden | Never -- protect code files only |
+| Hardcoding N=100 for re-validation counter | Simple implementation | Too frequent at high load; performance cost | Only if combined with time-based debounce |
+| Using `uuid.getnode()` for MAC in WSL2 | No code change needed | Fingerprint changes on reboot; license breaks | Never on WSL2 -- remove MAC entirely |
+| Monolithic `validate_license()` doing fingerprint + integrity + expiry | Single function, simple | Cannot test components independently; re-validation is all-or-nothing | Only in v1.x; refactor for v2.1 to separate concerns |
 
 ## Integration Gotchas
 
-Common mistakes when connecting these v1.4 features to the existing system.
-
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Playwright + Docker Compose | Using `webServer` config to start Docker Compose (race condition on port open vs service ready) | Use `globalSetup` with health endpoint polling; start Docker Compose independently |
-| Playwright + GitHub Actions | Running E2E tests on same runner as Docker containers without increasing timeouts | Use `--workers=1`, increase timeouts 2-3x for CI, upload trace artifacts |
-| E2E tests + Google Maps API | Tests depend on real geocoding API (costs money, fails in CI, flaky) | Seed database with pre-geocoded addresses; mock geocoding for E2E |
-| Stop script + PostgreSQL | Using `docker compose down` which removes containers, or not setting grace period for DB | Use `docker compose stop` with `stop_grace_period: 30s` on db service |
-| build-dist.sh + Docker Python version | Compiling .pyc with local Python that differs from Docker image Python | Compile .pyc inside Docker, or pin Docker image to exact patch version |
-| Tarball + file permissions | Tarball preserves developer's UID/GID which differs from Docker's appuser (1001) | Verify tarball contents work with the Docker non-root user; test extraction + build |
-| CI Playwright + browser cache | Downloading 400MB browsers on every CI run | Cache browsers with `actions/cache` keyed on Playwright version, or use Playwright Docker image |
-| License docs + customer deployment | Documenting license.key placement as a Linux path (`~/routing_opt/license.key`) | Show the Windows Explorer path and explain how to access WSL filesystem from Windows |
-| E2E tests + existing 420 unit tests | Running Playwright E2E in same CI job as pytest, exceeding runner time limits | Separate CI jobs: `test` (pytest, 2 min), `e2e` (Playwright, 5-10 min), `docker` (build verify, 2 min) |
-
----
+| Cython + Docker multi-stage build | Installing Cython in runtime stage (bloats image, exposes build tools) | Install Cython only in the builder stage; copy only the compiled `.so` to runtime stage; never ship Cython itself |
+| `/etc/machine-id` bind mount | Mounting without `:ro` flag; container could theoretically write to host's machine-id | Always use `- /etc/machine-id:/etc/machine-id:ro` in docker-compose.yml; add comment explaining why |
+| `/proc/cpuinfo` in Docker | Reading `cpu MHz` (fluctuates with power management) or `processor` count (varies with `--cpus` flag) | Read only `model name` and `vendor_id` -- these are hardware constants that don't change with Docker resource limits |
+| Cython + existing test suite | Tests import from `core.licensing.license_manager` which no longer exists as `.py` | Tests must run against source `.py` (not compiled `.so`); keep `.py` in the repository; only remove in `build-dist.sh` staging |
+| License renewal + fingerprint change | Generating renewal key with old fingerprint signals (MAC), which no longer match after the fingerprinting upgrade | Generate renewal keys using the NEW fingerprint format; provide a migration path for existing customers (re-run `get_machine_id.py` with updated script) |
+| `build-dist.sh` + Cython setup.py | Running `setup.py build_ext` in the project root, polluting source tree with `.so` files and `build/` directory | Use `--build-lib` to output to the staging directory; or run inside an isolated temp directory; clean up `build/` and `*.c` intermediates |
 
 ## Performance Traps
 
-Patterns that work at small scale but fail as the CI pipeline or test suite grows.
-
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| Downloading Playwright browsers on every CI run | CI takes 3+ minutes before first test; 400MB bandwidth per run | Cache with `actions/cache` on `~/.cache/ms-playwright`, keyed on Playwright version in package.json | Immediately on first CI run; gets worse with more frequent pushes |
-| Running all E2E tests serially on one CI runner | CI pipeline takes 15+ minutes as E2E suite grows | Shard tests across multiple runners with `--shard=1/3` when suite exceeds 5 minutes | At ~20 E2E test files or 10 minutes total |
-| Rebuilding Docker images on every E2E CI run | Adds 2-3 minutes per run; Docker layer cache cold in CI | Use `docker compose build` with `DOCKER_BUILDKIT=1` and GitHub Actions Docker layer cache | Immediately; mitigate with `type=gha` cache in `docker/build-push-action` |
-| Not pruning Docker artifacts in stop/GC script | Disk fills on customer machine after weeks of daily use (old images, build cache, logs) | Stop script includes periodic pruning: `docker image prune -f`, `docker builder prune -f` | After 2-4 weeks of daily Docker rebuilds; faster if dashboard has frequent updates |
-
----
+| Synchronous integrity check in async middleware | All concurrent requests block during file hashing; latency spikes every N requests | Use `run_in_executor()` for file I/O and hashing; cache result with TTL | At ~50 concurrent requests; noticeable at 100+ |
+| Re-hashing all manifest files on every check | Disk I/O on overlayfs is slow; each file read + SHA256 = 5-20ms | Hash once at startup; re-hash only on re-validation trigger (every Nth request) | At any concurrency level -- overlayfs is slow |
+| Full `validate_license()` on every re-validation | Reads license.key from disk, computes fingerprint, decodes key, checks expiry | Cache decoded license info; only re-read file if mtime changed; only recompute fingerprint on first call (it doesn't change mid-runtime) | Immediately measurable; 10-50ms per validation call |
 
 ## Security Mistakes
 
-Domain-specific security issues for v1.4 features.
-
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Google Maps API key stored in GitHub Actions as a plain env var (not a Secret) | Key visible in CI logs, accessible to anyone with repo read access | Always use `secrets.GOOGLE_MAPS_API_KEY`, never `env` in workflow YAML; ideally skip real key in CI entirely |
-| Test-only `/api/test/reset` endpoint accessible in production | Anyone can truncate the production database | Guard with `if os.environ.get('ENVIRONMENT') == 'test'` AND check for a test-only header/token; better: only register the route when `ENVIRONMENT=test` |
-| License key included in distribution tarball | Customer A's license key works on any machine if tarball is shared | License key must NOT be in the tarball; deliver it separately via secure channel (encrypted email, in-person USB) |
-| Trace artifacts from E2E tests uploaded as public CI artifacts | Traces contain screenshots of the app, potentially with test data that mirrors real delivery addresses | Set artifact retention to 7 days (not 30); ensure test data is synthetic, not derived from real customer data |
-
----
-
-## UX Pitfalls
-
-Common user experience mistakes specific to v1.4 features.
-
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| License error shows "HMAC validation failed" | Office employee has no idea what this means; system unusable until developer interprets | Show "License problem -- please contact [support phone]. Error code: L-001" with a code the developer can look up |
-| Stop script has no feedback during shutdown | User runs `./stop.sh`, sees nothing for 10-30 seconds, thinks it is broken | Show per-service status during shutdown: "Stopping API... done. Stopping OSRM... done. Stopping database... done." |
-| Google API troubleshooting doc lists 8 possible causes | Office employee cannot diagnose which applies; gives up after step 2 | Decision tree: "Does the dashboard show addresses on the map? YES -> key is working. NO -> Is there a red error banner? YES -> read the banner text and go to Step X." |
-| License renewal requires CLI commands | Customer cannot renew without developer/IT assistance | Document the renewal as a file replacement: "Delete old license.key, copy new license.key to same location, restart the system" |
-
----
+| Embedding HMAC secret in compiled `.so` without changing the derivation seed | Determined attacker extracts the seed from the old `.pyc` (trivial) and it still works with the new `.so` | Rotate the `_DERIVATION_SEED` value when switching from `.pyc` to `.so`; existing license keys must be re-generated |
+| Integrity manifest stored as a separate file (not embedded in `.so`) | Attacker replaces both the manifest file and the code files; manifest check passes with attacker's hashes | Embed manifest directly in the Cython source before compilation; it becomes part of the native binary |
+| Request counter stored in `app.state` (Python object) | Attacker patches `main.py` to reset counter to 0 on each request, preventing re-validation | Store counter inside the compiled `.so` module as a module-level variable; inaccessible without reverse-engineering the binary |
+| `/etc/machine-id` readable by any process in the container | Not a real risk for licensing, but principle of least privilege | Mount read-only; run container as non-root (already done); this is defense in depth |
+| Logging fingerprint details in plaintext | Customer sends logs to support; logs contain all fingerprint signals; attacker on same network intercepts | Log only the final SHA256 hash, never the component signals (hostname, machine-id, CPU info); current code already follows this pattern |
+| Not changing the HMAC key derivation when format changes | License keys from v1.x (with MAC + container_id fingerprint) could be replayed against v2.1 (with machine-id + cpuinfo fingerprint) if the HMAC key is unchanged | The fingerprint is embedded IN the key, so old keys won't match new fingerprints; BUT if the attacker generates their own key, the same HMAC key means the generation script still works. Rotate the seed. |
 
 ## "Looks Done But Isn't" Checklist
 
-Things that appear complete but are missing critical pieces.
-
-- [ ] **Playwright E2E tests:** Pass locally but no `globalSetup` health check -- will fail in CI cold start
-- [ ] **Playwright E2E tests:** No database reset between test files -- will produce order-dependent failures as suite grows
-- [ ] **Playwright E2E tests:** Use real Google Geocoding API -- will fail in CI where no API key exists
-- [ ] **Playwright config:** Default timeouts work locally but are too short for CI runners
-- [ ] **CI workflow:** Installs Playwright browsers on every run instead of caching -- adds 2+ minutes per run
-- [ ] **CI workflow:** E2E job does not upload trace artifacts -- failures are un-debuggable
-- [ ] **CI workflow:** E2E and pytest run in same job -- exceeds runner time limit as test count grows
-- [ ] **build-dist.sh:** .pyc compiled with local Python, not Docker image Python -- magic number mismatch risk
-- [ ] **build-dist.sh:** No manifest verification of required files after staging -- missing files not caught until customer install
-- [ ] **build-dist.sh:** tarball tested by "it builds" not "it extracts and boots in a fresh environment"
-- [ ] **Stop script:** Uses `docker compose down` instead of `docker compose stop` -- unnecessarily removes containers
-- [ ] **Stop script:** No `stop_grace_period` for PostgreSQL -- risk of unclean shutdown on slow machines
-- [ ] **Stop script:** No per-service progress feedback -- user thinks script is broken during 10-30s shutdown
-- [ ] **License lifecycle doc:** Written for developers, not for office staff -- mentions HMAC, hardware binding, magic bytes
-- [ ] **License lifecycle doc:** No mapping from error messages to customer actions
-- [ ] **License lifecycle doc:** No "contact support" procedure with phone number / email
-- [ ] **Google API troubleshooting:** Lists technical causes without a user-facing decision tree
-- [ ] **Clean install verification:** Tested on developer machine with cached Docker images and OSRM data, not fresh WSL instance
-- [ ] **Prod vs dev docs:** Do not explain which docker-compose file to use when, or how to switch between them
-
----
+- [ ] **Cython compilation:** Often missing the `__init__.py` compilation -- both `__init__.py` AND `license_manager.py` must be compiled to `.so`. If `__init__.py` is left as `.py`, it creates an import inconsistency. If it's deleted without compilation, `import core.licensing` fails entirely.
+- [ ] **Dev-mode stripping:** Often strips the code but forgets to remove the `ENVIRONMENT` variable from `docker-compose.yml` -- customer sets `ENVIRONMENT=development` in `.env` and bypasses everything.
+- [ ] **Fingerprint migration:** Often updates `license_manager.py` fingerprinting but forgets to update `scripts/get_machine_id.py` -- customer runs old script, sends old fingerprint, gets a key that doesn't match new validation.
+- [ ] **Docker volume mount:** Often adds `/etc/machine-id` mount to `docker-compose.yml` but forgets `docker-compose.license-test.yml` and `docker-compose.prod.yml` -- E2E license tests fail or production deploys fail.
+- [ ] **build-dist.sh exclusions:** Often adds Cython build artifacts (`.c` files, `build/` directory, `*.egg-info`) but forgets to add them to the rsync `--exclude` list -- tarball ships with intermediate C files and build metadata.
+- [ ] **License renewal E2E test:** Often tests renewal happy path but forgets to test renewal-after-fingerprint-change scenario -- renewal works in dev but fails for customers who rebooted between initial license and renewal.
+- [ ] **Verify-dist.sh updates:** Often updates `build-dist.sh` for Cython but forgets to update `verify-dist.sh` which still checks for `.pyc` files instead of `.so` files.
+- [ ] **ENVIRONMENT variable removal:** Strips dev-mode code from `main.py` but leaves `ENVIRONMENT=${ENVIRONMENT:-development}` in docker-compose.yml; the variable is unused but confusing, and a determined attacker might try to re-add the dev-mode code path.
 
 ## Recovery Strategies
 
-When pitfalls occur despite prevention, how to recover.
-
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| .pyc magic number mismatch in customer tarball | MEDIUM | Rebuild tarball using Docker-based compilation; re-deliver to customer; no data loss |
-| Stop script accidentally removed database volume | HIGH | Restore from most recent `backups/*.sql.gz` (if backup script was configured); if no backup, all data is lost -- must re-import all CSVs and re-geocode (costs Google API credits) |
-| E2E tests flaky in CI | LOW | Add `retries: 2`, increase timeouts, use `--workers=1`; investigate root cause from trace artifacts |
-| Playwright tests fail because Google API key missing in CI | LOW | Switch to seeded/cached geocode data for E2E tests; add key as GitHub Secret only for the geocoding integration test |
-| Tarball missing required file | LOW | Add file to rsync include or remove from exclude list; add to manifest check array; rebuild and re-deliver |
-| License expired at customer site | MEDIUM | Generate new license key; deliver to customer; they replace `license.key` file and restart. Recovery depends on how fast you can reach the customer. |
-| Clean install fails on customer machine | HIGH | Remote diagnosis required; could be OSRM OOM, Python version mismatch, Docker not installed, or missing .env values. Each diagnosis takes 30-60 minutes remotely. Prevention via thorough clean install testing is far cheaper. |
-| E2E test state leakage causing false failures | LOW | Add database reset to `beforeAll` hooks; rerun tests to verify; fix is mechanical once identified |
-
----
+| .so version mismatch (wrong Python version) | LOW | Rebuild with correct Python version inside Docker; re-package tarball; no customer data lost |
+| Fingerprint changes after WSL reboot | MEDIUM | Customer re-runs `get_machine_id.py`, sends new fingerprint; we generate new key or renewal key; customer replaces `license.key` and restarts. Requires support interaction. |
+| Dev-mode stripping produces broken main.py | HIGH | Customer's API is completely down. Emergency: ship a corrected tarball. Prevention is much cheaper than recovery. |
+| Integrity manifest blocks legitimate edits | LOW | Customer restores original file from backup or re-extracts from tarball; OR we ship a new build with corrected manifest. Support must identify which file was modified. |
+| Event loop blocked by sync re-validation | LOW | Deploy a patched version with `run_in_executor()`. No data loss, just performance degradation until patched. |
+| HMAC seed not rotated, old keys still work | MEDIUM | Generate new keys with new seed for all customers; coordinate key replacement. Old keys stop working immediately when new `.so` is deployed. Must time the rollout carefully. |
+| Architecture-mismatched .so in tarball | LOW | Rebuild inside Docker on correct platform; re-package; no data loss. But the customer's system is down until the new tarball arrives. |
 
 ## Pitfall-to-Phase Mapping
 
-How roadmap phases should address these pitfalls.
-
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| Service startup race condition | Playwright E2E setup | Tests pass on cold start: `docker compose down && npx playwright test` |
-| CI flakiness (timeouts, resources) | CI/CD pipeline integration | 10 consecutive CI runs with zero flaky failures |
-| .pyc version mismatch | Distribution verification | Build tarball, extract in fresh Docker container, run `python -c "import core.licensing"` |
-| Stop script data loss | Stop/GC script | Run stop script 10 times; verify `docker volume ls` still shows pgdata after each |
-| Clean install from tarball | Clean install verification | Extract tarball on fresh WSL instance with no Docker cache; full workflow completes |
-| Google API key missing in E2E | Playwright E2E setup | CI E2E tests pass with no `GOOGLE_MAPS_API_KEY` set |
-| License docs for non-technical user | License lifecycle docs | Hand document to non-technical person; they can identify their license status and know who to contact |
-| Tarball missing files | Distribution verification | Manifest check in `build-dist.sh` passes; tarball extract matches expected file list |
-| Database state leakage in E2E | Playwright E2E setup | Run full test suite 3 times consecutively; all pass with identical results |
-| PostgreSQL unclean shutdown | Stop/GC script | After stop + start, `docker compose logs db` shows no "recovery" messages |
-| Playwright browser caching in CI | CI/CD pipeline integration | Second CI run uses cached browsers (check `actions/cache` hit in logs) |
-| License error messages for office staff | License lifecycle docs | Every license error code has a plain-English explanation and "contact support" instruction |
-
----
+| .so Python version lock | Phase 1: Cython Pipeline | `python3 -c "import core.licensing"` runs inside Docker container after build; `.so` filename contains `cpython-312` |
+| WSL2 MAC address instability | Phase 2: Fingerprint Hardening | `get_machine_id.py` produces same output before and after WSL restart; no `uuid.getnode()` calls remain |
+| Async code in compiled module | Phase 1: Cython Pipeline | `grep -r "async def" core/licensing/` returns nothing; build-time check enforced |
+| Dev-mode stripping syntax errors | Phase 1: Dev-Mode Stripping | `python3 -c "ast.parse(...)"` against stripped `main.py`; pytest runs against staged directory |
+| Integrity manifest over-coverage | Phase 3: Integrity Manifest | Manifest file list documented; `docker-compose.yml` explicitly excluded; customer can edit `.env` without triggering integrity failure |
+| Event loop blocking on re-validation | Phase 4: Periodic Re-Validation | Load test with 50 concurrent requests; no request takes >200ms during re-validation window |
+| Architecture mismatch | Phase 1: Cython Pipeline | `file *.so` shows `x86-64` and `ELF`; build runs inside Docker |
+| HMAC seed not rotated | Phase 1: Cython Pipeline | Old license keys fail validation with new `.so`; generate_license.py updated with new seed |
+| `get_machine_id.py` out of sync | Phase 2: Fingerprint Hardening | `get_machine_id.py` and `license_manager.py` produce identical fingerprints on same machine |
+| Docker volume mounts missing | Phase 2: Fingerprint Hardening | All docker-compose*.yml files mount `/etc/machine-id:ro`; E2E license tests pass |
+| verify-dist.sh still checks .pyc | Phase 1: Cython Pipeline | `verify-dist.sh` checks for `.so` files and validates they import correctly |
+| ENVIRONMENT variable in docker-compose.yml | Phase 1: Dev-Mode Stripping | Distributed `docker-compose.yml` does not reference `ENVIRONMENT` variable at all |
 
 ## Sources
 
-- [Playwright Official: Setting up CI](https://playwright.dev/docs/ci-intro) -- recommended CI configuration, artifact upload, trace collection
-- [Playwright Official: Docker](https://playwright.dev/docs/docker) -- Docker image names (`mcr.microsoft.com/playwright`), `--ipc=host` requirement, `--init` flag
-- [Playwright Official: Timeouts](https://playwright.dev/docs/test-timeouts) -- timeout configuration hierarchy
-- [Playwright webServer race condition with Docker Compose](https://github.com/sillsdev/web-languageforge/issues/1402) -- port-open != service-ready
-- [Avoiding Flaky Tests in Playwright (Better Stack)](https://betterstack.com/community/guides/testing/avoid-flaky-playwright-tests/) -- explicit waits, stable selectors, retry strategies
-- [Why Playwright Tests Fail in CI but Pass Locally (JavaScript in Plain English)](https://javascript.plainenglish.io/why-your-playwright-tests-fail-in-ci-but-pass-locally-and-how-to-fix-it-54fa19836737) -- CI resource constraints, timeout adjustment
-- [Docker Compose stop documentation](https://docs.docker.com/reference/cli/docker/compose/stop/) -- SIGTERM, grace period, SIGKILL behavior
-- [Docker Compose down documentation](https://docs.docker.com/reference/cli/docker/compose/down/) -- `-v` removes volumes, default behavior
-- [Why You Need to Wait When Stopping Docker Compose Services (vsupalov.com)](https://vsupalov.com/docker-compose-stop-slow/) -- signal propagation, grace period configuration
-- [Docker Graceful Shutdown and Signal Handling](https://oneuptime.com/blog/post/2026-01-16-docker-graceful-shutdown-signals/view) -- SIGTERM handling in containers
-- [PEP 3147 -- PYC Repository Directories](https://peps.python.org/pep-3147/) -- .pyc magic numbers, version-specific caching, `-b` flag for legacy placement
-- [Python .pyc Bytecode Compatibility (CPython Bug Tracker)](https://bugs.python.org/issue41650) -- .pyc not portable across Python versions
-- [The Benefits and Limitations of PYC-only Distribution (Nick Coghlan)](https://www.curiousefficiency.org/posts/2011/04/benefits-and-limitations-of-pyc-only/) -- .pyc-only distribution constraints
-- [Google Maps Error Messages (Official)](https://developers.google.com/maps/documentation/javascript/error-messages) -- REQUEST_DENIED causes, billing requirements
-- [Google Maps Troubleshooting (Official)](https://developers.google.com/maps/documentation/javascript/troubleshooting) -- API key verification steps
-- [How to Fix Google Maps API Billing Error (Storepoint)](https://storepoint.co/help/articles/how-to-fix-a-google-maps-api-billing-error) -- billing setup, expired credit card causes
-- Codebase inspection: `build-dist.sh` (rsync excludes, .pyc compilation with `-b` flag, import validation), `docker-compose.yml` (service dependency chain, healthchecks, no `stop_grace_period`), `.github/workflows/ci.yml` (3 jobs, no Playwright, no E2E), `scripts/start.sh` (health polling pattern), `scripts/reset.sh` (interactive volume removal), `infra/Dockerfile` (Python 3.12-slim unpinned), `core/licensing/` (2 .py files compiled to .pyc)
+- [Cython FastAPI coroutine issue: FastAPI#1921](https://github.com/fastapi/fastapi/issues/1921)
+- [Cython .so naming convention: Cython documentation](https://cython.readthedocs.io/en/latest/src/userguide/source_files_and_compilation.html)
+- [WSL2 MAC address instability: microsoft/WSL#5352](https://github.com/microsoft/WSL/issues/5352)
+- [WSL2 fixed MAC address request: microsoft/WSL#5291](https://github.com/microsoft/WSL/issues/5291)
+- [Python uuid.getnode() not tied to MAC with libuuid: cpython#132710](https://github.com/python/cpython/issues/132710)
+- [Cython async iscoroutinefunction issue: cython/cython#2273](https://github.com/cython/cython/issues/2273)
+- [FastAPI concurrency model: FastAPI docs](https://fastapi.tiangolo.com/async/)
+- [Docker /proc/cpuinfo inconsistencies: docker/for-mac#6111](https://github.com/docker/for-mac/issues/6111)
+- [Cython glibc version compatibility](https://snorfalorpagus.net/blog/2016/07/17/compiling-python-extensions-for-old-glibc-versions/)
+- [Protecting Python code with Cython and Docker](https://shawinnes.com/protecting-python/)
+- [Cython Pure Python Mode](https://cython.readthedocs.io/en/latest/src/tutorial/pure.html)
+- [Docker bind mount security: Docker docs](https://docs.docker.com/engine/storage/bind-mounts/)
+- [FastAPI thread safety discussion: fastapi#876](https://github.com/fastapi/fastapi/issues/876)
 
 ---
-*Pitfalls research for: Kerala LPG Delivery Route Optimizer -- v1.4 Ship-Ready QA*
-*Researched: 2026-03-08*
+*Pitfalls research for: v2.1 Licensing & Distribution Security*
+*Researched: 2026-03-10*

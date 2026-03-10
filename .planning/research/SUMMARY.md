@@ -1,190 +1,187 @@
 # Project Research Summary
 
-**Project:** Kerala LPG Delivery Route Optimizer -- v1.4 Ship-Ready QA
-**Domain:** E2E testing infrastructure, CI/CD integration, distribution verification, operational scripts for Docker Compose delivery app
-**Researched:** 2026-03-08
+**Project:** Kerala LPG Delivery Route Optimizer -- v2.1 Licensing & Distribution Security
+**Domain:** Software licensing enforcement, code protection, and integrity checking for a Python/FastAPI/Docker application deployed on WSL2
+**Researched:** 2026-03-10
 **Confidence:** HIGH
 
 ## Executive Summary
 
-v1.4 is a QA and distribution-readiness milestone on a mature, working product (v1.3 shipped with 420+ pytest tests, Docker Compose orchestration, and full deployment scripts). The core gap is that no automated browser-level testing exists -- the 30+ item CLAUDE.md E2E checklist is performed manually via Playwright MCP but never encoded as repeatable tests. CI does not exercise the running application. The distribution tarball is built but never verified as installable on a fresh machine. No graceful stop script exists for daily end-of-shift use. All four research streams converge on a clear conclusion: the existing stack (Playwright already installed, Docker Compose already working, bash script conventions already established) needs configuration and test authoring, not new technology adoption.
+v2.1 is a security-hardening milestone that closes six identified loopholes in an already-working licensing system. The existing system (v2.0) provides HMAC-SHA256 license keys with machine fingerprinting, but uses `.pyc` bytecode (trivially decompilable), startup-only validation (no mid-runtime checks), an exploitable dev-mode bypass, and an unstable fingerprint that relies on Docker container IDs and WSL2 MAC addresses -- both of which change on routine operations. The goal is to move from "Tier 1" (license key at startup) to "Tier 2" (compiled enforcement with integrity checks) without changing the existing offline, single-customer deployment model.
 
-The recommended approach is a four-phase build: (1) Playwright test infrastructure and first tests against the running Docker stack, (2) CI integration with the E2E job, (3) distribution verification and the stop/GC script, (4) documentation consolidation. This ordering is driven by dependency analysis -- Playwright config gates all E2E work, local test stability gates CI integration, and distribution verification gates customer delivery. The total estimated effort is 20-30 hours across all phases.
+The recommended approach is Cython 3.2.4 compilation of the licensing module to native `.so` shared libraries, combined with SHA256 file integrity manifests embedded in the compiled binary, stronger machine fingerprinting using `/etc/machine-id` and `/proc/cpuinfo`, periodic request-count-based re-validation, dev-mode code stripping from distribution builds, and a license renewal mechanism. The entire stack addition is one build-time dependency (Cython) with zero new runtime dependencies on the customer machine. All technologies are stdlib-based or build-time-only. This is a well-scoped, dependency-light enhancement.
 
-The top risks are: Docker Compose service startup race conditions causing flaky tests in CI (solved by explicit health polling, not Playwright webServer); .pyc magic number mismatch between the developer's Python and the Docker image's Python (solved by compiling inside Docker); and the stop script accidentally destroying the production database volume (solved by using `docker compose stop` not `down -v`, and keeping volume cleanup exclusively in the existing `reset.sh`). All three risks have straightforward prevention strategies identified in the pitfalls research.
+The primary risks are: (1) Cython `.so` files are platform-and-version-locked -- building on the wrong Python version or architecture produces silent import failures, so compilation must happen inside the target Docker container; (2) WSL2 MAC addresses change on every reboot, so MAC must be dropped entirely from the fingerprint (not just supplemented); (3) the fingerprint formula change is a **breaking change** that invalidates all existing customer licenses, requiring a coordinated migration; and (4) dev-mode code stripping with naive `sed` can produce syntactically broken Python that takes down the customer's API -- AST-based validation or marker-based removal with syntax checks is mandatory.
 
 ## Key Findings
 
 ### Recommended Stack
 
-No new technologies are required. Playwright `@playwright/test` v1.58.2 is already installed as a devDependency. The stack additions are configuration files and scripts using existing tools. See `.planning/research/STACK.md` for full details.
+The existing Python 3.12 / FastAPI / Docker Compose stack is locked and unchanged. v2.1 adds exactly one build-time dependency: **Cython 3.2.4**. No new runtime dependencies are introduced on the customer machine. All other changes use Python stdlib (`hashlib`, `hmac`, `struct`) and Linux system files (`/etc/machine-id`, `/proc/cpuinfo`). See `.planning/research/STACK.md` for full details.
 
 **Core technologies:**
-- **Playwright 1.58.2 (already installed):** E2E test framework -- `playwright.config.ts` must be created at project root, Chromium-only in CI (drivers and office staff both use Chrome)
-- **GitHub Actions `ubuntu-latest` runner:** CI host for E2E -- install Playwright browsers directly on runner (not Docker-in-Docker) because the app itself IS a Docker Compose stack
-- **Built-in `github` + `html` reporters:** CI test reporting -- PR failure annotations + HTML artifact for debugging, no third-party reporter packages
-- **Bash 5.x (existing conventions):** Stop/GC script and verification scripts -- matches `set -euo pipefail`, color helpers, `header()`/`info()`/`success()`/`error()` function pattern from existing scripts
-- **ShellCheck (pre-installed on CI runners):** Shell script linting -- catches quoting bugs and unbound variables in all `scripts/*.sh` files
+- **Cython 3.2.4** (build-time only): Compiles `core/licensing/*.py` to native `.so` shared libraries. Replaces `.pyc` (decompilable in seconds) with real machine code (requires disassembly). Supports pure Python mode -- no `.pyx` rewrite of existing code needed. Zero customer-side dependencies.
+- **`hashlib.file_digest()`** (stdlib, Python 3.11+): SHA256 hashing of protected files for the integrity manifest. Already available in our Python 3.12 runtime.
+- **`/etc/machine-id`** (Linux system file): Stable 128-bit machine identifier that survives reboots and container recreation. Bind-mounted read-only into Docker. Replaces the unstable Docker container ID.
+- **`/proc/cpuinfo` model name** (Linux procfs): Hardware-intrinsic CPU identifier. Accessible inside Docker containers without special mounting. Cannot change without swapping physical CPU.
 
-**What NOT to add:** Cypress, Testcontainers, `@estruyf/github-actions-reporter`, `docker-compose-wait`, visual regression baselines, multi-browser testing. All were evaluated and rejected -- see STACK.md "What NOT to Add" section.
+**Critical version requirement:** The `.so` files are tagged `cpython-312-x86_64-linux-gnu`. Build and runtime must use the same Python minor version (3.12) and architecture (x86_64). Pin both in the Dockerfile and build script.
 
 ### Expected Features
 
-See `.planning/research/FEATURES.md` for full analysis including effort estimates and dependency graph.
+See `.planning/research/FEATURES.md` for full details including dependency graph and expected behavior specifications.
 
-**Must have (table stakes):**
-- Playwright E2E: API endpoint smoke tests (5-8 tests, no browser needed)
-- Playwright E2E: Driver PWA upload-to-delivery flow (the critical user path)
-- Playwright E2E: Dashboard route display and QR sheet generation
-- CI/CD pipeline with Playwright job (without this, E2E tests rot within weeks)
-- Stop script with garbage collection (daily end-of-shift use, separate from `reset.sh`)
-- Clean install verification from tarball (tests the product customers actually receive)
-- Google API key troubleshooting guide (single most common support issue)
-- Production vs development environment documentation
+**Must have (table stakes -- close the six identified loopholes):**
+- **Dev-mode stripping** -- Remove `ENVIRONMENT=development` bypass from distributed builds. Currently the easiest exploit: one env var disables all enforcement.
+- **Cython compilation to `.so`** -- Replace decompilable `.pyc` with native machine code. Prerequisite for three other features.
+- **Enforcement logic in compiled module** -- Move middleware from plain-text `main.py` into the compiled `.so`. Expose a single `enforce(app)` entry point.
+- **Stronger machine fingerprinting** -- Replace Docker container ID and MAC address with `/etc/machine-id` + CPU model + hostname. Stable across container recreation and reboots.
+- **SHA256 file integrity manifest** -- Embed hashes of protected files (main.py) in the compiled binary. Detect tampering at startup and periodically.
+- **Periodic re-validation** -- Re-check license + integrity every Nth request (N=500). Catches mid-runtime expiry or file modifications.
+- **License renewal mechanism** -- `--renew` flag on `generate_license.py` to extend expiry without requiring new fingerprint exchange.
 
-**Should have (differentiators):**
-- Playwright test report as CI artifact (saves hours of "works on my machine" debugging)
-- Distribution documentation (build-to-deliver pipeline consolidated)
-- License lifecycle documentation (generate, deliver, activate, renew, troubleshoot)
-- CI badge on README
-- Stop script with log rotation/truncation
+**Should have (differentiators -- professional polish):**
+- Compilation with `-O2` and `embedsignature=False` optimization flags
+- Build-time `.so` import validation
+- Expiry warning in API response headers (`X-License-Expires-In`)
+- License status in `/health` endpoint body for monitoring
+- Renewal notification logging (WARNING at 30 days, ERROR in grace period)
 
-**Defer (v1.5+):**
-- Visual regression tests (requires baseline image management)
-- Offline PWA E2E test (complex service worker testing)
-- License validation E2E test (covered by existing pytest unit tests)
-- Performance/load testing (irrelevant at 50 orders/day scale)
-- Multi-browser testing (irrelevant -- all users on Chrome)
+**Defer (v2+):**
+- Fingerprint similarity scoring (fuzzy match on partial signal changes)
+- Call-home license verification (offline requirement is a hard constraint)
+- Hardware dongle support
+- Centralized license server (makes sense at 50+ customers, not 1)
 
 ### Architecture Approach
 
-The architecture adds a Playwright test layer on top of the existing Docker Compose stack with no modifications to existing components. Tests run against `http://localhost:8000` where Docker Compose exposes ports. A Page Object Model pattern encapsulates UI selectors so tests remain stable when the UI changes (as it did in v1.1, v1.2). The stop script is the safe counterpart to `start.sh` -- it halts containers but preserves all data volumes. See `.planning/research/ARCHITECTURE.md` for full component diagrams and data flow.
+See `.planning/research/ARCHITECTURE.md` for full component diagrams, data flow changes, and code-level specifications.
+
+The architecture introduces two new compiled modules (`enforcement.py`, `integrity.py`) alongside the existing `license_manager.py`, all compiled to `.so` files via Cython. The key architectural shift is moving enforcement state (license info, request counter) from `app.state` (editable Python object) into module-level variables inside the compiled binary (inaccessible without reverse engineering). `main.py` reduces from ~50 lines of inline licensing logic to a single `enforce(app)` call. The build pipeline gains three new ordered steps: dev-mode stripping, manifest generation, and Cython compilation (order is critical -- manifest must be generated AFTER stripping but BEFORE compilation).
 
 **Major components:**
-1. **`playwright.config.ts`** -- Test runner configuration (baseURL, Chromium-only, CI-aware retries/reporters)
-2. **`e2e/` directory** -- Test specs, Page Object Models, fixtures, and helpers (separated from Python `tests/` to avoid pytest/Playwright discovery conflicts)
-3. **`e2e/pages/*.page.ts`** -- Page Object Models for Driver PWA, Upload flow, and Dashboard (encapsulate selectors, expose high-level actions like `uploadCSV()`, `markStopDone()`)
-4. **CI `e2e` job** -- 4th GitHub Actions job: start Docker Compose on runner, install Chromium, run tests, upload artifacts, teardown
-5. **`scripts/stop.sh`** -- Graceful shutdown (`docker compose stop`) with optional `--gc` flag for image/cache pruning; NEVER touches named volumes
-
-**Key architectural decisions:**
-- Docker Compose managed externally (not via Playwright `webServer`) -- avoids port-open-before-service-ready race condition
-- OSRM/VROOM skipped in CI -- too slow to download/preprocess; UI rendering and API contract tests do not need the optimization engine
-- Database state reset via `beforeAll` hooks or test-only reset endpoint -- prevents order-dependent test failures
-- E2E tests use pre-geocoded/seeded data -- avoids dependency on Google Maps API key in CI
+1. **`core/licensing/enforcement.py` (NEW, compiled to .so)** -- Single entry point for all enforcement. Registers middleware, performs startup validation, orchestrates periodic re-validation and integrity checking. Holds internal state (counter, cached license status) in compiled binary.
+2. **`core/licensing/integrity.py` (NEW, compiled to .so)** -- SHA256 manifest verification. Checks protected files against build-time-embedded hashes. Separated from enforcement for testability.
+3. **`core/licensing/license_manager.py` (MODIFIED, compiled to .so)** -- Updated fingerprint function (machine-id + cpuinfo + MAC, dropped container_id). Added renewal function.
+4. **`scripts/build-dist.sh` (MODIFIED)** -- Rewritten build pipeline: rsync -> strip dev-mode -> generate manifest -> inject manifest -> Cython compile -> remove source -> validate -> tar.
 
 ### Critical Pitfalls
 
-See `.planning/research/PITFALLS.md` for all 10 pitfalls with detailed prevention strategies.
+See `.planning/research/PITFALLS.md` for all seven critical pitfalls plus integration gotchas, technical debt patterns, and recovery strategies.
 
-1. **Service startup race condition** -- Docker opens ports before the app is ready; Playwright detects the port and starts tests prematurely. Prevention: use `globalSetup` with `/health` endpoint polling (not `webServer` config). Verification: tests pass on cold start `docker compose down && npx playwright test`.
+1. **Cython `.so` platform lock** -- The `.so` is pinned to `cpython-312-x86_64-linux-gnu`. Building on wrong Python version or architecture produces silent `ModuleNotFoundError`. **Avoid by:** compiling inside the target Docker container, adding version assertion in build script, testing import inside Docker.
 
-2. **CI resource constraints causing flaky tests** -- GitHub Actions shared runners have 2 vCPUs / 7 GB RAM running 4 Docker containers + Chromium simultaneously. Prevention: `--workers=1`, `retries: 2` in CI, `trace: 'on-first-retry'`, upload artifacts for debugging.
+2. **WSL2 MAC address instability** -- `uuid.getnode()` returns different values after every WSL2 reboot (microsoft/WSL#5352). This breaks fingerprints. **Avoid by:** dropping MAC address entirely from the fingerprint formula for WSL2 deployments, using `/etc/machine-id` as primary stable signal.
 
-3. **.pyc magic number mismatch in distribution tarball** -- `build-dist.sh` compiles `.pyc` with local Python; Docker image may use a different patch version. Prevention: compile .pyc inside Docker (`docker run --rm -v ... python:3.12-slim python -m compileall`), or pin Docker image to exact patch version.
+3. **Cython cannot compile async code safely** -- `async def` functions compiled with Cython fail `asyncio.iscoroutinefunction()` checks, causing silent runtime failures in FastAPI (FastAPI#1921). **Avoid by:** strict scope -- compile ONLY synchronous `core/licensing/` code. Add build-time `grep` check for `async def` in compilation targets.
 
-4. **Stop script destroys production database** -- `docker compose down -v` removes named volumes including `pgdata`. Prevention: use `docker compose stop` (not `down -v`); keep volume cleanup exclusively in `reset.sh` with confirmation prompts.
+4. **Dev-mode stripping can produce broken Python** -- Naive `sed` removal of if/else blocks leaves syntactically invalid code. Customer's API goes down completely. **Avoid by:** marker-based removal (`# DIST-STRIP-BEGIN` / `# DIST-STRIP-END`) with mandatory `ast.parse()` validation of the stripped file.
 
-5. **E2E tests leak state between runs** -- Tests upload CSVs and create routes; next test finds stale data. Prevention: database reset in `beforeAll` hooks or test-only `/api/test/reset` endpoint (guarded by `ENVIRONMENT=test`).
-
-6. **Google Maps API key missing in CI** -- Upload flow requires geocoding which fails without API key. Prevention: seed database with pre-geocoded addresses; E2E tests must pass with no `GOOGLE_MAPS_API_KEY` set.
-
-7. **Tarball missing critical files** -- `rsync --exclude` overshoot silently drops required files. Prevention: manifest verification step in `build-dist.sh` that checks for 15+ required files after staging.
+5. **Integrity manifest blocks legitimate config edits** -- If `docker-compose.yml` is in the manifest, customer's password change breaks the license. **Avoid by:** excluding `docker-compose.yml` from the manifest. Only protect code files that contain enforcement logic (`main.py`).
 
 ## Implications for Roadmap
 
-Based on combined research, the suggested structure is 4 phases with a clear dependency chain.
+Based on research, the suggested phase structure follows the dependency chain identified across all four research files. The critical path is: dev-mode stripping -> Cython pipeline -> enforcement module -> integrity manifest -> periodic re-validation. Fingerprinting and renewal are parallel tracks.
 
-### Phase 1: Playwright Test Infrastructure + First Tests
-**Rationale:** Everything else depends on this. Playwright config must exist before any test runs. The API smoke tests validate that the test infrastructure works before investing in browser tests. The Driver PWA flow is the highest-value user path and the most complex to automate.
-**Delivers:** `playwright.config.ts`, `e2e/` directory structure, Page Object Models, API smoke tests (5-8 tests), Driver PWA E2E flow, Dashboard E2E flow
-**Addresses:** Table stakes features -- Playwright E2E (API, Driver PWA, Dashboard)
-**Avoids:** Pitfall 1 (startup race -- configure globalSetup with health polling from day one), Pitfall 6 (Google API key -- establish seeding/mocking strategy before writing upload tests), Pitfall 10 (state leakage -- build database reset into fixture setup from the start)
-**Estimated effort:** 10-14 hours
-**Build order within phase:** config + API smoke tests first (validate infrastructure), then Page Object Models, then Driver PWA spec, then Dashboard spec
+### Phase 1: Foundation -- Fingerprinting and Dev-Mode Markers
+**Rationale:** Fingerprinting is independent of Cython and changes the identity function used everywhere. Do it first so all subsequent phases use the new formula. Dev-mode markers are zero-risk annotations that prepare for Phase 2 stripping.
+**Delivers:** Updated `get_machine_fingerprint()` with machine-id + cpuinfo, Docker Compose machine-id bind mount, updated `get_machine_id.py`, DIST-STRIP markers added to `main.py`.
+**Addresses:** Stronger fingerprinting (table stakes), prep for dev-mode stripping.
+**Avoids:** WSL2 MAC instability pitfall (drop MAC or make it optional). Fingerprint migration pitfall (update both `license_manager.py` and `get_machine_id.py` simultaneously).
+**Key action:** Regenerate the customer's license key with the new fingerprint. This is a breaking change -- coordinate with customer.
 
-### Phase 2: CI/CD Pipeline Integration
-**Rationale:** Tests that do not run in CI rot within weeks. This phase takes locally-passing tests and makes them reliable in GitHub Actions. Must come after Phase 1 (need passing tests before adding CI complexity).
-**Delivers:** 4th CI job (`e2e`), ShellCheck lint job, Playwright browser caching, artifact upload on failure, `package.json` script updates
-**Addresses:** Table stakes feature -- CI/CD pipeline fix and Playwright integration
-**Avoids:** Pitfall 2 (CI flakiness -- configure `--workers=1`, increased timeouts, trace artifacts), Pitfall 6 (no API key in CI -- tests already use seeded data from Phase 1)
-**Estimated effort:** 3-4 hours
-**Key constraint:** OSRM/VROOM not started in CI. Only `db`, `db-init`, `dashboard-build`, `api` services. Tests focus on UI rendering and API contracts.
+### Phase 2: Build Pipeline -- Dev-Mode Stripping and Cython Compilation
+**Rationale:** These are the two highest-severity loopholes (#1 and #4). They share a common artifact: `build-dist.sh`. The stripped `main.py` must exist before Cython compiles, and the Cython pipeline must work before enforcement can move into the `.so`. Group them because they are both build-system changes with the same validation pattern.
+**Delivers:** Marker-based dev-mode stripping with AST validation, Cython compilation of `core/licensing/*.py` to `.so`, updated build-dist.sh with correct ordering, import validation inside Docker.
+**Addresses:** Dev-mode stripping (table stakes), Cython compilation (table stakes).
+**Avoids:** Platform lock pitfall (compile inside Docker), syntax error pitfall (AST validation), async compilation pitfall (build-time grep check), architecture mismatch pitfall (ELF header check).
+**Key action:** Rotate the HMAC derivation seed since the `.pyc` version is already in the wild and trivially decompilable.
 
-### Phase 3: Distribution Verification + Operational Scripts
-**Rationale:** Before declaring the product ship-ready, verify that the actual customer deliverable (tarball) works on a fresh machine. The stop script is operationally independent but belongs in this phase because it rounds out the deployment lifecycle (bootstrap -> install -> start -> stop). The .pyc compilation fix must land before building any customer tarballs.
-**Delivers:** Tarball manifest verification in `build-dist.sh`, clean install verification script, `scripts/stop.sh` with `--gc` flag, `stop_grace_period: 30s` for PostgreSQL in `docker-compose.yml`
-**Addresses:** Table stakes features -- clean install verification, stop script with GC
-**Avoids:** Pitfall 3 (.pyc mismatch -- fix compilation to use Docker), Pitfall 4 (stop script data loss -- use `docker compose stop`, never `-v`), Pitfall 5 (cached state masking fresh-install problems -- test on fresh WSL instance), Pitfall 8 (tarball missing files -- add manifest verification), Pitfall 9 (PostgreSQL unclean shutdown -- set grace period)
-**Estimated effort:** 4-6 hours
+### Phase 3: Enforcement Refactor -- Move Middleware Into Compiled Module
+**Rationale:** Must come after Cython pipeline is working. This is the largest architectural change: creating `enforcement.py` and `integrity.py`, moving middleware from `main.py` into compiled code, reducing `main.py` to a single `enforce(app)` call. Test as plain Python first, then compile.
+**Delivers:** `core/licensing/enforcement.py` (new), `core/licensing/integrity.py` (new), refactored `main.py` with single enforcement call, internal license state (not on `app.state`).
+**Addresses:** Enforcement in compiled module (table stakes), file integrity manifest (table stakes).
+**Avoids:** Integrity manifest over-coverage pitfall (protect only `main.py`, not `docker-compose.yml`). Build order pitfall (manifest generated AFTER strip, BEFORE compile).
 
-### Phase 4: Documentation Consolidation
-**Rationale:** Documentation has no technical dependencies and can proceed in parallel with other work, but is listed last because it benefits from having the verified tooling (E2E tests, CI, stop script, tarball verification) in place -- docs can reference actual commands and workflows. Write customer-facing docs first, developer docs second.
-**Delivers:** Google API key troubleshooting guide (decision tree format), distribution documentation (build-to-deliver pipeline), license lifecycle documentation (customer-facing + developer reference), production vs development environment docs
-**Addresses:** Table stakes features -- Google API troubleshooting, prod vs dev docs; differentiator features -- distribution docs, license lifecycle docs
-**Avoids:** Pitfall 7 (technical docs for non-technical readers -- write customer-facing version first with plain-English error explanations and "contact support" procedures)
-**Estimated effort:** 4-6 hours
+### Phase 4: Periodic Re-Validation and Polish
+**Rationale:** Depends on enforcement module from Phase 3. Adds request counting and re-validation to the middleware. Also a good time for the differentiator features (optimization flags, expiry headers, health endpoint enhancement).
+**Delivers:** Request-count-based re-validation (every 500 requests), `run_in_executor` for async-safe re-validation, compilation optimization flags (`-O2`, `embedsignature=False`), expiry warning headers.
+**Addresses:** Periodic re-validation (table stakes), compilation optimization (differentiator), expiry warnings (differentiator).
+**Avoids:** Event loop blocking pitfall (use threadpool executor). Counter stored in compiled module (not `app.state`).
+
+### Phase 5: License Renewal and Migration
+**Rationale:** Independent of the compilation pipeline. Requires fingerprinting to be stable (Phase 1). Best done last because the renewal mechanism should work with the final fingerprint formula and compiled enforcement.
+**Delivers:** `--renew` flag on `generate_license.py`, renewal key workflow without new fingerprint exchange, automatic pickup on next periodic re-validation (no restart needed).
+**Addresses:** License renewal (table stakes).
+**Avoids:** Renewal-after-fingerprint-change pitfall (fingerprint is stable by this phase).
+
+### Phase 6: End-to-End Validation and Customer Migration
+**Rationale:** All features are implemented. This phase is about building the distribution tarball, running full E2E license tests, validating the complete build pipeline, and coordinating the customer migration (new fingerprint, new license key, new tarball).
+**Delivers:** Complete distribution tarball with all v2.1 security features, E2E test coverage for integrity failure / re-validation / renewal scenarios, updated `docker-compose.license-test.yml`, customer migration documentation.
+**Addresses:** All "Looks Done But Isn't" checklist items from PITFALLS.md.
 
 ### Phase Ordering Rationale
 
-- **Dependency chain:** Config -> tests -> CI -> distribution -> docs. Each phase builds on the previous one. You cannot add tests to CI before they pass locally. You cannot verify distribution before fixing .pyc compilation.
-- **Risk-first:** Phase 1 addresses the three highest-complexity pitfalls (startup race, state leakage, API key mocking). Getting these right early prevents cascading failures in later phases.
-- **Value delivery:** Phase 1 alone delivers the highest-value outcome (automated E2E tests for the critical user paths). If the milestone is time-constrained, Phase 1 is the minimum viable delivery.
-- **Architecture grouping:** Phases group naturally by component boundary -- Phase 1 is all Playwright, Phase 2 is all CI YAML, Phase 3 is all bash scripts, Phase 4 is all markdown.
+- **Fingerprinting first** because it changes the identity function consumed by key generation and validation. Every subsequent phase operates on the new fingerprint formula.
+- **Build pipeline (strip + Cython) before enforcement refactor** because debugging plain Python is vastly easier than debugging compiled `.so`. Get the compilation working with existing code before introducing new modules.
+- **Enforcement refactor before re-validation** because re-validation is an extension of the enforcement middleware. The middleware must exist before it can count requests.
+- **Renewal last** because it is developer-side tooling that does not affect the security posture. It is a customer experience improvement, not a loophole fix.
+- **End-to-end validation as a final phase** because it exercises the complete pipeline. Partial E2E testing happens in each phase, but the full integration (build tarball -> deploy -> validate license -> test integrity -> test re-validation -> test renewal) must be done holistically.
 
 ### Research Flags
 
 Phases likely needing deeper research during planning:
-- **Phase 1:** The database state reset strategy (test-only API endpoint vs SQL truncation vs transaction rollback) needs a concrete decision during phase planning. The seeded-data approach for bypassing Google Geocoding also needs the specific seed data defined.
-- **Phase 2:** OSRM data caching in CI (GitHub Actions cache for `data/osrm/`) is a future optimization that may need research if full-stack E2E is desired later.
+- **Phase 2 (Cython compilation):** The interaction between Cython, setuptools, and the Docker build environment has edge cases around `build_ext --inplace` directory handling, intermediate `.c` file cleanup, and `__init__.py` compilation. Warrants a `/gsd:research-phase` spike focused on the exact build commands and their output.
+- **Phase 3 (Enforcement refactor):** Moving middleware registration into a compiled module while keeping FastAPI's middleware decorator patterns working requires careful testing. The `enforce(app)` function signature and its interaction with FastAPI's startup lifecycle should be prototyped before committing to the architecture.
 
 Phases with standard patterns (skip research-phase):
-- **Phase 3:** Stop script and tarball verification are straightforward bash scripting following established project conventions. All Docker commands are documented. No research needed.
-- **Phase 4:** Documentation consolidation is reorganizing existing content. No research needed.
+- **Phase 1 (Fingerprinting):** Well-documented. Reading `/etc/machine-id` and `/proc/cpuinfo` is straightforward file I/O. Docker bind mounts are a standard pattern.
+- **Phase 4 (Re-validation):** Standard request-counting middleware with `run_in_executor`. No novel patterns.
+- **Phase 5 (Renewal):** Standard HMAC key generation with a `--renew` flag. Reuses existing `encode_license_key()` / `decode_license_key()`.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All tools already installed or pre-available. Playwright 1.58.2 is pinned. No new dependencies. Verified against official Playwright CI docs, Docker docs. |
-| Features | HIGH | Feature list derived from existing CLAUDE.md E2E checklist and codebase analysis. Effort estimates based on comparable Playwright projects. Clear table stakes vs differentiator separation. |
-| Architecture | HIGH | Architecture adds a test layer on top of an existing, stable system. Page Object Model and CI patterns are well-documented Playwright conventions. No novel architectural decisions. |
-| Pitfalls | HIGH | All 10 pitfalls verified against official documentation (Playwright CI docs, Docker signal handling docs, CPython .pyc specs). Race condition and .pyc mismatch pitfalls confirmed by GitHub issue trackers and community reports. |
+| Stack | HIGH | Only one new dependency (Cython 3.2.4). Version confirmed on PyPI. All other tools are stdlib or already in the project. Verified on target WSL2 system. |
+| Features | HIGH | Features scoped directly from six identified loopholes in CONTEXT.md. No ambiguity about what needs to be built. Dependency chain is clear. |
+| Architecture | HIGH | Existing codebase thoroughly analyzed with line-number precision. Component boundaries are clean. New modules follow existing patterns. |
+| Pitfalls | HIGH | Cython and WSL2 pitfalls verified against GitHub issue trackers and official docs. FastAPI async/Cython incompatibility confirmed via FastAPI#1921. Recovery strategies documented. |
 
 **Overall confidence:** HIGH
 
-This is a well-scoped QA milestone on a mature codebase with no technology unknowns. The existing Playwright installation, Docker Compose stack, and bash script conventions provide a solid foundation. Every recommendation uses tools already available in the project.
-
 ### Gaps to Address
 
-- **Database state reset strategy:** Research identifies three options (test-only API endpoint, SQL truncation in beforeAll, transaction rollback) but does not prescribe which one. Decision needed during Phase 1 planning based on API framework capabilities.
-- **Seeded test data for geocoding bypass:** The specific CSV fixture and pre-geocoded database records need to be defined. Should use addresses from the existing test fixtures or synthetic Kerala addresses that are already in the geocode cache.
-- **OSRM in CI (future):** If full optimization-flow E2E tests are ever desired in CI, the OSRM data download (~150 MB) and preprocessing need a caching strategy. Not needed for v1.4 but flagged for future milestones.
-- **Physical Android device testing:** Listed as tech debt in PROJECT.md. E2E tests run in desktop Chromium, not on a real Android phone. Outdoor contrast and touch target sizes cannot be verified by Playwright. This remains a manual verification gap.
+- **WSL2 MAC address behavior:** Research strongly recommends dropping MAC from the fingerprint entirely, but STACK.md still includes it as a signal. The PITFALLS.md research is more recent and specific -- **follow the pitfalls recommendation: drop MAC or make it the lowest-weight optional signal.** Validate by running `get_machine_id.py` before and after a WSL restart.
+- **Cython compilation inside Docker vs. on host:** STACK.md recommends `cythonize -i` on the developer machine. PITFALLS.md warns this produces architecture-mismatched `.so` if the host ever changes. **Recommendation: compile inside Docker from the start.** The extra build time (seconds) is trivial compared to the debugging cost of a silent import failure.
+- **HMAC seed rotation:** PITFALLS.md identifies that the current HMAC derivation seed is recoverable from the existing `.pyc` files. Rotating it means all existing license keys become invalid (in addition to the fingerprint change). This is acceptable since fingerprinting already forces re-keying, but it must be documented and coordinated. **Do both changes (fingerprint + seed) in the same customer migration.**
+- **`docker-compose.yml` in integrity manifest:** FEATURES.md includes it as a protected file. PITFALLS.md explicitly warns against it (customers must edit it for passwords, ports). **Follow the pitfalls recommendation: exclude `docker-compose.yml` from the manifest. Protect only `main.py`.**
+- **Re-validation interval (N):** FEATURES.md suggests N=250, ARCHITECTURE.md suggests N=500, PITFALLS.md warns against N=100. **Use N=500 as the starting value.** It can be tuned later since it is a compiled constant.
+- **Cython async limitation:** The enforcement middleware is `async def` and cannot be compiled by Cython (FastAPI#1921). The current ARCHITECTURE.md design places the middleware inside `enforcement.py` which is compiled. **Resolution: the middleware closure must be defined as a regular `def` or the async wrapper must remain in uncompiled `main.py` while calling synchronous compiled functions.** This needs resolution during Phase 3 design.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [Playwright CI documentation](https://playwright.dev/docs/ci) -- GitHub Actions setup, Docker image recommendations, caching
-- [Playwright CI intro](https://playwright.dev/docs/ci-intro) -- Recommended YAML, `--with-deps` flag, artifact upload
-- [Playwright Docker documentation](https://playwright.dev/docs/docker) -- Official images, version pinning, `--ipc=host`
-- [Playwright test configuration](https://playwright.dev/docs/test-configuration) -- `defineConfig`, `webServer`, `projects`, `reporter`
-- [Playwright webServer documentation](https://playwright.dev/docs/test-webserver) -- `command`, `url`, `reuseExistingServer`
-- [Playwright Page Object Models](https://playwright.dev/docs/pom) -- Official POM pattern
-- [Playwright test reporters](https://playwright.dev/docs/test-reporters) -- Built-in reporters
-- [Docker Compose stop documentation](https://docs.docker.com/reference/cli/docker/compose/stop/) -- SIGTERM, grace period, SIGKILL
-- [Docker Compose down documentation](https://docs.docker.com/reference/cli/docker/compose/down/) -- `-v` flag behavior
-- [PEP 3147](https://peps.python.org/pep-3147/) -- .pyc magic numbers, version-specific caching
-- [Google Maps Error Messages](https://developers.google.com/maps/documentation/javascript/error-messages) -- REQUEST_DENIED causes
-- Existing codebase: `ci.yml`, `docker-compose.yml`, `package.json`, `scripts/`, `tests/`, `build-dist.sh`, `DEPLOY.md`, `LICENSING.md`
+- [Cython 3.2.4 on PyPI](https://pypi.org/project/Cython/) -- version confirmation, pure Python mode support
+- [Cython Source Files and Compilation](https://cython.readthedocs.io/en/latest/src/userguide/source_files_and_compilation.html) -- Extension objects, build patterns, `.so` naming
+- [Cython Pure Python Mode](https://cython.readthedocs.io/en/latest/src/tutorial/pure.html) -- confirmation that `.py` compiles directly
+- [machine-id(5) manpage](https://man7.org/linux/man-pages/man5/machine-id.5.html) -- 32-char hex, persistence guarantees
+- [Python hashlib docs](https://docs.python.org/3/library/hashlib.html) -- `file_digest()` in 3.11+
+- [FastAPI Advanced Middleware](https://fastapi.tiangolo.com/advanced/middleware/) -- middleware registration patterns
+- [Docker Bind Mounts](https://docs.docker.com/engine/storage/bind-mounts/) -- read-only mount syntax
+- Local verification on target WSL2 system: `/etc/machine-id` populated, `/proc/cpuinfo` accessible, Docker bind mount tested
 
 ### Secondary (MEDIUM confidence)
-- [BrowserStack: Playwright Best Practices 2026](https://www.browserstack.com/guide/playwright-best-practices)
-- [Better Stack: Avoid Flaky Playwright Tests](https://betterstack.com/community/guides/testing/avoid-flaky-playwright-tests/)
-- [Dockerized E2E Tests with GitHub Actions](https://lachiejames.com/elevate-your-ci-cd-dockerized-e2e-tests-with-github-actions/)
-- [Playwright webServer race condition with Docker Compose](https://github.com/sillsdev/web-languageforge/issues/1402)
-- [Docker Graceful Shutdown Signals](https://oneuptime.com/blog/post/2026-01-16-docker-graceful-shutdown-signals/view)
+- [WSL2 MAC address instability: microsoft/WSL#5352](https://github.com/microsoft/WSL/issues/5352) -- confirmed WSL2 MAC randomization
+- [Cython async issue: FastAPI#1921](https://github.com/fastapi/fastapi/issues/1921) -- async def incompatibility with Cython compilation
+- [Python uuid.getnode() instability: cpython#132710](https://github.com/python/cpython/issues/132710) -- MAC not guaranteed stable with libuuid
+- [Cython reverse engineering difficulty](https://groups.google.com/g/cython-users/c/Zd7HZ9UW_ew) -- community consensus that `.so` is significantly harder than `.pyc`
+- [Cisco: Securing Python with Cython](https://blogs.cisco.com/developer/securingpythoncodewithcython01) -- practical guide
+- [WSL2 machine-id persistence: microsoft/WSL#6347](https://github.com/microsoft/WSL/issues/6347) -- WSL2 machine-id edge cases
+
+### Tertiary (LOW confidence)
+- [NixOS-WSL /etc/machine-id persistence issue](https://github.com/nix-community/NixOS-WSL/issues/574) -- NixOS-specific, does not apply to standard Ubuntu WSL but worth monitoring
 
 ---
-*Research completed: 2026-03-08*
+*Research completed: 2026-03-10*
 *Ready for roadmap: yes*
