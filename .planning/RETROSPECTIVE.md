@@ -2,6 +2,52 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v2.0 — Documentation & Error Handling
+
+**Shipped:** 2026-03-10
+**Phases:** 4 | **Plans:** 9 | **Timeline:** 2 days
+
+### What Was Built
+- Consolidated ~3,600 lines of documentation into organized docs/ directory with audience badges and docs/INDEX.md as central hub
+- ErrorResponse Pydantic model with 22 namespaced ErrorCodes, request ID tracing via ContextVar middleware, global exception handler
+- Startup health gates for PostgreSQL/OSRM/VROOM, enhanced /health endpoint with per-service status, tenacity retry decorators
+- Frontend error UI: color-coded ErrorBanner with auto-recovery, inline ErrorTable for CSV failures, collapsible ErrorDetail, per-service health status bar
+- Playwright E2E tests for all dashboard error UI components
+- Fixed fetchHealth 503 handling and all 15 ERROR_HELP_URLS anchor fragments; updated ERROR-MAP.md line references
+
+### What Worked
+- Milestone audit-first approach: initial audit found 4 gaps, Phases 3-4 were added specifically to close them, re-audit passed 100%
+- Gap closure phases were surgical and fast (Phase 3: 2min, Phase 4: 4min combined)
+- ErrorResponse model with error_response() helper standardized all 30+ HTTPException call sites
+- Call-site retry wrapping (instead of modifying core modules) minimized blast radius
+- E2E tests used client-side validation errors to avoid API_KEY dependency — pragmatic testing strategy
+
+### What Was Inefficient
+- ROADMAP phase 2 plan checkboxes showed `[ ]` despite all 4 plans being complete — execution tracking didn't update them
+- summary-extract CLI failed for all 9 SUMMARY files — one_liner field not populated, required manual extraction
+- Milestone was labeled "v1.0" in STATE.md but conflicted with existing v1.0 archive — required rename to v2.0 during completion
+
+### Patterns Established
+- ErrorResponse model with error_response() helper for consistent API error structure
+- ERROR_HELP_URLS mapping from error codes to documentation anchors (Python + TypeScript in sync)
+- Direct fetch() for endpoints where non-200 response bodies contain useful data (503 health)
+- DaisyUI collapse for progressive disclosure of error details
+- force:true click pattern for DaisyUI components with hidden checkbox overlays
+
+### Key Lessons
+1. Milestone version numbering should be agreed upfront — reusing "v1.0" when v1.0 archives already exist creates conflicts
+2. Error handling infrastructure is best added as a dedicated milestone after the MVP — retrofitting 30+ error responses is manageable when the API surface is stable
+3. Audit → gap closure → re-audit is the right flow for milestone completion — it caught 4 real integration issues
+4. SUMMARY.md frontmatter fields (one_liner) should be populated during execution, not deferred — CLI tools depend on them
+5. Documentation line references drift on every code change — ERROR-MAP.md needs update whenever main.py changes
+
+### Cost Observations
+- Model mix: opus for all phases (quality profile)
+- Sessions: ~2 sessions across 2 days
+- Notable: 9 plans in 2 days (4.5 plans/day). Phase 3 and 4 completed in minutes — gap closure phases are extremely efficient when well-scoped
+
+---
+
 ## Milestone: v1.4 — Ship-Ready QA
 
 **Shipped:** 2026-03-09
@@ -234,6 +280,7 @@
 | v1.2 | 2 days | 5 | 9 | Fine-grained REQ-IDs; parallel independent phases; TDD for data wiring |
 | v1.3 | 14 days | 8 | 10 | Milestone audit + gap closure; documentation-as-code traceability |
 | v1.4 | 2 days | 4 | 10 | E2E testing as quality gate; parallel doc plans; standalone compose for isolation |
+| v2.0 | 2 days | 4 | 9 | Audit-driven gap closure; error handling as dedicated milestone; version naming discipline |
 
 ### Cumulative Quality
 
@@ -244,6 +291,7 @@
 | v1.2 | 8.3k | 3.7k | 1.9k | -- | Dead code removed (-9.2k Python), typed helpers, config consolidation |
 | v1.3 | 2.7k | 3.7k | 2.0k | 1.6k | Bootstrap/startup scripts, CSV docs, humanized errors, dist build |
 | v1.4 | 17.9k | 5.0k | -- | 3.0k | E2E test suite, CI/CD pipeline, stop/verify scripts, 5 doc artifacts |
+| v2.0 | 19.5k | 6.0k | -- | 3.0k | ErrorResponse model, health gates, retry logic, frontend error UI, doc restructure |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -258,3 +306,5 @@
 9. Docker Compose override files merge ports additively — use standalone compose files for isolated test stacks
 10. Container logs must be truncated BEFORE `docker compose down` — down removes containers and their log files
 11. Pre-existing test failure counts should be tracked with exact numbers, not estimates carried forward from stale context
+12. Error handling infrastructure is best added after MVP — stable API surface makes retrofitting manageable
+13. Audit → gap closure → re-audit is the right milestone completion flow — catches real integration issues before shipping

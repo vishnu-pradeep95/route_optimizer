@@ -105,8 +105,8 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v1.4 shipped (2026-03-09). ~17.9k Python LOC, ~5k TypeScript LOC, ~3k Shell LOC. 38 E2E tests + 426 unit tests. 5 milestones shipped (v1.0-v1.4), 25 phases, 55 plans.
-- **Known tech debt**: Physical Android device testing for outdoor contrast; 8 GB laptop testing for install script OSRM OOM validation.
+- **Current state**: v2.0 shipped (2026-03-10). ~19.5k Python LOC, ~6k TypeScript LOC, ~3k Shell LOC. 38 E2E tests + 426 unit tests. 6 milestones shipped (v1.0-v1.4, v2.0), 28 phases, 64 plans.
+- **Known tech debt**: Physical Android device testing for outdoor contrast; 8 GB laptop testing for install script OSRM OOM validation; 6 ErrorCode enum values reserved for future use.
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
 ## Constraints
@@ -169,4 +169,4 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | FLEET_NO_VEHICLES → #step-11-cdcms-data-workflow | Closest relevant heading in SETUP.md (no Fleet Setup section) | ✓ Good — best available anchor |
 
 ---
-*Last updated: 2026-03-10 after Phase 03 (Error Handling Polish)*
+*Last updated: 2026-03-10 after v2.0 milestone (Documentation & Error Handling)*

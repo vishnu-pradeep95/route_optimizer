@@ -1,5 +1,21 @@
 # Milestones
 
+## v2.0 Documentation & Error Handling (Shipped: 2026-03-10)
+
+**Phases completed:** 4 phases, 9 plans
+**Timeline:** 2 days (2026-03-09 → 2026-03-10)
+**Git range:** 40 commits, 57 files changed (+7,635 / -231)
+
+**Key accomplishments:**
+- Consolidated ~3,600 lines of documentation into organized docs/ directory with audience badges and docs/INDEX.md as central hub
+- ErrorResponse Pydantic model with 22 namespaced ErrorCodes, request ID tracing via ContextVar middleware, global exception handler
+- Startup health gates for PostgreSQL/OSRM/VROOM with 60s timeout, enhanced /health endpoint with per-service status, tenacity retry decorators
+- Frontend error UI: color-coded ErrorBanner with auto-recovery, inline ErrorTable for CSV failures, collapsible ErrorDetail, per-service health status bar
+- Playwright E2E tests for all dashboard error UI components (ErrorBanner, ErrorDetail, ErrorTable, health bar)
+- Fixed fetchHealth to preserve 503 per-service JSON body; repaired all 15 ERROR_HELP_URLS anchor fragments across Python and TypeScript
+
+---
+
 ## v1.4 Ship-Ready QA (Shipped: 2026-03-09)
 
 **Phases completed:** 4 phases (21-24), 10 plans
