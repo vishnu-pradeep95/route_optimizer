@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Documentation & Error Handling
+milestone: v2.1
+milestone_name: Licensing & Distribution Security
 current_plan: none
-status: milestone_complete
-stopped_at: v2.0 milestone archived
-last_updated: "2026-03-10T10:45:00.000Z"
+status: defining_requirements
+stopped_at: Milestone v2.1 started — defining requirements
+last_updated: "2026-03-10T13:00:00.000Z"
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,12 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Planning next milestone
+**Current focus:** v2.1 Licensing & Distribution Security
 
 ## Current Position
 
-Milestone v2.0 complete. No active phase.
-Progress: All 6 milestones shipped (v1.0-v1.4, v2.0). 28 phases, 64 plans.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-10 — Milestone v2.1 started
 
 ## Performance Metrics
 
@@ -69,8 +71,19 @@ See `.planning/milestones/` for full phase details per milestone.
 | 2 | Document OSRM readiness check and add Docker dependency conditions | 2026-03-09 | 3b994e5 | [2-document-osrm-readiness-check-and-add-tr](./quick/2-document-osrm-readiness-check-and-add-tr/) |
 | 3 | Commit uncommitted files: VITE_API_KEY Docker build, .gitignore cleanup, package-lock.json | 2026-03-10 | e544988 | [3-commit-uncommitted-files](./quick/3-commit-uncommitted-files/) |
 
+### Security Audit Findings (v2.1 trigger)
+
+| # | Loophole | Severity | Description |
+|---|----------|----------|-------------|
+| 1 | ENVIRONMENT=development bypass | CRITICAL | Default docker-compose.yml uses `ENVIRONMENT=${ENVIRONMENT:-development}`, skipping all license enforcement |
+| 2 | Enforcement in plain-text main.py | CRITICAL | Dev-mode override (main.py:184-203) ships as readable source, trivially editable |
+| 3 | Fingerprint spoofable via Docker | MEDIUM | hostname + MAC + container_id all controllable via docker-compose settings |
+| 4 | .pyc decompilation trivial | MEDIUM | Tools like pycdc/uncompyle6 recover source from .pyc in minutes |
+| 5 | License checked only at startup | LOW-MEDIUM | No periodic re-validation; patching app.state after startup bypasses permanently |
+| 6 | No file integrity verification | LOW-MEDIUM | No checksum on main.py; customer can edit any .py file freely |
+
 ## Session Continuity
 
 Last session: 2026-03-10
-Stopped at: Completed quick task 003 (commit uncommitted files)
+Stopped at: Defining requirements for v2.1
 Resume file: None

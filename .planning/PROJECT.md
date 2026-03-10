@@ -80,7 +80,17 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 
 ### Active
 
-(No active requirements — all shipped)
+## Current Milestone: v2.1 Licensing & Distribution Security
+
+**Goal:** Close all identified loopholes in the licensing and distribution system that allow customers to circumvent license enforcement.
+
+**Target features:**
+- Eliminate ENVIRONMENT=development bypass in distributed builds
+- Move license enforcement logic into compiled .pyc code
+- Strengthen machine fingerprinting against Docker spoofing
+- Add periodic license re-validation (not just startup)
+- Add file integrity checking for shipped code
+- Harden .pyc against casual decompilation
 
 
 ### Out of Scope
@@ -169,4 +179,4 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | FLEET_NO_VEHICLES → #step-11-cdcms-data-workflow | Closest relevant heading in SETUP.md (no Fleet Setup section) | ✓ Good — best available anchor |
 
 ---
-*Last updated: 2026-03-10 after v2.0 milestone (Documentation & Error Handling)*
+*Last updated: 2026-03-10 after v2.1 milestone start (Licensing & Distribution Security)*
