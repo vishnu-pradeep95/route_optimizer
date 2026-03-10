@@ -46,6 +46,12 @@ COPY apps/kerala_delivery/dashboard/ .
 # Override this ARG if the API is on a different domain.
 ARG VITE_API_URL=""
 
+# API key for authenticated requests.
+# Baked into the JS bundle at build time (Vite replaces import.meta.env.VITE_API_KEY).
+# Passed from docker-compose via build args, sourced from the .env API_KEY variable.
+ARG VITE_API_KEY=""
+ENV VITE_API_KEY=$VITE_API_KEY
+
 # Base path for asset URLs in the built HTML.
 # Production (Caddy serves at /):   VITE_BASE_PATH=/    (default)
 # Development (API serves at /dashboard/): VITE_BASE_PATH=/dashboard/

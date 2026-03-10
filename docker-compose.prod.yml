@@ -257,6 +257,7 @@ services:
       args:
         # Empty = same-origin (dashboard and API behind same Caddy domain).
         VITE_API_URL: ""
+        VITE_API_KEY: "${API_KEY:-}"
     container_name: dashboard-builder
     volumes:
       - dashboard_assets:/srv/dashboard
