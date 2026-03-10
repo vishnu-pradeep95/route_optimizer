@@ -24,10 +24,16 @@ class TestCheckPostgresql:
         """Healthy PostgreSQL returns (True, 'connected')."""
         from apps.kerala_delivery.api.health import check_postgresql
 
-        mock_engine = AsyncMock()
         mock_conn = AsyncMock()
-        mock_engine.connect.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
-        mock_engine.connect.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_conn.execute = AsyncMock()
+
+        # Create an async context manager mock for engine.connect()
+        mock_cm = AsyncMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=mock_conn)
+        mock_cm.__aexit__ = AsyncMock(return_value=False)
+
+        mock_engine = MagicMock()
+        mock_engine.connect.return_value = mock_cm
 
         healthy, msg = await check_postgresql(mock_engine)
         assert healthy is True
@@ -38,7 +44,7 @@ class TestCheckPostgresql:
         """Failed PostgreSQL returns (False, error_msg)."""
         from apps.kerala_delivery.api.health import check_postgresql
 
-        mock_engine = AsyncMock()
+        mock_engine = MagicMock()
         mock_engine.connect.side_effect = Exception("Connection refused")
 
         healthy, msg = await check_postgresql(mock_engine)
