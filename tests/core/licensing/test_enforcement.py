@@ -209,3 +209,252 @@ class TestVerifyIntegrity:
         ok, failures = verify_integrity(base_path=str(tmp_path))
         assert ok is False
         assert len(failures) == 2
+
+
+# =============================================================================
+# Enforcement module tests (enforce() + middleware)
+# =============================================================================
+
+
+from unittest.mock import patch, MagicMock
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+
+def _make_license_info(status: LicenseStatus, customer_id: str = "test") -> LicenseInfo:
+    """Helper to create LicenseInfo with a given status."""
+    return LicenseInfo(
+        customer_id=customer_id,
+        fingerprint="a1b2c3d4e5f6a7b8",
+        expires_at=datetime.now(timezone.utc) + timedelta(days=365),
+        status=status,
+        days_remaining=365 if status == LicenseStatus.VALID else -3,
+        message=f"Status: {status.value}",
+    )
+
+
+class TestEnforce:
+    """Tests for enforce(app) -- the single entry point for license enforcement."""
+
+    def test_enforce_with_valid_license(self):
+        """enforce(app) with a valid license calls set_license_state with VALID status."""
+        from core.licensing.enforcement import enforce
+
+        app = FastAPI()
+        valid_info = _make_license_info(LicenseStatus.VALID)
+
+        with patch("core.licensing.enforcement.validate_license", return_value=valid_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enforce(app)
+
+        assert get_license_status() == LicenseStatus.VALID
+
+    def test_enforce_dev_mode_invalid_overrides_to_valid(self, monkeypatch):
+        """enforce(app) in dev mode with invalid license overrides to VALID status."""
+        monkeypatch.setenv("ENVIRONMENT", "development")
+
+        # Need to reload the module to pick up the env change
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", True)
+
+        app = FastAPI()
+        invalid_info = _make_license_info(LicenseStatus.INVALID)
+
+        with patch("core.licensing.enforcement.validate_license", return_value=invalid_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enf_mod.enforce(app)
+
+        # Dev mode should override invalid to valid
+        assert get_license_status() == LicenseStatus.VALID
+
+    def test_enforce_production_invalid_stays_invalid(self, monkeypatch):
+        """enforce(app) in production with invalid license calls set_license_state with INVALID."""
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", False)
+
+        app = FastAPI()
+        invalid_info = _make_license_info(LicenseStatus.INVALID)
+
+        with patch("core.licensing.enforcement.validate_license", return_value=invalid_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enf_mod.enforce(app)
+
+        assert get_license_status() == LicenseStatus.INVALID
+
+    def test_enforce_registers_middleware(self):
+        """enforce(app) registers an HTTP middleware on the app."""
+        from core.licensing.enforcement import enforce
+
+        app = FastAPI()
+        middleware_count_before = len(app.middleware_stack.middleware if hasattr(app, 'middleware_stack') else [])
+
+        valid_info = _make_license_info(LicenseStatus.VALID)
+
+        with patch("core.licensing.enforcement.validate_license", return_value=valid_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enforce(app)
+
+        # Verify middleware was registered by testing with a client
+        @app.get("/test-endpoint")
+        def test_endpoint():
+            return {"status": "ok"}
+
+        client = TestClient(app)
+        response = client.get("/test-endpoint")
+        # Should pass through since license is VALID
+        assert response.status_code == 200
+
+    def test_enforce_skips_integrity_in_dev_mode(self, monkeypatch):
+        """enforce(app) skips integrity verification in dev mode."""
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", True)
+
+        app = FastAPI()
+        valid_info = _make_license_info(LicenseStatus.VALID)
+
+        mock_verify = MagicMock(return_value=(True, []))
+
+        with patch("core.licensing.enforcement.validate_license", return_value=valid_info), \
+             patch("core.licensing.enforcement.verify_integrity", mock_verify):
+            enf_mod.enforce(app)
+
+        # verify_integrity should NOT have been called in dev mode
+        mock_verify.assert_not_called()
+
+    def test_enforce_integrity_failure_raises_system_exit(self, monkeypatch):
+        """enforce(app) with integrity failures raises SystemExit in production."""
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", False)
+
+        app = FastAPI()
+        valid_info = _make_license_info(LicenseStatus.VALID)
+
+        with patch("core.licensing.enforcement.validate_license", return_value=valid_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(False, ["main.py has been modified"])):
+            with pytest.raises(SystemExit):
+                enf_mod.enforce(app)
+
+
+class TestEnforcementMiddleware:
+    """Tests for the HTTP middleware registered by enforce()."""
+
+    def _create_app_with_enforcement(self, license_status, monkeypatch, is_dev=True):
+        """Helper: create a FastAPI app with enforce() called and controlled license status."""
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", is_dev)
+
+        app = FastAPI()
+
+        @app.get("/test")
+        def test_route():
+            return {"status": "ok"}
+
+        @app.get("/health")
+        def health_route():
+            return {"status": "healthy"}
+
+        license_info = _make_license_info(license_status)
+
+        with patch("core.licensing.enforcement.validate_license", return_value=license_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enf_mod.enforce(app)
+
+        return app
+
+    def test_middleware_returns_503_when_invalid(self, monkeypatch):
+        """The registered middleware returns 503 when get_license_status() is INVALID."""
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", False)
+
+        app = FastAPI()
+
+        @app.get("/test")
+        def test_route():
+            return {"status": "ok"}
+
+        invalid_info = _make_license_info(LicenseStatus.INVALID)
+
+        with patch("core.licensing.enforcement.validate_license", return_value=invalid_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enf_mod.enforce(app)
+
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 503
+        assert response.json()["license_status"] == "invalid"
+
+    def test_middleware_passes_through_when_valid(self, monkeypatch):
+        """The registered middleware passes through when get_license_status() is VALID."""
+        app = self._create_app_with_enforcement(LicenseStatus.VALID, monkeypatch)
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+
+    def test_middleware_adds_warning_header_when_grace(self, monkeypatch):
+        """The registered middleware adds X-License-Warning header when GRACE."""
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", False)
+
+        app = FastAPI()
+
+        @app.get("/test")
+        def test_route():
+            return {"status": "ok"}
+
+        grace_info = _make_license_info(LicenseStatus.GRACE)
+
+        with patch("core.licensing.enforcement.validate_license", return_value=grace_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enf_mod.enforce(app)
+
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+        assert "X-License-Warning" in response.headers
+
+    def test_middleware_passes_through_when_none(self, monkeypatch):
+        """The registered middleware passes through when get_license_status() is None."""
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", True)
+
+        app = FastAPI()
+
+        @app.get("/test")
+        def test_route():
+            return {"status": "ok"}
+
+        valid_info = _make_license_info(LicenseStatus.VALID)
+
+        with patch("core.licensing.enforcement.validate_license", return_value=valid_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enf_mod.enforce(app)
+
+        # Reset state to None AFTER enforce() registered middleware
+        license_manager._license_state = None
+
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+
+    def test_middleware_always_allows_health(self, monkeypatch):
+        """The registered middleware always allows /health endpoint."""
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", False)
+
+        app = FastAPI()
+
+        @app.get("/health")
+        def health_route():
+            return {"status": "healthy"}
+
+        invalid_info = _make_license_info(LicenseStatus.INVALID)
+
+        with patch("core.licensing.enforcement.validate_license", return_value=invalid_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enf_mod.enforce(app)
+
+        client = TestClient(app)
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert "X-License-Status" in response.headers
+        assert response.headers["X-License-Status"] == "invalid"
