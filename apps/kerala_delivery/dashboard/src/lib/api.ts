@@ -254,9 +254,17 @@ export async function fetchRunRoutes(runId: string): Promise<RoutesResponse> {
 
 // --- Health check ---
 
-/** Check if the backend API is reachable and healthy. */
+/** Check if the backend API is reachable and healthy.
+ *
+ * Uses direct fetch instead of apiFetch because /health intentionally
+ * returns 503 with valid JSON body on degraded/unhealthy state.
+ * apiFetch throws on non-2xx, which would discard the per-service data.
+ */
 export async function fetchHealth(): Promise<HealthResponse> {
-  return apiFetch<HealthResponse>("/health");
+  const url = `${BASE_URL}/health`;
+  const response = await fetch(url, { cache: "no-store" });
+  // /health always returns valid JSON regardless of status code (200 or 503)
+  return (await response.json()) as HealthResponse;
 }
 
 // --- Upload / Optimize ---
