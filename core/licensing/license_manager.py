@@ -1,7 +1,7 @@
 """License manager — validates hardware-bound license keys offline.
 
 This module is the core of the licensing system. It handles:
-1. Machine fingerprinting (hostname + MAC + container ID → SHA256)
+1. Machine fingerprinting (/etc/machine-id + CPU model → SHA256)
 2. License key encoding/decoding (base32 payload + HMAC signature)
 3. Validation on API startup (valid, expired, grace period, invalid)
 
@@ -30,9 +30,7 @@ import base64
 import hashlib
 import hmac
 import os
-import platform
 import struct
-import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -121,85 +119,84 @@ class LicenseInfo:
 GRACE_PERIOD_DAYS = 7
 
 
+def _read_machine_id() -> str:
+    """Read /etc/machine-id (systemd machine identifier).
+
+    This file contains a 32-character hex string unique to the OS installation.
+    In Docker, it must be bind-mounted from the host via docker-compose.yml:
+        - /etc/machine-id:/etc/machine-id:ro
+
+    Falls back to /var/lib/dbus/machine-id (older systems), then empty string.
+    """
+    for path in ["/etc/machine-id", "/var/lib/dbus/machine-id"]:
+        try:
+            with open(path, "r") as f:
+                return f.read().strip()
+        except (FileNotFoundError, PermissionError):
+            continue
+    return ""
+
+
+def _read_cpu_model() -> str:
+    """Read CPU model name from /proc/cpuinfo.
+
+    /proc/cpuinfo is a kernel virtual filesystem shared between host and
+    all containers automatically. The CPU model string is identical in both
+    environments without any bind mounts needed.
+
+    Falls back to empty string on non-Linux or if parsing fails.
+    """
+    try:
+        with open("/proc/cpuinfo", "r") as f:
+            for line in f:
+                if line.startswith("model name"):
+                    # Format: "model name\t: AMD Ryzen 9 ..."
+                    return line.split(":", 1)[1].strip()
+    except (FileNotFoundError, PermissionError):
+        pass
+    return ""
+
+
 def get_machine_fingerprint() -> str:
     """Generate a SHA256 fingerprint for this machine.
 
-    Combines three identifiers:
-    - hostname: unique per machine (but user-changeable)
-    - MAC address: hardware identifier (but spoofable)
-    - Docker container ID: if running in Docker, adds container identity
+    Combines two identifiers that are stable across Docker container
+    recreation and identical between host and container:
 
-    Why all three? Any single identifier can be spoofed, but combining
-    them makes casual copying harder. The fingerprint changes if:
-    - Software is copied to a different computer
-    - The Docker container is recreated (container ID changes)
-    - The hostname is changed
+    - /etc/machine-id: unique per OS installation, persists across reboots.
+      Must be bind-mounted read-only into Docker containers.
+    - CPU model name: hardware identifier from /proc/cpuinfo, shared
+      automatically via the Linux kernel's virtual filesystem.
 
-    Why NOT use disk serial or CPU ID?
-    - Not reliably accessible from inside Docker containers
-    - Requires root permissions on some Linux distros
-    - MAC + hostname + container ID is good enough for our threat model
+    Why these two (not hostname/MAC/container_id)?
+    The old formula used hostname + MAC + container_id, which produced
+    different fingerprints on host vs. inside Docker:
+    - hostname: host="MSI", container="3da3b7bd30a9" (container ID prefix)
+    - MAC: host="00155de6650d", container="ea77d7280813" (virtual adapter)
+    - container_id: changes on every docker compose recreate
+
+    MAC was also dropped because WSL2 generates a new random MAC on every
+    reboot (microsoft/WSL#5352), making fingerprints unstable across reboots.
+
+    The new formula uses signals that are identical in both environments,
+    enabling the same license key to work on host and in Docker.
 
     Returns:
         64-character hex string (SHA256 hash)
     """
     components = []
 
-    # 1. Hostname — different per machine
-    components.append(platform.node())
+    # 1. Machine ID — unique per OS install, stable across reboots
+    machine_id = _read_machine_id()
+    components.append(machine_id)
 
-    # 2. MAC address — hardware identifier
-    # uuid.getnode() returns the MAC address as a 48-bit integer.
-    # On some VMs this returns a random value, but that's consistent
-    # across reboots (Python caches it).
-    mac = uuid.getnode()
-    components.append(format(mac, "012x"))
-
-    # 3. Docker container ID — if running in Docker
-    # Docker writes the container ID to /proc/self/cgroup or
-    # /proc/1/cpuset. If not in Docker, this adds an empty string
-    # (which is fine — the hash still works, just without this component).
-    container_id = _get_docker_container_id()
-    if container_id:
-        components.append(container_id)
+    # 2. CPU model — hardware identifier, shared via /proc/cpuinfo
+    cpu_model = _read_cpu_model()
+    components.append(cpu_model)
 
     # Combine and hash
     combined = "|".join(components)
     return hashlib.sha256(combined.encode()).hexdigest()
-
-
-def _get_docker_container_id() -> Optional[str]:
-    """Try to read the Docker container ID from /proc.
-
-    Returns None if not running in Docker.
-
-    Why check both cgroup and mountinfo?
-    - cgroup v1 (older Docker): container ID in /proc/self/cgroup
-    - cgroup v2 (newer Docker): container ID in /proc/self/mountinfo
-    - Not in Docker: neither file contains a 64-char hex string
-    """
-    # Try cgroup v1 first (most common in production Docker)
-    try:
-        with open("/proc/self/cgroup", "r") as f:
-            for line in f:
-                # Format: hierarchy-ID:controller:path
-                # Docker containers have paths like /docker/CONTAINER_ID
-                parts = line.strip().split("/")
-                for part in parts:
-                    if len(part) == 64 and all(c in "0123456789abcdef" for c in part):
-                        return part
-    except (FileNotFoundError, PermissionError):
-        pass
-
-    # Try hostname file (Docker sets hostname to container ID by default)
-    try:
-        hostname = platform.node()
-        if len(hostname) == 12 and all(c in "0123456789abcdef" for c in hostname):
-            return hostname
-    except Exception:
-        pass
-
-    return None
 
 
 # =============================================================================

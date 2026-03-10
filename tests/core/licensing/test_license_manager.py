@@ -24,19 +24,13 @@ from core.licensing.license_manager import (
     GRACE_PERIOD_DAYS,
     LicenseInfo,
     LicenseStatus,
+    _read_cpu_model,
+    _read_machine_id,
     decode_license_key,
     encode_license_key,
     get_machine_fingerprint,
     validate_license,
 )
-
-# New private functions — will fail to import until Task 3 implements them.
-# Using try/except so existing non-fingerprint tests still run during RED phase.
-try:
-    from core.licensing.license_manager import _read_cpu_model, _read_machine_id
-except ImportError:
-    _read_machine_id = None
-    _read_cpu_model = None
 
 
 # =============================================================================
@@ -92,10 +86,6 @@ def expired_key_past_grace(fixed_fingerprint):
 # =============================================================================
 
 
-_new_functions_available = _read_machine_id is not None and _read_cpu_model is not None
-
-
-@pytest.mark.skipif(not _new_functions_available, reason="Waiting for _read_machine_id implementation")
 class TestReadMachineId:
     """Tests for _read_machine_id() — reads /etc/machine-id with fallbacks."""
 
@@ -132,7 +122,6 @@ class TestReadMachineId:
         assert result == ""
 
 
-@pytest.mark.skipif(not _new_functions_available, reason="Waiting for _read_cpu_model implementation")
 class TestReadCpuModel:
     """Tests for _read_cpu_model() — reads CPU model from /proc/cpuinfo."""
 
@@ -207,31 +196,31 @@ class TestMachineFingerprint:
         expected = hashlib.sha256(f"{machine_id}|{cpu_model}".encode()).hexdigest()
         assert fp1 == expected
 
-    def test_fingerprint_does_not_call_platform_node(self):
-        """get_machine_fingerprint() does NOT call platform.node() (no hostname)."""
-        with patch("core.licensing.license_manager.platform") as mock_platform:
-            with patch(
-                "core.licensing.license_manager._read_machine_id",
-                return_value="test-id",
-            ), patch(
-                "core.licensing.license_manager._read_cpu_model",
-                return_value="test-cpu",
-            ):
-                get_machine_fingerprint()
-            mock_platform.node.assert_not_called()
+    def test_fingerprint_does_not_use_hostname(self):
+        """get_machine_fingerprint() does NOT use platform.node() (no hostname).
 
-    def test_fingerprint_does_not_use_uuid_getnode(self):
-        """get_machine_fingerprint() does NOT call uuid.getnode() (no MAC, drop-mac decision)."""
-        with patch("core.licensing.license_manager.uuid") as mock_uuid:
-            with patch(
-                "core.licensing.license_manager._read_machine_id",
-                return_value="test-id",
-            ), patch(
-                "core.licensing.license_manager._read_cpu_model",
-                return_value="test-cpu",
-            ):
-                get_machine_fingerprint()
-            mock_uuid.getnode.assert_not_called()
+        Verified by confirming 'platform' module is not imported in
+        license_manager.py — hostname was removed from the fingerprint formula.
+        """
+        import core.licensing.license_manager as lm
+
+        assert not hasattr(lm, "platform"), (
+            "platform module should not be imported in license_manager "
+            "(hostname removed from fingerprint)"
+        )
+
+    def test_fingerprint_does_not_use_mac_address(self):
+        """get_machine_fingerprint() does NOT call uuid.getnode() (drop-mac decision).
+
+        MAC was dropped because WSL2 generates a new random MAC on every reboot
+        (microsoft/WSL#5352), making fingerprints unstable across reboots.
+        """
+        import core.licensing.license_manager as lm
+
+        assert not hasattr(lm, "uuid"), (
+            "uuid module should not be imported in license_manager "
+            "(MAC dropped from fingerprint per drop-mac decision)"
+        )
 
     def test_fingerprint_does_not_use_docker_container_id(self):
         """get_machine_fingerprint() does NOT use _get_docker_container_id (function removed)."""
