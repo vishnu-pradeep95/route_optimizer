@@ -122,5 +122,25 @@ Plans:
 - [ ] 02-03-PLAN.md -- Frontend error UI (ErrorBanner, ErrorTable, ErrorDetail), api.ts integration, per-service health display
 - [ ] 02-04-PLAN.md -- Playwright E2E tests for all error UI elements
 
+### Phase 3: Error Handling Polish
+
+**Goal:** Fix degraded integration edge cases: apiFetch 503 handling to preserve per-service health data, and repair all 15 ERROR_HELP_URLS anchor fragments to match actual doc headings.
+**Requirements**: [ERR-01, ERR-05, ERR-09]
+**Depends on:** Phase 2
+**Gap Closure:** Closes integration gaps from v1.0 audit (14/16 → 16/16 integration, 4/5 → 5/5 flows)
+
+Plans:
+- [ ] 03-01-PLAN.md -- Fix apiFetch 503 response handling, repair ERROR_HELP_URLS anchors
+
+### Phase 4: Documentation Accuracy Refresh
+
+**Goal:** Update ERROR-MAP.md line numbers drifted by Phase 02 edits (~140 lines added to main.py), and remove stale plan/ directory references from FleetManagement.tsx comments.
+**Requirements**: [DOC-VALIDATE, DOC-CLEANUP]
+**Depends on:** Phase 2
+**Gap Closure:** Closes documentation tech debt from v1.0 audit
+
+Plans:
+- [ ] 04-01-PLAN.md -- Update ERROR-MAP.md line references, clean stale code comments
+
 ---
 *Full phase details for v1.0-v1.4 archived in `.planning/milestones/`*
