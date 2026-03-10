@@ -12,10 +12,11 @@ These tests use freezegun for time-based tests and monkeypatching
 for machine fingerprint isolation.
 """
 
+import hashlib
 import os
 import struct
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, mock_open, patch
 
 import pytest
 
@@ -28,6 +29,14 @@ from core.licensing.license_manager import (
     get_machine_fingerprint,
     validate_license,
 )
+
+# New private functions — will fail to import until Task 3 implements them.
+# Using try/except so existing non-fingerprint tests still run during RED phase.
+try:
+    from core.licensing.license_manager import _read_cpu_model, _read_machine_id
+except ImportError:
+    _read_machine_id = None
+    _read_cpu_model = None
 
 
 # =============================================================================
@@ -83,11 +92,87 @@ def expired_key_past_grace(fixed_fingerprint):
 # =============================================================================
 
 
+_new_functions_available = _read_machine_id is not None and _read_cpu_model is not None
+
+
+@pytest.mark.skipif(not _new_functions_available, reason="Waiting for _read_machine_id implementation")
+class TestReadMachineId:
+    """Tests for _read_machine_id() — reads /etc/machine-id with fallbacks."""
+
+    def test_reads_etc_machine_id(self):
+        """_read_machine_id() returns content of /etc/machine-id when file exists."""
+        fake_id = "9ea32533cbc847218443c7139d7ce34b\n"
+        with patch("builtins.open", mock_open(read_data=fake_id)):
+            result = _read_machine_id()
+        assert result == "9ea32533cbc847218443c7139d7ce34b"
+
+    def test_falls_back_to_dbus_machine_id(self):
+        """_read_machine_id() falls back to /var/lib/dbus/machine-id when /etc/machine-id missing."""
+        dbus_id = "abcdef1234567890abcdef1234567890\n"
+
+        def side_effect(path, *args, **kwargs):
+            if path == "/etc/machine-id":
+                raise FileNotFoundError()
+            return mock_open(read_data=dbus_id)()
+
+        with patch("builtins.open", side_effect=side_effect):
+            result = _read_machine_id()
+        assert result == "abcdef1234567890abcdef1234567890"
+
+    def test_returns_empty_when_both_files_missing(self):
+        """_read_machine_id() returns empty string when both files missing."""
+        with patch("builtins.open", side_effect=FileNotFoundError()):
+            result = _read_machine_id()
+        assert result == ""
+
+    def test_returns_empty_on_permission_error(self):
+        """_read_machine_id() returns empty string on PermissionError."""
+        with patch("builtins.open", side_effect=PermissionError()):
+            result = _read_machine_id()
+        assert result == ""
+
+
+@pytest.mark.skipif(not _new_functions_available, reason="Waiting for _read_cpu_model implementation")
+class TestReadCpuModel:
+    """Tests for _read_cpu_model() — reads CPU model from /proc/cpuinfo."""
+
+    def test_reads_cpu_model_from_cpuinfo(self):
+        """_read_cpu_model() returns CPU model name from /proc/cpuinfo."""
+        cpuinfo = (
+            "processor\t: 0\n"
+            "vendor_id\t: AuthenticAMD\n"
+            "model name\t: AMD Ryzen 9 9955HX3D 16-Core Processor\n"
+            "stepping\t: 2\n"
+        )
+        with patch("builtins.open", mock_open(read_data=cpuinfo)):
+            result = _read_cpu_model()
+        assert result == "AMD Ryzen 9 9955HX3D 16-Core Processor"
+
+    def test_returns_empty_when_cpuinfo_missing(self):
+        """_read_cpu_model() returns empty string when /proc/cpuinfo missing."""
+        with patch("builtins.open", side_effect=FileNotFoundError()):
+            result = _read_cpu_model()
+        assert result == ""
+
+    def test_returns_empty_when_no_model_name_line(self):
+        """_read_cpu_model() returns empty string when no 'model name' line found."""
+        cpuinfo = (
+            "processor\t: 0\n"
+            "vendor_id\t: AuthenticAMD\n"
+            "stepping\t: 2\n"
+        )
+        with patch("builtins.open", mock_open(read_data=cpuinfo)):
+            result = _read_cpu_model()
+        assert result == ""
+
+
 class TestMachineFingerprint:
     """Tests for get_machine_fingerprint().
 
     The fingerprint should be deterministic (same machine = same output)
     and always produce a valid 64-character hex string (SHA256 output).
+    Uses /etc/machine-id + /proc/cpuinfo CPU model (no hostname, no MAC,
+    no container_id).
     """
 
     def test_fingerprint_is_64_hex_chars(self):
@@ -101,6 +186,104 @@ class TestMachineFingerprint:
         fp1 = get_machine_fingerprint()
         fp2 = get_machine_fingerprint()
         assert fp1 == fp2
+
+    def test_fingerprint_with_mocked_filesystem(self):
+        """Fingerprint is deterministic with mocked filesystem reads."""
+        machine_id = "9ea32533cbc847218443c7139d7ce34b"
+        cpu_model = "AMD Ryzen 9 9955HX3D 16-Core Processor"
+
+        with patch(
+            "core.licensing.license_manager._read_machine_id",
+            return_value=machine_id,
+        ), patch(
+            "core.licensing.license_manager._read_cpu_model",
+            return_value=cpu_model,
+        ):
+            fp1 = get_machine_fingerprint()
+            fp2 = get_machine_fingerprint()
+
+        assert fp1 == fp2
+        # Verify it's the expected SHA256 of "machine_id|cpu_model"
+        expected = hashlib.sha256(f"{machine_id}|{cpu_model}".encode()).hexdigest()
+        assert fp1 == expected
+
+    def test_fingerprint_does_not_call_platform_node(self):
+        """get_machine_fingerprint() does NOT call platform.node() (no hostname)."""
+        with patch("core.licensing.license_manager.platform") as mock_platform:
+            with patch(
+                "core.licensing.license_manager._read_machine_id",
+                return_value="test-id",
+            ), patch(
+                "core.licensing.license_manager._read_cpu_model",
+                return_value="test-cpu",
+            ):
+                get_machine_fingerprint()
+            mock_platform.node.assert_not_called()
+
+    def test_fingerprint_does_not_use_uuid_getnode(self):
+        """get_machine_fingerprint() does NOT call uuid.getnode() (no MAC, drop-mac decision)."""
+        with patch("core.licensing.license_manager.uuid") as mock_uuid:
+            with patch(
+                "core.licensing.license_manager._read_machine_id",
+                return_value="test-id",
+            ), patch(
+                "core.licensing.license_manager._read_cpu_model",
+                return_value="test-cpu",
+            ):
+                get_machine_fingerprint()
+            mock_uuid.getnode.assert_not_called()
+
+    def test_fingerprint_does_not_use_docker_container_id(self):
+        """get_machine_fingerprint() does NOT use _get_docker_container_id (function removed)."""
+        import core.licensing.license_manager as lm
+
+        assert not hasattr(lm, "_get_docker_container_id"), (
+            "_get_docker_container_id should be removed from license_manager"
+        )
+
+    def test_fingerprint_changes_when_machine_id_changes(self):
+        """Different machine-id produces a different fingerprint."""
+        cpu_model = "AMD Ryzen 9 9955HX3D 16-Core Processor"
+
+        with patch(
+            "core.licensing.license_manager._read_cpu_model",
+            return_value=cpu_model,
+        ):
+            with patch(
+                "core.licensing.license_manager._read_machine_id",
+                return_value="aaaa1111bbbb2222cccc3333dddd4444",
+            ):
+                fp1 = get_machine_fingerprint()
+
+            with patch(
+                "core.licensing.license_manager._read_machine_id",
+                return_value="eeee5555ffff6666aaaa7777bbbb8888",
+            ):
+                fp2 = get_machine_fingerprint()
+
+        assert fp1 != fp2
+
+    def test_fingerprint_changes_when_cpu_model_changes(self):
+        """Different CPU model produces a different fingerprint."""
+        machine_id = "9ea32533cbc847218443c7139d7ce34b"
+
+        with patch(
+            "core.licensing.license_manager._read_machine_id",
+            return_value=machine_id,
+        ):
+            with patch(
+                "core.licensing.license_manager._read_cpu_model",
+                return_value="AMD Ryzen 9 9955HX3D 16-Core Processor",
+            ):
+                fp1 = get_machine_fingerprint()
+
+            with patch(
+                "core.licensing.license_manager._read_cpu_model",
+                return_value="Intel Core i9-14900K",
+            ):
+                fp2 = get_machine_fingerprint()
+
+        assert fp1 != fp2
 
 
 # =============================================================================
