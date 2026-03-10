@@ -133,11 +133,11 @@ Plans:
   1. `main.py` calls `enforce(app)` (or equivalent single function) and contains zero lines of license validation, middleware registration, or enforcement logic
   2. A SHA256 integrity manifest of protected files is embedded in the compiled `.so` and verified at startup -- tampering with `main.py` causes the API to refuse to start with a clear error
   3. The enforcement module stores license state internally (not on `app.state` or any other Python-accessible object)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 07-01: TBD
-- [ ] 07-02: TBD
+- [ ] 07-01-PLAN.md — Enforcement module + license_manager state/integrity functions + tests
+- [ ] 07-02-PLAN.md — main.py refactor to enforce(app) + build-dist.sh manifest injection
 
 ### Phase 8: Runtime Protection
 **Goal**: License validity and file integrity are continuously verified during operation, not just at startup
@@ -220,7 +220,7 @@ Phases execute in numeric order: 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 4. Documentation Accuracy Refresh | v2.0 | 2/2 | Complete | 2026-03-10 |
 | 5. Fingerprinting Overhaul | v2.1 | 2/2 | Complete | 2026-03-10 |
 | 6. Build Pipeline -- Dev-Mode Stripping and Cython | v2.1 | 3/3 | Complete | 2026-03-10 |
-| 7. Enforcement Module | v2.1 | 0/? | Not started | - |
+| 7. Enforcement Module | v2.1 | 0/2 | Not started | - |
 | 8. Runtime Protection | v2.1 | 0/? | Not started | - |
 | 9. License Management | v2.1 | 0/? | Not started | - |
 | 10. End-to-End Validation | v2.1 | 0/? | Not started | - |
