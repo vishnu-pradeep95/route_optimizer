@@ -26,17 +26,20 @@ export const PREGEOCODE_CSV_PATH = path.join(__dirname, '..', '..', 'data', 'sam
 /**
  * Validate that the API_KEY environment variable is set.
  *
- * E2E tests require an API key for authenticated endpoints (POST, PUT, DELETE,
- * and sensitive GET endpoints like /api/vehicles and /api/telemetry/*).
- * Fails fast with a descriptive error instead of cryptic 401s during tests.
+ * The API itself skips auth when API_KEY is empty (dev mode), so tests
+ * can run without it. When API_KEY IS set, authenticated endpoints
+ * require the X-API-Key header (configured in playwright.config.ts).
+ *
+ * This function warns (not throws) when API_KEY is unset, matching
+ * the API's own behavior: dev mode allows all requests.
  */
 export async function validateApiKey(request: APIRequestContext): Promise<void> {
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
-    throw new Error(
+    console.warn(
       'API_KEY environment variable is not set. ' +
-      'E2E tests require it for authenticated endpoints. ' +
-      'Set it in .env or export API_KEY=your-key-here before running tests.'
+      'Running in dev mode — API allows unauthenticated requests. ' +
+      'Set API_KEY for production-like auth testing.'
     );
   }
 }

@@ -57,7 +57,7 @@ test.describe('Driver PWA Flow', () => {
     page = await context.newPage();
 
     // Set API key in localStorage before any navigation
-    await page.goto('http://localhost:8000/driver/');
+    await page.goto('http://localhost:8000/driver/', { waitUntil: 'load' });
     await page.evaluate((key) => {
       localStorage.clear();
       localStorage.setItem('lpg_api_key', key);
@@ -73,13 +73,9 @@ test.describe('Driver PWA Flow', () => {
   // =========================================================================
 
   test('upload screen renders correctly', async () => {
-    // Navigate fresh and clear any cached state
-    await page.goto('http://localhost:8000/driver/');
-    await page.evaluate((key) => {
-      localStorage.clear();
-      localStorage.setItem('lpg_api_key', key);
-    }, process.env.API_KEY || '');
-    await page.reload();
+    // beforeAll already navigated and set localStorage.
+    // Reload to pick up the stored API key cleanly.
+    await page.reload({ waitUntil: 'load' });
 
     // Assert upload section is visible
     await expect(page.locator('#upload-section')).toBeVisible();
