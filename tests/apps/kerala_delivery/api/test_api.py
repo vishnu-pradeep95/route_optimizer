@@ -63,11 +63,23 @@ def client(mock_session):
     Rate limiting is disabled via RATE_LIMIT_ENABLED=false to prevent
     429 responses during rapid test execution. Real rate limits are
     tested in a dedicated TestRateLimiting class.
+
+    wait_for_services is mocked to return all-healthy so startup doesn't
+    try to connect to real PostgreSQL/OSRM/VROOM services.
     """
     async def override_get_session():
         yield mock_session
 
-    with patch.dict(os.environ, {"RATE_LIMIT_ENABLED": "false"}):
+    # Mock wait_for_services so lifespan startup doesn't block on real services.
+    # Returns all-healthy so the /health endpoint returns 200 in most tests.
+    mock_service_health = {
+        "postgresql": (True, "connected"),
+        "osrm": (True, "available"),
+        "vroom": (True, "available"),
+    }
+
+    with patch.dict(os.environ, {"RATE_LIMIT_ENABLED": "false"}), \
+         patch("apps.kerala_delivery.api.main.wait_for_services", new_callable=AsyncMock, return_value=mock_service_health):
         # Re-apply the enabled flag on the limiter instance.
         # slowapi reads the enabled flag at init time, so we must
         # toggle it directly for the test session.
@@ -75,6 +87,12 @@ def client(mock_session):
         limiter.enabled = False
 
         app.dependency_overrides[get_session] = override_get_session
+
+        # Set service_health and started_at directly on app.state for tests
+        # that don't go through the lifespan (TestClient without context manager).
+        app.state.service_health = mock_service_health
+        app.state.started_at = datetime.now(timezone.utc)
+
         yield TestClient(app)
         app.dependency_overrides.clear()
 
@@ -154,15 +172,26 @@ def mock_vroom_2_orders():
 
 
 class TestHealthEndpoint:
-    """Tests for GET /health."""
+    """Tests for GET /health — enhanced per-service status."""
 
-    def test_health_returns_ok(self, client):
-        """Health check should return 200 with status 'ok'."""
+    def test_health_returns_healthy(self, client):
+        """Health check returns 200 with status 'healthy' when all services up."""
         resp = client.get("/health")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "ok"
+        assert data["status"] == "healthy"
         assert "version" in data
+        assert "uptime_seconds" in data
+        assert "services" in data
+        # Per-service breakdown
+        assert "postgresql" in data["services"]
+        assert "osrm" in data["services"]
+        assert "vroom" in data["services"]
+        assert "google_api" in data["services"]
+        # PostgreSQL should be connected (mocked as healthy)
+        assert data["services"]["postgresql"]["status"] == "connected"
+        assert data["services"]["osrm"]["status"] == "available"
+        assert data["services"]["vroom"]["status"] == "available"
 
 
 class TestRoutesEndpoints:
@@ -1059,8 +1088,16 @@ class TestAuthentication:
         async def override_get_session():
             yield mock_session
 
+        mock_health = {
+            "postgresql": (True, "connected"),
+            "osrm": (True, "available"),
+            "vroom": (True, "available"),
+        }
         app.dependency_overrides[get_session] = override_get_session
-        with patch.dict(os.environ, {"API_KEY": "test-secret-key-123"}):
+        app.state.service_health = mock_health
+        app.state.started_at = datetime.now(timezone.utc)
+        with patch.dict(os.environ, {"API_KEY": "test-secret-key-123"}), \
+             patch("apps.kerala_delivery.api.main.wait_for_services", new_callable=AsyncMock, return_value=mock_health):
             yield TestClient(app)
         app.dependency_overrides.clear()
 
@@ -1925,11 +1962,19 @@ class TestSecurityHeaders:
 
     def test_docs_gated_in_production(self):
         """API docs return 404 when ENVIRONMENT=production (SEC-03)."""
-        with patch.dict(os.environ, {"ENVIRONMENT": "production", "RATE_LIMIT_ENABLED": "false"}):
+        mock_health = {
+            "postgresql": (True, "connected"),
+            "osrm": (True, "available"),
+            "vroom": (True, "available"),
+        }
+        with patch.dict(os.environ, {"ENVIRONMENT": "production", "RATE_LIMIT_ENABLED": "false"}), \
+             patch("apps.kerala_delivery.api.main.wait_for_services", new_callable=AsyncMock, return_value=mock_health):
             # Must reimport to pick up the new environment
             import importlib
             import apps.kerala_delivery.api.main as main_mod
             importlib.reload(main_mod)
+            main_mod.app.state.service_health = mock_health
+            main_mod.app.state.started_at = datetime.now(timezone.utc)
             prod_client = TestClient(main_mod.app)
             try:
                 assert prod_client.get("/docs").status_code == 404
@@ -1973,9 +2018,17 @@ class TestRateLimiting:
         async def override_get_session():
             yield mock_session
 
+        mock_health = {
+            "postgresql": (True, "connected"),
+            "osrm": (True, "available"),
+            "vroom": (True, "available"),
+        }
         limiter.enabled = True
         app.dependency_overrides[get_session] = override_get_session
-        yield TestClient(app)
+        app.state.service_health = mock_health
+        app.state.started_at = datetime.now(timezone.utc)
+        with patch("apps.kerala_delivery.api.main.wait_for_services", new_callable=AsyncMock, return_value=mock_health):
+            yield TestClient(app)
         app.dependency_overrides.clear()
         # CRITICAL: reset all in-memory counters to prevent state leaking
         # to subsequent test modules. Without this, another module enabling

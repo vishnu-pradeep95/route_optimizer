@@ -61,7 +61,9 @@ from core.optimizer.vroom_adapter import VroomAdapter
 from geoalchemy2.shape import to_shape
 
 from apps.kerala_delivery.api.errors import ErrorCode, ErrorResponse, error_response, ERROR_HELP_URLS
+from apps.kerala_delivery.api.health import wait_for_services, check_postgresql, check_osrm, check_vroom, check_google_api
 from apps.kerala_delivery.api.middleware import RequestIDMiddleware, RequestIDFilter, request_id_var, LOG_FORMAT
+from apps.kerala_delivery.api.retry import geocoding_retry, optimizer_retry
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +201,27 @@ async def lifespan(app: FastAPI):
                 message="Development mode — no license required",
             )
             app.state.license_info = license_info
+
+    # ── Startup health gates (NON-NEGOTIABLE) ────────────────────────
+    # Block until PostgreSQL, OSRM, VROOM are healthy (60s timeout).
+    # Sequence: PostgreSQL first, then OSRM, then VROOM.
+    # If timeout, start anyway but store degraded status for /health endpoint.
+    osrm_url = os.environ.get("OSRM_URL", "http://osrm:5000")
+    vroom_url = os.environ.get("VROOM_URL", "http://vroom:3000")
+
+    logger.info("Checking service health (60s timeout)...")
+    service_health = await wait_for_services(engine, osrm_url, vroom_url, timeout=60.0)
+    app.state.service_health = service_health
+    app.state.started_at = datetime.now(timezone.utc)
+
+    unhealthy = [name for name, (healthy, _) in service_health.items() if not healthy]
+    if unhealthy:
+        logger.warning(
+            "Starting with unhealthy services: %s — API will return 503 for affected operations",
+            unhealthy,
+        )
+    else:
+        logger.info("All services healthy")
 
     logger.info("Starting up — DB engine pool initialized")
     yield
@@ -735,10 +758,60 @@ class AppConfig(BaseModel):
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
-    # Use app.version so we don't have to update this string separately.
-    # The version is set once in the FastAPI() constructor above.
-    return {"status": "ok", "service": "kerala-lpg-optimizer", "version": app.version}
+    """Enhanced health check with per-service status.
+
+    Returns overall status (healthy/degraded/unhealthy) and per-service
+    breakdown. Used by start-daily.sh health polling and dashboard status bar.
+
+    - 200: all services healthy
+    - 503: one or more services unhealthy (includes details in response body)
+    """
+    service_health = getattr(app.state, "service_health", {})
+    google_status, google_msg = check_google_api()
+
+    services = {
+        "postgresql": {
+            "status": "connected" if service_health.get("postgresql", (False,))[0] else "unavailable",
+            "message": service_health.get("postgresql", (False, "unknown"))[1],
+        },
+        "osrm": {
+            "status": "available" if service_health.get("osrm", (False,))[0] else "unavailable",
+            "message": service_health.get("osrm", (False, "unknown"))[1],
+        },
+        "vroom": {
+            "status": "available" if service_health.get("vroom", (False,))[0] else "unavailable",
+            "message": service_health.get("vroom", (False, "unknown"))[1],
+        },
+        "google_api": {
+            "status": google_status,
+            "message": google_msg,
+        },
+    }
+
+    all_healthy = all(
+        s["status"] in ("connected", "available", "configured", "not_configured")
+        for s in services.values()
+    )
+    any_unhealthy = any(
+        s["status"] in ("unavailable", "timeout", "error")
+        for s in services.values()
+    )
+    overall = "healthy" if all_healthy else ("unhealthy" if any_unhealthy else "degraded")
+
+    started_at = getattr(app.state, "started_at", datetime.now(timezone.utc))
+    uptime = (datetime.now(timezone.utc) - started_at).total_seconds()
+
+    status_code = 200 if overall == "healthy" else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": overall,
+            "service": "kerala-lpg-optimizer",
+            "version": app.version,
+            "uptime_seconds": round(uptime, 1),
+            "services": services,
+        },
+    )
 
 
 @app.get("/api/config", response_model=AppConfig)
@@ -975,6 +1048,12 @@ async def upload_and_optimize(
         # Step 2: Geocode orders that don't have coordinates
         # CachedGeocoder handles DB cache lookup + API fallback in one call.
         geocoder = _get_geocoder()
+        # Apply retry decorator to individual geocoding HTTP calls.
+        # This wraps _call_api (synchronous httpx.get) so each Google API
+        # request is retried on transient failures (ConnectError, TimeoutException).
+        # Permanent errors (HTTP 400/401/403) are NOT retried.
+        if geocoder is not None:
+            geocoder._call_api = geocoding_retry(geocoder._call_api)
         geocoding_failures: list[ImportFailure] = []
 
         # GEO-04: Initialize cost tracking variables (available in all return paths)
@@ -1157,6 +1236,11 @@ async def upload_and_optimize(
             vroom_url=config.VROOM_URL,
             safety_multiplier=effective_multiplier,
         )
+        # Apply retry decorator to the optimizer's HTTP POST call.
+        # This wraps optimize() (synchronous httpx.post to VROOM) so transient
+        # failures (ConnectError, TimeoutException) are retried automatically.
+        # Permanent errors (HTTP 400 = bad input) are NOT retried.
+        optimizer.optimize = optimizer_retry(optimizer.optimize)
         assignment = optimizer.optimize(geocoded_orders, fleet)
 
         # Step 4: Persist to database
