@@ -1071,7 +1071,8 @@ class TestAuthentication:
             files={"file": ("orders.csv", sample_csv_file, "text/csv")},
         )
         assert resp.status_code == 401
-        assert "API key" in resp.json()["detail"]
+        data = resp.json()
+        assert "API key" in data.get("user_message", data.get("detail", ""))
 
     def test_upload_rejects_wrong_key(self, auth_client, sample_csv_file):
         """POST /api/upload-orders with incorrect API key returns 401."""
@@ -1132,7 +1133,7 @@ class TestAuthentication:
         """
         resp = auth_client.get("/api/telemetry/fleet")
         assert resp.status_code == 401
-        assert "API key" in resp.json()["detail"]
+        assert "API key" in resp.json().get("user_message", resp.json().get("detail", ""))
 
     def test_vehicle_telemetry_rejects_missing_key(self, auth_client):
         """GET /api/telemetry/{vehicle_id} without API key returns 401.
@@ -1142,7 +1143,7 @@ class TestAuthentication:
         """
         resp = auth_client.get("/api/telemetry/VEH-01")
         assert resp.status_code == 401
-        assert "API key" in resp.json()["detail"]
+        assert "API key" in resp.json().get("user_message", resp.json().get("detail", ""))
 
     def test_list_vehicles_rejects_missing_key(self, auth_client):
         """GET /api/vehicles without API key returns 401.
@@ -1152,13 +1153,13 @@ class TestAuthentication:
         """
         resp = auth_client.get("/api/vehicles")
         assert resp.status_code == 401
-        assert "API key" in resp.json()["detail"]
+        assert "API key" in resp.json().get("user_message", resp.json().get("detail", ""))
 
     def test_get_vehicle_rejects_missing_key(self, auth_client):
         """GET /api/vehicles/{vehicle_id} without API key returns 401."""
         resp = auth_client.get("/api/vehicles/VEH-01")
         assert resp.status_code == 401
-        assert "API key" in resp.json()["detail"]
+        assert "API key" in resp.json().get("user_message", resp.json().get("detail", ""))
 
     def test_fleet_telemetry_accepts_correct_key(self, auth_client):
         """GET /api/telemetry/fleet with correct API key succeeds."""
@@ -1269,7 +1270,7 @@ class TestUploadValidation:
             files={"file": ("orders.txt", b"some data", "text/plain")},
         )
         assert resp.status_code == 400
-        assert "unsupported" in resp.json()["detail"].lower()
+        assert "unsupported" in resp.json().get("user_message", resp.json().get("detail", "")).lower()
 
     def test_rejects_exe_file(self, client):
         """Uploading an .exe should return 400 listing accepted types."""
@@ -1278,7 +1279,7 @@ class TestUploadValidation:
             files={"file": ("malware.exe", b"\x00" * 100, "application/octet-stream")},
         )
         assert resp.status_code == 400
-        assert ".csv" in resp.json()["detail"]
+        assert ".csv" in resp.json().get("user_message", resp.json().get("detail", ""))
 
     def test_rejects_filename_without_extension(self, client):
         """Upload with no file extension should return 400."""
@@ -1287,7 +1288,7 @@ class TestUploadValidation:
             files={"file": ("orders_noext", b"data", "text/csv")},
         )
         assert resp.status_code == 400
-        assert "Unsupported file type" in resp.json()["detail"]
+        assert "Unsupported file type" in resp.json().get("user_message", resp.json().get("detail", ""))
 
     def test_rejects_oversized_file(self, client):
         """Upload exceeding MAX_UPLOAD_SIZE_BYTES should return 413.
@@ -1301,7 +1302,7 @@ class TestUploadValidation:
                 files={"file": ("big.csv", b"x" * 200, "text/csv")},
             )
         assert resp.status_code == 413
-        assert "too large" in resp.json()["detail"].lower()
+        assert "too large" in resp.json().get("user_message", resp.json().get("detail", "")).lower()
 
     def test_upload_rejects_pdf_extension(self, client):
         """Uploading a .pdf file returns 400 with descriptive error."""
@@ -1310,7 +1311,7 @@ class TestUploadValidation:
             files={"file": ("orders.pdf", b"fake pdf data", "application/pdf")},
         )
         assert resp.status_code == 400
-        detail = resp.json()["detail"]
+        detail = resp.json().get("user_message", resp.json().get("detail", ""))
         assert ".pdf" in detail
         assert ".csv" in detail  # Lists accepted types
 
@@ -1321,7 +1322,7 @@ class TestUploadValidation:
             files={"file": ("orders.csv", b"data", "application/pdf")},
         )
         assert resp.status_code == 400
-        assert "content type" in resp.json()["detail"].lower()
+        assert "content type" in resp.json().get("user_message", resp.json().get("detail", "")).lower()
 
     def test_upload_accepts_octet_stream_content_type(self, client, mock_session):
         """application/octet-stream is accepted (browsers send this for CSV).
@@ -1349,7 +1350,7 @@ class TestUploadValidation:
                 files={"file": ("orders.csv", big_content, "text/csv")},
             )
         assert resp.status_code == 413
-        detail = resp.json()["detail"]
+        detail = resp.json().get("user_message", resp.json().get("detail", ""))
         assert "MB" in detail  # Shows size unit
 
     def test_validation_before_processing(self, client):
@@ -1362,7 +1363,7 @@ class TestUploadValidation:
             files={"file": ("data.pdf", b"not,a,csv\n1,2,3", "application/pdf")},
         )
         assert resp.status_code == 400
-        assert "file type" in resp.json()["detail"].lower() or "content type" in resp.json()["detail"].lower()
+        assert "file type" in resp.json().get("user_message", resp.json().get("detail", "")).lower() or "content type" in resp.json().get("user_message", resp.json().get("detail", "")).lower()
 
 
 # =============================================================================
@@ -2130,7 +2131,7 @@ class TestCdcmsAutoDetection:
             files={"file": ("cdcms.csv", cdcms_no_matching.encode(), "text/csv")},
         )
         assert resp.status_code == 400
-        assert "allocated-printed" in resp.json()["detail"].lower()
+        assert "allocated-printed" in resp.json().get("user_message", resp.json().get("detail", "")).lower()
 
     def test_standard_csv_not_treated_as_cdcms(
         self, client, sample_csv_file, mock_vroom_2_orders, mock_run_id

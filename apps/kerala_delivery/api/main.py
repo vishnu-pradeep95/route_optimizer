@@ -60,7 +60,15 @@ from core.models.order import Order
 from core.optimizer.vroom_adapter import VroomAdapter
 from geoalchemy2.shape import to_shape
 
+from apps.kerala_delivery.api.errors import ErrorCode, ErrorResponse, error_response, ERROR_HELP_URLS
+from apps.kerala_delivery.api.middleware import RequestIDMiddleware, RequestIDFilter, request_id_var, LOG_FORMAT
+
 logger = logging.getLogger(__name__)
+
+# Configure logging with request ID filter so every log line includes [request_id].
+# This enables grep-based log correlation for support: "grep abc12def api.log"
+logging.basicConfig(format=LOG_FORMAT, level=logging.INFO, force=True)
+logging.getLogger().addFilter(RequestIDFilter())
 
 
 def _point_lat(geom: object) -> float | None:
@@ -322,8 +330,14 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     # Tighten from ["*"] to explicit list matching actual API headers
     allow_headers=["Content-Type", "X-API-Key", "Authorization"],
-    expose_headers=["X-License-Warning", "Retry-After"],
+    expose_headers=["X-License-Warning", "Retry-After", "X-Request-ID"],
 )
+
+# RequestIDMiddleware MUST be registered LAST because Starlette processes
+# middleware in reverse registration order (last added = outermost = runs first).
+# This ensures every request gets a request_id BEFORE any other middleware
+# processes it, so even auth/license error responses include request_id.
+app.add_middleware(RequestIDMiddleware)
 
 
 # =============================================================================
@@ -382,6 +396,28 @@ async def license_enforcement_middleware(request: Request, call_next):
         response.headers["X-License-Warning"] = license_info.message
 
     return response
+
+
+# =============================================================================
+# Global HTTPException handler — wraps old-style exceptions in ErrorResponse
+# =============================================================================
+# Catches any remaining `raise HTTPException(...)` that haven't been migrated
+# to `return error_response(...)`. Ensures ALL error responses conform to
+# the ErrorResponse JSON shape, even during migration period.
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Wrap all HTTPExceptions in ErrorResponse format for consistency."""
+    req_id = getattr(request.state, "request_id", "")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=ErrorResponse(
+            error_code="INTERNAL_ERROR" if exc.status_code >= 500 else "INVALID_REQUEST",
+            user_message=exc.detail if isinstance(exc.detail, str) else str(exc.detail),
+            request_id=req_id,
+        ).model_dump(mode="json"),
+    )
 
 
 # Serve the driver PWA as static files at /driver/
@@ -481,7 +517,7 @@ def _check_api_key(api_key: str | None) -> None:
     if not api_key or not hmac.compare_digest(api_key, expected_key):
         raise HTTPException(
             status_code=401,
-            detail="Invalid or missing API key. Include X-API-Key header.",
+            detail="Invalid or missing API key -- include X-API-Key header",
         )
 
 
@@ -635,7 +671,18 @@ class OptimizationSummary(BaseModel):
     dashboard can display per-row feedback without a separate API call.
     All new fields have defaults for backward compatibility — existing clients
     that don't read the new fields continue to work unchanged.
+
+    Partial success contract (LOCKED DECISION from CONTEXT.md):
+    - success: true for successful/partial-success uploads
+    - imported: count of successfully imported orders
+    - total: total rows in CSV
+    - warnings[]: per-row warning details
     """
+
+    # Partial success contract fields
+    success: bool = Field(default=True, description="True for successful/partial-success uploads")
+    imported: int = Field(default=0, description="Number of successfully imported orders (geocoded count)")
+    total: int = Field(default=0, description="Total rows in uploaded CSV (alias for total_rows)")
 
     # Existing fields (unchanged)
     run_id: str = Field(..., description="UUID of this optimization run (use for subsequent queries)")
@@ -737,17 +784,23 @@ async def upload_and_optimize(
 
     # Extension check with descriptive error
     if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
+        return error_response(
             status_code=400,
-            detail=f"Unsupported file type ({ext or 'none'}). Accepted: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+            error_code=ErrorCode.UPLOAD_INVALID_FORMAT,
+            user_message=f"Unsupported file type ({ext or 'none'}) -- use .csv, .xlsx, or .xls",
+            technical_message=f"Expected one of {sorted(ALLOWED_EXTENSIONS)}, got '{ext}'",
+            request_id=request_id_var.get(""),
         )
 
     # Content-type check (some browsers send odd types, so be lenient but block obvious mismatches)
     content_type = file.content_type or ""
     if content_type and content_type not in ALLOWED_CONTENT_TYPES:
-        raise HTTPException(
+        return error_response(
             status_code=400,
-            detail=f"Unexpected content type ({content_type}). Upload a CSV or Excel file.",
+            error_code=ErrorCode.UPLOAD_INVALID_FORMAT,
+            user_message=f"Unexpected content type ({content_type}) -- upload a CSV or Excel file",
+            technical_message=f"Allowed types: {sorted(ALLOWED_CONTENT_TYPES)}",
+            request_id=request_id_var.get(""),
         )
 
     suffix = ".csv" if ext == ".csv" else ".xlsx"
@@ -761,9 +814,12 @@ async def upload_and_optimize(
             if len(content) > MAX_UPLOAD_SIZE_BYTES:
                 size_mb = len(content) / (1024 * 1024)
                 max_mb = MAX_UPLOAD_SIZE_BYTES / (1024 * 1024)
-                raise HTTPException(
+                return error_response(
                     status_code=413,
-                    detail=f"File too large ({size_mb:.1f} MB). Maximum: {max_mb:.0f} MB.",
+                    error_code=ErrorCode.UPLOAD_FILE_TOO_LARGE,
+                    user_message=f"File too large ({size_mb:.1f} MB) -- maximum is {max_mb:.0f} MB",
+                    technical_message=f"{len(content)} bytes exceeds {MAX_UPLOAD_SIZE_BYTES} byte limit",
+                    request_id=request_id_var.get(""),
                 )
             tmp.write(content)
             tmp_path = tmp.name
@@ -786,10 +842,12 @@ async def upload_and_optimize(
                 area_suffix=config.CDCMS_AREA_SUFFIX,
             )
             if preprocessed_df.empty:
-                raise HTTPException(
+                return error_response(
                     status_code=400,
-                    detail="No 'Allocated-Printed' orders found in CDCMS export. "
-                    "Check that the file has orders with status 'Allocated-Printed'.",
+                    error_code=ErrorCode.UPLOAD_NO_ALLOCATED,
+                    user_message="No 'Allocated-Printed' orders found in CDCMS export -- check that the file has orders with status 'Allocated-Printed'",
+                    technical_message="preprocess_cdcms returned empty DataFrame",
+                    request_id=request_id_var.get(""),
                 )
             # Save preprocessed data to a temp CSV for CsvImporter
             preprocessed_path = tmp_path + ".preprocessed.csv"
@@ -846,6 +904,9 @@ async def upload_and_optimize(
                 # All rows failed validation — return structured response with failures
                 # instead of a generic 400 error. Staff can see exactly which rows to fix.
                 return OptimizationSummary(
+                    success=True,
+                    imported=0,
+                    total=len(import_result.errors),
                     run_id="",
                     assignment_id="",
                     total_orders=0,
@@ -868,7 +929,13 @@ async def upload_and_optimize(
                     duplicate_warnings=[],
                 )
             # Genuinely empty file (no rows at all, no errors) — this is a user error
-            raise HTTPException(status_code=400, detail="No valid orders found in file")
+            return error_response(
+                status_code=400,
+                error_code=ErrorCode.UPLOAD_NO_VALID_ORDERS,
+                user_message="No valid orders found in file -- check that the CSV has data rows",
+                technical_message="CsvImporter returned 0 orders and 0 errors",
+                request_id=request_id_var.get(""),
+            )
 
         # Step 1b: Enforce minimum delivery window (Kerala MVD compliance)
         # Non-negotiable: no delivery window shorter than 30 minutes.
@@ -1037,6 +1104,9 @@ async def upload_and_optimize(
                     logger.error("Google Geocoding API quota exceeded. Check billing.")
 
             return OptimizationSummary(
+                success=True,
+                imported=0,
+                total=len(orders) + len(import_result.errors),
                 run_id="",
                 assignment_id="",
                 total_orders=len(orders),
@@ -1064,9 +1134,12 @@ async def upload_and_optimize(
         if db_vehicles:
             fleet = [repo.vehicle_db_to_pydantic(v) for v in db_vehicles]
         else:
-            raise HTTPException(
+            return error_response(
                 status_code=400,
-                detail="No active vehicles configured. Add vehicles in Fleet Management before uploading orders.",
+                error_code=ErrorCode.FLEET_NO_VEHICLES,
+                user_message="No active vehicles configured -- add vehicles in Fleet Management before uploading orders",
+                technical_message="repo.get_active_vehicles returned empty list",
+                request_id=request_id_var.get(""),
             )
 
         # Apply monsoon multiplier (June–September) on top of base safety multiplier.
@@ -1097,6 +1170,9 @@ async def upload_and_optimize(
         await session.commit()
 
         return OptimizationSummary(
+            success=True,
+            imported=len(geocoded_orders),
+            total=len(orders) + len(import_result.errors),
             run_id=str(run_id),
             assignment_id=assignment.assignment_id,
             total_orders=len(orders),
@@ -1125,46 +1201,49 @@ async def upload_and_optimize(
     except ValueError as e:
         # ValueError from preprocess_cdcms() or CsvImporter._validate_columns()
         # already has a humanized message — pass it through as HTTP 400.
-        raise HTTPException(status_code=400, detail=str(e))
+        return error_response(
+            status_code=400,
+            error_code=ErrorCode.INVALID_REQUEST,
+            user_message=str(e),
+            technical_message=f"ValueError: {e}",
+            request_id=request_id_var.get(""),
+        )
 
     except httpx.ConnectError as e:
         logger.error("VROOM/OSRM connection failed during upload: %s", e)
-        raise HTTPException(
+        return error_response(
             status_code=503,
-            detail=(
-                "Route optimizer is not ready yet. "
-                "OSRM may still be downloading map data (this takes ~15 minutes on first run). "
-                "Please wait and try again."
-            ),
+            error_code=ErrorCode.OPTIMIZER_UNAVAILABLE,
+            user_message="Route optimizer is not ready yet -- OSRM may still be downloading map data (this takes ~15 minutes on first run). Please wait and try again",
+            technical_message=f"httpx.ConnectError: {e}",
+            request_id=request_id_var.get(""),
         )
     except httpx.TimeoutException as e:
         logger.error("VROOM/OSRM timed out during upload: %s", e)
-        raise HTTPException(
+        return error_response(
             status_code=503,
-            detail=(
-                "Route optimizer timed out. "
-                "OSRM may still be processing map data. "
-                "Please wait a few minutes and try again."
-            ),
+            error_code=ErrorCode.OPTIMIZER_TIMEOUT,
+            user_message="Route optimizer timed out -- OSRM may still be processing map data. Please wait a few minutes and try again",
+            technical_message=f"httpx.TimeoutException: {e}",
+            request_id=request_id_var.get(""),
         )
     except httpx.HTTPStatusError as e:
         logger.error("VROOM returned error %d: %s", e.response.status_code, e.response.text[:300])
-        raise HTTPException(
+        return error_response(
             status_code=502,
-            detail=(
-                f"Route optimizer returned an error (HTTP {e.response.status_code}). "
-                "This may indicate OSRM is still starting up. Please try again in a few minutes."
-            ),
+            error_code=ErrorCode.OPTIMIZER_ERROR,
+            user_message=f"Route optimizer returned an error (HTTP {e.response.status_code}) -- this may indicate OSRM is still starting up. Please try again in a few minutes",
+            technical_message=f"VROOM HTTP {e.response.status_code}: {e.response.text[:200]}",
+            request_id=request_id_var.get(""),
         )
     except Exception as e:
         logger.exception("Unexpected error during upload: %s", e)
-        raise HTTPException(
+        return error_response(
             status_code=500,
-            detail=(
-                "An unexpected error occurred while processing your upload. "
-                "Please check that all services are running and try again. "
-                f"Error: {type(e).__name__}: {e}"
-            ),
+            error_code=ErrorCode.INTERNAL_ERROR,
+            user_message="An unexpected error occurred while processing your upload -- please check that all services are running and try again",
+            technical_message=f"{type(e).__name__}: {e}",
+            request_id=request_id_var.get(""),
         )
 
     finally:
@@ -1193,7 +1272,12 @@ async def list_routes(include_stops: bool = False, session: AsyncSession = Sessi
     """
     run = await repo.get_latest_run(session)
     if not run:
-        raise HTTPException(status_code=404, detail="No routes generated yet. Upload orders first.")
+        return error_response(
+            status_code=404,
+            error_code=ErrorCode.ROUTE_NO_RUNS,
+            user_message="No routes generated yet -- upload orders first",
+            request_id=request_id_var.get(""),
+        )
 
     route_dbs = await repo.get_routes_for_run(session, run.id)
 
@@ -1266,13 +1350,21 @@ async def get_driver_route(vehicle_id: str, session: AsyncSession = SessionDep):
     """
     run = await repo.get_latest_run(session)
     if not run:
-        raise HTTPException(status_code=404, detail="No routes generated yet.")
+        return error_response(
+            status_code=404,
+            error_code=ErrorCode.ROUTE_NO_RUNS,
+            user_message="No routes generated yet -- upload orders first",
+            request_id=request_id_var.get(""),
+        )
 
     route_db = await repo.get_route_for_vehicle(session, run.id, vehicle_id)
     if not route_db:
-        raise HTTPException(
+        return error_response(
             status_code=404,
-            detail=f"No route found for vehicle {vehicle_id}",
+            error_code=ErrorCode.ROUTE_NOT_FOUND,
+            user_message=f"No route found for vehicle {vehicle_id}",
+            technical_message=f"run_id={run.id}, vehicle_id={vehicle_id}",
+            request_id=request_id_var.get(""),
         )
 
     # Convert to Pydantic for clean serialization
@@ -1357,12 +1449,23 @@ async def update_stop_status(
     """
     run = await repo.get_latest_run(session)
     if not run:
-        raise HTTPException(status_code=404, detail="No routes generated yet.")
+        return error_response(
+            status_code=404,
+            error_code=ErrorCode.ROUTE_NO_RUNS,
+            user_message="No routes generated yet -- upload orders first",
+            request_id=request_id_var.get(""),
+        )
 
     # Find the route for this vehicle
     route_db = await repo.get_route_for_vehicle(session, run.id, vehicle_id)
     if not route_db:
-        raise HTTPException(status_code=404, detail="Stop not found")
+        return error_response(
+            status_code=404,
+            error_code=ErrorCode.ROUTE_STOP_NOT_FOUND,
+            user_message=f"Stop not found for vehicle {vehicle_id}",
+            technical_message=f"No route for vehicle_id={vehicle_id}",
+            request_id=request_id_var.get(""),
+        )
 
     # Find the stop by order_id (string) — look up in the stops
     target_stop = None
@@ -1372,7 +1475,13 @@ async def update_stop_status(
             break
 
     if not target_stop:
-        raise HTTPException(status_code=404, detail="Stop not found")
+        return error_response(
+            status_code=404,
+            error_code=ErrorCode.ROUTE_STOP_NOT_FOUND,
+            user_message=f"Stop {order_id} not found in route for vehicle {vehicle_id}",
+            technical_message=f"order_id={order_id} not in route stops",
+            request_id=request_id_var.get(""),
+        )
 
     # Parse delivery location if provided
     delivery_loc = None
@@ -1389,7 +1498,13 @@ async def update_stop_status(
     await session.commit()
 
     if not updated:
-        raise HTTPException(status_code=404, detail="Stop not found")
+        return error_response(
+            status_code=404,
+            error_code=ErrorCode.ROUTE_STOP_NOT_FOUND,
+            user_message=f"Stop {order_id} not found",
+            technical_message=f"repo.update_stop_status returned False for order_id={order_id}",
+            request_id=request_id_var.get(""),
+        )
 
     # --- API-07: Save driver-verified location to geocode cache ---
     # Only on successful delivery WITH GPS — builds verified Kerala address DB.
@@ -1446,11 +1561,22 @@ async def get_google_maps_route(
     """
     run = await repo.get_latest_run(session)
     if not run:
-        raise HTTPException(status_code=404, detail="No routes generated yet.")
+        return error_response(
+            status_code=404,
+            error_code=ErrorCode.ROUTE_NO_RUNS,
+            user_message="No routes generated yet -- upload orders first",
+            request_id=request_id_var.get(""),
+        )
 
     route_db = await repo.get_route_for_vehicle(session, run.id, vehicle_id)
     if not route_db:
-        raise HTTPException(status_code=404, detail=f"No route found for vehicle {vehicle_id}")
+        return error_response(
+            status_code=404,
+            error_code=ErrorCode.ROUTE_NOT_FOUND,
+            user_message=f"No route found for vehicle {vehicle_id}",
+            technical_message=f"run_id={run.id}, vehicle_id={vehicle_id}",
+            request_id=request_id_var.get(""),
+        )
 
     route = repo.route_db_to_pydantic(route_db)
 
@@ -1503,11 +1629,22 @@ async def get_qr_sheet(session: AsyncSession = SessionDep):
     """
     run = await repo.get_latest_run(session)
     if not run:
-        raise HTTPException(status_code=404, detail="No routes generated yet. Upload orders first.")
+        return error_response(
+            status_code=404,
+            error_code=ErrorCode.ROUTE_NO_RUNS,
+            user_message="No routes generated yet -- upload orders first",
+            request_id=request_id_var.get(""),
+        )
 
     route_dbs = await repo.get_routes_for_run(session, run.id)
     if not route_dbs:
-        raise HTTPException(status_code=404, detail="No routes found for the latest run.")
+        return error_response(
+            status_code=404,
+            error_code=ErrorCode.ROUTE_NO_RUNS,
+            user_message="No routes found for the latest run",
+            technical_message=f"run_id={run.id} has 0 routes",
+            request_id=request_id_var.get(""),
+        )
 
     depot = config.DEPOT_LOCATION
 
@@ -2071,7 +2208,12 @@ async def get_vehicle(
     """Get details for a specific vehicle."""
     vehicle = await repo.get_vehicle_by_vehicle_id(session, vehicle_id)
     if not vehicle:
-        raise HTTPException(status_code=404, detail=f"Vehicle {vehicle_id} not found")
+        return error_response(
+            status_code=404,
+            error_code=ErrorCode.FLEET_VEHICLE_NOT_FOUND,
+            user_message=f"Vehicle {vehicle_id} not found",
+            request_id=request_id_var.get(""),
+        )
     return _vehicle_to_dict(vehicle)
 
 
@@ -2090,9 +2232,11 @@ async def create_vehicle(
     # Check for duplicate vehicle_id
     existing = await repo.get_vehicle_by_vehicle_id(session, body.vehicle_id)
     if existing:
-        raise HTTPException(
+        return error_response(
             status_code=409,
-            detail=f"Vehicle {body.vehicle_id} already exists",
+            error_code=ErrorCode.FLEET_VEHICLE_EXISTS,
+            user_message=f"Vehicle {body.vehicle_id} already exists -- use a different ID",
+            request_id=request_id_var.get(""),
         )
 
     depot = Location(latitude=body.depot_latitude, longitude=body.depot_longitude)
@@ -2138,11 +2282,21 @@ async def update_vehicle(
     updates.pop("depot_longitude", None)
 
     if not updates:
-        raise HTTPException(status_code=400, detail="No fields to update")
+        return error_response(
+            status_code=400,
+            error_code=ErrorCode.FLEET_NO_FIELDS,
+            user_message="No fields to update -- provide at least one field to change",
+            request_id=request_id_var.get(""),
+        )
 
     updated = await repo.update_vehicle(session, vehicle_id, updates)
     if not updated:
-        raise HTTPException(status_code=404, detail=f"Vehicle {vehicle_id} not found")
+        return error_response(
+            status_code=404,
+            error_code=ErrorCode.FLEET_VEHICLE_NOT_FOUND,
+            user_message=f"Vehicle {vehicle_id} not found",
+            request_id=request_id_var.get(""),
+        )
 
     await session.commit()
     return {"message": f"Vehicle {vehicle_id} updated"}
@@ -2163,7 +2317,12 @@ async def delete_vehicle(
     """
     deactivated = await repo.deactivate_vehicle(session, vehicle_id)
     if not deactivated:
-        raise HTTPException(status_code=404, detail=f"Vehicle {vehicle_id} not found")
+        return error_response(
+            status_code=404,
+            error_code=ErrorCode.FLEET_VEHICLE_NOT_FOUND,
+            user_message=f"Vehicle {vehicle_id} not found",
+            request_id=request_id_var.get(""),
+        )
 
     await session.commit()
     return {"message": f"Vehicle {vehicle_id} deactivated"}
@@ -2218,11 +2377,23 @@ async def get_routes_for_run(
     try:
         run_uuid = uuid.UUID(run_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid run_id format")
+        return error_response(
+            status_code=400,
+            error_code=ErrorCode.INVALID_REQUEST,
+            user_message="Invalid run ID format -- expected a UUID",
+            technical_message=f"Could not parse '{run_id}' as UUID",
+            request_id=request_id_var.get(""),
+        )
 
     run = await repo.get_run_by_id(session, run_uuid)
     if not run:
-        raise HTTPException(status_code=404, detail="Optimization run not found")
+        return error_response(
+            status_code=404,
+            error_code=ErrorCode.ROUTE_NO_RUNS,
+            user_message="Optimization run not found",
+            technical_message=f"No run with id={run_id}",
+            request_id=request_id_var.get(""),
+        )
 
     route_dbs = await repo.get_routes_for_run(session, run_uuid)
 
