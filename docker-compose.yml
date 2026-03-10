@@ -220,6 +220,7 @@ services:
     volumes:
       - ./data:/app/data
       - dashboard_assets:/srv/dashboard:ro
+      - /etc/machine-id:/etc/machine-id:ro   # Machine identity for license fingerprint
     depends_on:
       db-init:
         condition: service_completed_successfully
