@@ -1968,17 +1968,24 @@ class TestSecurityHeaders:
         assert resp.headers.get("access-control-allow-origin") == "http://localhost:8000"
 
     def test_docs_gated_in_production(self):
-        """API docs return 404 when ENVIRONMENT=production (SEC-03)."""
+        """API docs disabled by default (production); enabled only with ENVIRONMENT=development.
+
+        Production is the DEFAULT behavior -- when ENVIRONMENT is unset or set
+        to anything other than 'development', /docs, /redoc, and /openapi.json
+        all return 404. This closes security audit finding #1.
+        """
+        import importlib
+        import apps.kerala_delivery.api.main as main_mod
+
         mock_health = {
             "postgresql": (True, "connected"),
             "osrm": (True, "available"),
             "vroom": (True, "available"),
         }
+
+        # Test 1: ENVIRONMENT=production -- docs disabled
         with patch.dict(os.environ, {"ENVIRONMENT": "production", "RATE_LIMIT_ENABLED": "false"}), \
              patch("apps.kerala_delivery.api.main.wait_for_services", new_callable=AsyncMock, return_value=mock_health):
-            # Must reimport to pick up the new environment
-            import importlib
-            import apps.kerala_delivery.api.main as main_mod
             importlib.reload(main_mod)
             main_mod.app.state.service_health = mock_health
             main_mod.app.state.started_at = datetime.now(timezone.utc)
@@ -1988,7 +1995,62 @@ class TestSecurityHeaders:
                 assert prod_client.get("/redoc").status_code == 404
                 assert prod_client.get("/openapi.json").status_code == 404
             finally:
-                # Reload with default environment to restore for other tests
+                with patch.dict(os.environ, {"ENVIRONMENT": "development", "RATE_LIMIT_ENABLED": "false"}):
+                    importlib.reload(main_mod)
+
+    def test_docs_gated_when_environment_unset(self):
+        """API docs disabled when ENVIRONMENT is not set at all (production default)."""
+        import importlib
+        import apps.kerala_delivery.api.main as main_mod
+
+        mock_health = {
+            "postgresql": (True, "connected"),
+            "osrm": (True, "available"),
+            "vroom": (True, "available"),
+        }
+
+        # Remove ENVIRONMENT entirely -- should behave as production
+        env_copy = os.environ.copy()
+        env_copy.pop("ENVIRONMENT", None)
+        env_copy["RATE_LIMIT_ENABLED"] = "false"
+
+        with patch.dict(os.environ, env_copy, clear=True), \
+             patch("apps.kerala_delivery.api.main.wait_for_services", new_callable=AsyncMock, return_value=mock_health):
+            importlib.reload(main_mod)
+            main_mod.app.state.service_health = mock_health
+            main_mod.app.state.started_at = datetime.now(timezone.utc)
+            client = TestClient(main_mod.app)
+            try:
+                assert client.get("/docs").status_code == 404
+                assert client.get("/redoc").status_code == 404
+                assert client.get("/openapi.json").status_code == 404
+            finally:
+                with patch.dict(os.environ, {"ENVIRONMENT": "development", "RATE_LIMIT_ENABLED": "false"}):
+                    importlib.reload(main_mod)
+
+    def test_docs_enabled_in_development(self):
+        """API docs enabled when ENVIRONMENT=development (opt-in dev convenience)."""
+        import importlib
+        import apps.kerala_delivery.api.main as main_mod
+
+        mock_health = {
+            "postgresql": (True, "connected"),
+            "osrm": (True, "available"),
+            "vroom": (True, "available"),
+        }
+
+        with patch.dict(os.environ, {"ENVIRONMENT": "development", "RATE_LIMIT_ENABLED": "false"}), \
+             patch("apps.kerala_delivery.api.main.wait_for_services", new_callable=AsyncMock, return_value=mock_health):
+            importlib.reload(main_mod)
+            main_mod.app.state.service_health = mock_health
+            main_mod.app.state.started_at = datetime.now(timezone.utc)
+            dev_client = TestClient(main_mod.app)
+            try:
+                assert dev_client.get("/docs").status_code == 200
+                assert dev_client.get("/redoc").status_code == 200
+                assert dev_client.get("/openapi.json").status_code == 200
+            finally:
+                # Restore dev mode for other tests
                 with patch.dict(os.environ, {"ENVIRONMENT": "development", "RATE_LIMIT_ENABLED": "false"}):
                     importlib.reload(main_mod)
 
