@@ -8,10 +8,10 @@
 #   2. Strips developer-only artifacts (.git, tests, .planning, etc.)
 #   3. Strips dev-mode ENVIRONMENT gate from staged main.py (production-only)
 #   4. Validates zero ENVIRONMENT references remain in staged .py files
-#   5. Hashes protected licensing files (placeholder for Phase 7 integrity)
+#   5. Computes SHA256 integrity manifest and injects into license_manager.py
 #   6. Compiles licensing module to native .so via Cython inside Docker
 #   7. Validates .so imports inside Docker (platform compatibility check)
-#   8. Removes .py source from compiled modules (keeps __init__.py stub)
+#   8. Removes .py source from compiled modules (keeps __init__.py stub + enforcement.py)
 #   9. Packages everything into a versioned tarball
 #
 # Pipeline ordering:
@@ -160,15 +160,33 @@ fi
 success "No ENVIRONMENT references found in staged Python files"
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Step 4: HASH -- Record protected file hashes (Phase 7 integrity manifest)
+# Step 4: HASH -- Compute and inject integrity manifest
 # ═══════════════════════════════════════════════════════════════════════════
 
-header "Hashing protected files"
+header "Computing and injecting integrity manifest"
 
-sha256sum "$STAGE/core/licensing/license_manager.py" > "$BUILD_DIR/licensing-hashes.txt"
-sha256sum "$STAGE/core/licensing/__init__.py" >> "$BUILD_DIR/licensing-hashes.txt"
+# Compute SHA256 of protected files (AFTER dev-mode stripping, BEFORE compilation)
+MAIN_HASH=$(sha256sum "$STAGE/apps/kerala_delivery/api/main.py" | cut -d' ' -f1)
+ENFORCE_HASH=$(sha256sum "$STAGE/core/licensing/enforcement.py" | cut -d' ' -f1)
+INIT_HASH=$(sha256sum "$STAGE/core/licensing/__init__.py" | cut -d' ' -f1)
 
-success "Protected file hashes recorded (Phase 7 will embed in integrity manifest)"
+info "  main.py:        ${MAIN_HASH:0:16}..."
+info "  enforcement.py: ${ENFORCE_HASH:0:16}..."
+info "  __init__.py:    ${INIT_HASH:0:16}..."
+
+# Build the manifest dict string
+# SHA256 hex digests are [0-9a-f] only -- no sed special character risk
+MANIFEST_DICT="{\"apps/kerala_delivery/api/main.py\": \"${MAIN_HASH}\", \"core/licensing/enforcement.py\": \"${ENFORCE_HASH}\", \"core/licensing/__init__.py\": \"${INIT_HASH}\"}"
+
+# Inject into license_manager.py, replacing the empty placeholder dict
+sed -i "s|_INTEGRITY_MANIFEST: dict\[str, str\] = {}|_INTEGRITY_MANIFEST: dict[str, str] = ${MANIFEST_DICT}|" \
+    "$STAGE/core/licensing/license_manager.py"
+
+# Verify injection worked
+grep -q "INTEGRITY_MANIFEST.*apps/kerala_delivery" "$STAGE/core/licensing/license_manager.py" \
+    || { error "Failed to inject integrity manifest"; exit 1; }
+
+success "Integrity manifest injected into license_manager.py (3 protected files)"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Step 5: COMPILE -- Cython compilation via Docker (replaces .pyc)
@@ -201,7 +219,7 @@ header "Validating .so imports (Docker)"
 
 # Mount the staged directory and test imports inside the same base image
 docker run --rm -v "$STAGE:/app:ro" -w /app -e PYTHONPATH=/app python:3.12-slim \
-    python -c "from core.licensing.license_manager import get_machine_fingerprint, validate_license, encode_license_key; print('All imports OK')" \
+    python -c "from core.licensing.license_manager import get_machine_fingerprint, validate_license, encode_license_key, get_license_status, set_license_state, verify_integrity; print('All imports OK')" \
     || { error ".so import validation failed inside Docker! Platform mismatch?"; exit 1; }
 
 success "Import validation passed (.so licensing module loads in Docker)"
@@ -214,7 +232,11 @@ rm "$STAGE/core/licensing/license_manager.py"
 rm -f "$STAGE/core/licensing/license_manager.c"  # Cython intermediate, if extracted
 rm -rf "$STAGE/core/licensing/__pycache__/"
 
-success "Removed .py source from licensing module (kept __init__.py stub)"
+# Verify enforcement.py stays as .py (Cython cannot compile async def)
+[ -f "$STAGE/core/licensing/enforcement.py" ] \
+    || { error "enforcement.py missing from staging -- must stay as .py"; exit 1; }
+
+success "Removed .py source from licensing module (kept __init__.py stub and enforcement.py wrapper)"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Warn about placeholder API key in .env.example
