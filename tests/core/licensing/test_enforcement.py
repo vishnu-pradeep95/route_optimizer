@@ -286,7 +286,10 @@ class TestEnforce:
         from core.licensing.enforcement import enforce
 
         app = FastAPI()
-        middleware_count_before = len(app.middleware_stack.middleware if hasattr(app, 'middleware_stack') else [])
+
+        @app.get("/test-endpoint")
+        def test_endpoint():
+            return {"status": "ok"}
 
         valid_info = _make_license_info(LicenseStatus.VALID)
 
@@ -295,14 +298,13 @@ class TestEnforce:
             enforce(app)
 
         # Verify middleware was registered by testing with a client
-        @app.get("/test-endpoint")
-        def test_endpoint():
-            return {"status": "ok"}
-
+        # Should pass through since license is VALID
         client = TestClient(app)
         response = client.get("/test-endpoint")
-        # Should pass through since license is VALID
         assert response.status_code == 200
+
+        # Verify middleware is present in the user_middleware list
+        assert len(app.user_middleware) > 0
 
     def test_enforce_skips_integrity_in_dev_mode(self, monkeypatch):
         """enforce(app) skips integrity verification in dev mode."""
