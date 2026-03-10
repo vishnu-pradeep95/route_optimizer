@@ -122,15 +122,17 @@ Plans:
 - [ ] 02-03-PLAN.md -- Frontend error UI (ErrorBanner, ErrorTable, ErrorDetail), api.ts integration, per-service health display
 - [ ] 02-04-PLAN.md -- Playwright E2E tests for all error UI elements
 
-### Phase 3: Error Handling Polish
+### Phase 3: Error Handling Polish ✓
 
 **Goal:** Fix degraded integration edge cases: apiFetch 503 handling to preserve per-service health data, and repair all 15 ERROR_HELP_URLS anchor fragments to match actual doc headings.
 **Requirements**: [ERR-01, ERR-05, ERR-09]
 **Depends on:** Phase 2
 **Gap Closure:** Closes integration gaps from v1.0 audit (14/16 → 16/16 integration, 4/5 → 5/5 flows)
+**Plans:** 1/1 plans complete
+**Completed:** 2026-03-10
 
 Plans:
-- [ ] 03-01-PLAN.md -- Fix apiFetch 503 response handling, repair ERROR_HELP_URLS anchors
+- [x] 03-01-PLAN.md -- Fix apiFetch 503 response handling, repair ERROR_HELP_URLS anchors
 
 ### Phase 4: Documentation Accuracy Refresh
 

@@ -74,10 +74,14 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ Documentation consolidated in docs/ with cross-reference cleanup — post-v1.4
 - ✓ All documentation validated against codebase, audience badges added — post-v1.4
 - ✓ docs/INDEX.md as central documentation hub, README trimmed to overview-only — post-v1.4
+- ✓ Error handling infrastructure: ErrorResponse model, 22 ErrorCodes, request ID tracing, startup health gates, retry logic, frontend error UI — Phase 2
+- ✓ fetchHealth preserves 503 per-service JSON body for degraded health bar display — Phase 3
+- ✓ All 15 ERROR_HELP_URLS anchors match actual doc headings (Python + TypeScript in sync) — Phase 3
 
 ### Active
 
-- [ ] Error handling infrastructure (Phase 2 — to be planned)
+(No active requirements — all shipped)
+
 
 ### Out of Scope
 
@@ -161,5 +165,8 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | docs/INDEX.md as documentation hub | Central entry point with audience tags replaces scattered README links | ✓ Good — office employees find their docs first |
 | README.md overview-only | Setup/startup instructions moved to docs/SETUP.md, README links to INDEX.md | ✓ Good — clean landing page |
 
+| Direct fetch() for /health endpoint | apiFetch throws on 503, discarding per-service JSON body | ✓ Good — health bar shows service breakdown on degraded state |
+| FLEET_NO_VEHICLES → #step-11-cdcms-data-workflow | Closest relevant heading in SETUP.md (no Fleet Setup section) | ✓ Good — best available anchor |
+
 ---
-*Last updated: 2026-03-09 after Phase 01 (Documentation Restructure)*
+*Last updated: 2026-03-10 after Phase 03 (Error Handling Polish)*
