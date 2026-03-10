@@ -47,3 +47,20 @@ tools/tailwindcss-extra
 backups/*
 !backups/.gitkeep
 *.sql.gz
+
+# Claude Code / GSD tooling
+.claude/
+
+# Playwright MCP
+.playwright-mcp/
+
+# VS Code workspace settings
+.vscode/
+
+# Test artifacts
+dashboard-test.png
+playwright-report/
+test-results/
+
+# GSD template (local copy)
+gsd-template/
