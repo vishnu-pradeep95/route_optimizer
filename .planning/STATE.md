@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-03-10T22:36:14Z"
-last_activity: 2026-03-10 -- Phase 6 Plan 02 complete (HMAC credential rotation)
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-03-10T22:40:35.198Z"
+last_activity: 2026-03-10 -- Phase 6 Plan 01 complete (ENVIRONMENT production-default refactor)
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 3
-  completed_plans: 1
-  percent: 22
+  total_plans: 0
+  completed_plans: 0
+  percent: 33
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 6 -- Build Pipeline (Dev-Mode Stripping and Cython Compilation)
-Plan: 2 of 3 complete (06-02 done, 06-01 and 06-03 remaining)
+Plan: 2 of 3 complete (06-01 and 06-02 done, 06-03 remaining)
 Status: Executing
-Last activity: 2026-03-10 -- Phase 6 Plan 02 complete (HMAC credential rotation)
+Last activity: 2026-03-10 -- Phase 6 Plan 01 complete (ENVIRONMENT production-default refactor)
 
-Progress: [##░░░░░░░░] 22% (3/12 plans across 6 phases)
+Progress: [###░░░░░░░] 33% (4/12 plans across 6 phases)
 
 ## Performance Metrics
 
@@ -60,6 +60,8 @@ Progress: [##░░░░░░░░] 22% (3/12 plans across 6 phases)
 - Phase 6-02: PBKDF2 iterations doubled to 200k for stronger key derivation
 - Phase 6-02: Migration docs written in Phase 6 while context fresh (execution deferred to Phase 10)
 
+- Phase 6-01: Set ENVIRONMENT=development at top of test file (os.environ.setdefault) for test module imports
+
 See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase details per milestone.
 
 ### Pending Todos
@@ -77,7 +79,7 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 
 | # | Loophole | Severity | Phase |
 |---|----------|----------|-------|
-| 1 | ENVIRONMENT=development bypass | CRITICAL | Phase 6 |
+| 1 | ~~ENVIRONMENT=development bypass~~ | ~~CRITICAL~~ | ✓ Phase 6 (06-01) |
 | 2 | Enforcement in plain-text main.py | CRITICAL | Phase 7 |
 | 3 | ~~Fingerprint spoofable via Docker~~ | ~~MEDIUM~~ | ✓ Phase 5 |
 | 4 | .pyc decompilation trivial | MEDIUM | Phase 6 |
@@ -91,9 +93,10 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 | 05-01 | Fingerprint formula | 5min | 3 | 3 |
 | 05-02 | Docker compose bind mount | 2min | 2 | 2 |
 | 06-02 | HMAC credential rotation | 5min | 3 | 4 |
+| 06-01 | ENVIRONMENT production-default | 6min | 2 | 2 |
 
 ## Session Continuity
 
-Last session: 2026-03-10T22:36:14Z
-Stopped at: Completed 06-02-PLAN.md
-Resume file: .planning/milestones/v2.1-phases/06-build-pipeline/06-02-SUMMARY.md
+Last session: 2026-03-10T22:39:52Z
+Stopped at: Completed 06-01-PLAN.md
+Resume file: .planning/milestones/v2.1-phases/06-build-pipeline/06-01-SUMMARY.md

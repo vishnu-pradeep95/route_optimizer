@@ -9,7 +9,7 @@ Requirements for v2.1 Licensing & Distribution Security. Each maps to roadmap ph
 
 ### Enforcement Hardening
 
-- [ ] **ENF-01**: Dev-mode code stripped from distributed builds (no ENVIRONMENT=development bypass exists in tarball)
+- [x] **ENF-01**: Dev-mode code stripped from distributed builds (no ENVIRONMENT=development bypass exists in tarball)
 - [ ] **ENF-02**: Licensing module compiled to native .so via Cython (replaces decompilable .pyc)
 - [ ] **ENF-03**: Enforcement logic lives in compiled module with single `enforce(app)` entry point (main.py has no inline enforcement)
 - [x] **ENF-04**: HMAC derivation seed rotated (old .pyc seed is compromised)
@@ -72,7 +72,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENF-01 | Phase 6 | Pending |
+| ENF-01 | Phase 6 | Complete |
 | ENF-02 | Phase 6 | Pending |
 | ENF-03 | Phase 7 | Pending |
 | ENF-04 | Phase 6 | Complete |
