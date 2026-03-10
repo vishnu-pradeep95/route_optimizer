@@ -67,9 +67,10 @@ See `.planning/milestones/` for full phase details per milestone.
 |---|-------------|------|--------|-----------|
 | 1 | Fix 500 error on fresh-clone CSV upload and track reset script in git | 2026-03-09 | c91525d | [1-fix-500-error-on-fresh-clone-csv-upload-](./quick/1-fix-500-error-on-fresh-clone-csv-upload-/) |
 | 2 | Document OSRM readiness check and add Docker dependency conditions | 2026-03-09 | 3b994e5 | [2-document-osrm-readiness-check-and-add-tr](./quick/2-document-osrm-readiness-check-and-add-tr/) |
+| 3 | Commit uncommitted files: VITE_API_KEY Docker build, .gitignore cleanup, package-lock.json | 2026-03-10 | e544988 | [3-commit-uncommitted-files](./quick/3-commit-uncommitted-files/) |
 
 ## Session Continuity
 
 Last session: 2026-03-10
-Stopped at: v2.0 milestone archived
+Stopped at: Completed quick task 003 (commit uncommitted files)
 Resume file: None
