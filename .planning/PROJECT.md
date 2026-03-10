@@ -83,17 +83,17 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 
 ### Active
 
-## Current Milestone: v2.1 Licensing & Distribution Security
+## Current Milestone: v2.2 Address Preprocessing Pipeline
 
-**Goal:** Close all identified loopholes in the licensing and distribution system that allow customers to circumvent license enforcement.
+**Goal:** Fix wrong route locations caused by concatenated CDCMS addresses and unvalidated geocoding results — every address must geocode within the delivery zone or be flagged as approximate.
 
 **Target features:**
-- Eliminate ENVIRONMENT=development bypass in distributed builds
-- Move license enforcement logic into compiled .pyc code
-- Strengthen machine fingerprinting against Docker spoofing
-- Add periodic license re-validation (not just startup)
-- Add file integrity checking for shipped code
-- Harden .pyc against casual decompilation
+- Fix address_display source to always use cleaned original address (not Google's formatted_address)
+- Improve regex word splitting for lowercase→uppercase transitions in CDCMS text
+- Dictionary-powered word splitting using OSM + India Post place names (~200-300 entries)
+- Geocode validation with 30km zone check and fallback chain (area retry → centroid)
+- API confidence fields and Driver PWA "Approx. location" badge for low-confidence stops
+- Integration testing with accuracy metrics and Approach B (NER) upgrade trigger criteria
 
 
 ### Out of Scope
@@ -184,4 +184,4 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | Read-only bind mount for /etc/machine-id | Prevent container writes to host identity file | ✓ Good — secure host-container identity sharing |
 
 ---
-*Last updated: 2026-03-10 after Phase 5 (Fingerprinting Overhaul)*
+*Last updated: 2026-03-10 after Milestone v2.2 start (Address Preprocessing Pipeline)*

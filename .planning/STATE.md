@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.1
-milestone_name: Licensing & Distribution Security
-status: executing
-stopped_at: Completed 05-02-PLAN.md (Phase 5 complete)
-last_updated: "2026-03-10T20:23:12.960Z"
-last_activity: 2026-03-10 -- Completed 05-02 docker compose bind mount (Phase 5 done)
+milestone: v2.2
+milestone_name: Address Preprocessing Pipeline
+status: defining
+stopped_at: null
+last_updated: "2026-03-10"
+last_activity: 2026-03-10 -- Milestone v2.2 started
 progress:
-  total_phases: 6
+  total_phases: 0
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
-  percent: 17
+  percent: 0
 ---
 
 # Project State
@@ -21,16 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** v2.1 Licensing & Distribution Security -- Phase 6 (Build Pipeline)
+**Current focus:** v2.2 Address Preprocessing Pipeline
 
 ## Current Position
 
-Phase: 6 -- Build Pipeline (Dev-Mode Stripping and Cython Compilation)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-03-10 -- Phase 5 complete, transitioned to Phase 6
-
-Progress: [##░░░░░░░░] 17% (2/12 plans across 6 phases)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-10 — Milestone v2.2 started
 
 ## Performance Metrics
 
@@ -47,7 +45,8 @@ Progress: [##░░░░░░░░] 17% (2/12 plans across 6 phases)
 | v1.3 Office-Ready Deployment | 8 (13-20) | 10 | 2026-02-21 -> 2026-03-07 |
 | v1.4 Ship-Ready QA | 4 (21-24) | 10 | 2026-03-08 -> 2026-03-09 |
 | v2.0 Doc & Error Handling | 4 (1-4) | 9 | 2026-03-09 -> 2026-03-10 |
-| v2.1 Licensing Security | 6 (5-10) | TBD | 2026-03-10 -> ... |
+| v2.1 Licensing Security | 6 (5-10) | TBD | 2026-03-10 -> ... (parallel, main branch) |
+| v2.2 Address Preprocessing | TBD | TBD | 2026-03-10 -> ... |
 
 ## Accumulated Context
 
@@ -65,31 +64,11 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 
 ### Blockers/Concerns
 
-- BREAKING CHANGE: Fingerprint formula change (Phase 5) invalidates all existing customer licenses. Must coordinate migration in Phase 10.
-- Cython async limitation: `async def` cannot be compiled by Cython (FastAPI#1921). Enforcement middleware must call synchronous compiled functions from an uncompiled async wrapper.
-- Physical Android device testing required for outdoor contrast validation.
 - Google Maps API key is currently invalid (REQUEST_DENIED) -- E2E tests must use pre-geocoded seed data.
-
-### Security Audit Findings (v2.1 trigger)
-
-| # | Loophole | Severity | Phase |
-|---|----------|----------|-------|
-| 1 | ENVIRONMENT=development bypass | CRITICAL | Phase 6 |
-| 2 | Enforcement in plain-text main.py | CRITICAL | Phase 7 |
-| 3 | ~~Fingerprint spoofable via Docker~~ | ~~MEDIUM~~ | ✓ Phase 5 |
-| 4 | .pyc decompilation trivial | MEDIUM | Phase 6 |
-| 5 | License checked only at startup | LOW-MEDIUM | Phase 8 |
-| 6 | No file integrity verification | LOW-MEDIUM | Phase 7 |
-
-## Performance Metrics (v2.1)
-
-| Phase | Plan | Duration | Tasks | Files |
-|-------|------|----------|-------|-------|
-| 05-01 | Fingerprint formula | 5min | 3 | 3 |
-| 05-02 | Docker compose bind mount | 2min | 2 | 2 |
+- Physical Android device testing required for outdoor contrast validation.
 
 ## Session Continuity
 
 Last session: 2026-03-10
-Stopped at: Phase 5 complete, ready to plan Phase 6
+Stopped at: Defining requirements for v2.2
 Resume file: None
