@@ -71,21 +71,21 @@ class ErrorCode(StrEnum):
 # Error code -> docs/ URL path mapping.
 # Dashboard renders these as clickable help links in error details.
 ERROR_HELP_URLS: dict[str, str] = {
-    ErrorCode.UPLOAD_INVALID_FORMAT: "/docs/CSV_FORMAT.md#file-level-errors",
-    ErrorCode.UPLOAD_FILE_TOO_LARGE: "/docs/CSV_FORMAT.md#file-level-errors",
-    ErrorCode.UPLOAD_EMPTY_FILE: "/docs/CSV_FORMAT.md#file-level-errors",
-    ErrorCode.UPLOAD_NO_VALID_ORDERS: "/docs/CSV_FORMAT.md#row-level-errors",
-    ErrorCode.UPLOAD_NO_ALLOCATED: "/docs/CSV_FORMAT.md#cdcms-format",
-    ErrorCode.GEOCODING_NOT_CONFIGURED: "/docs/GOOGLE-MAPS.md#api-key-setup",
-    ErrorCode.GEOCODING_QUOTA_EXCEEDED: "/docs/GOOGLE-MAPS.md#quota",
-    ErrorCode.GEOCODING_FAILED: "/docs/GOOGLE-MAPS.md#troubleshooting",
-    ErrorCode.OPTIMIZER_UNAVAILABLE: "/docs/SETUP.md#osrm-vroom",
-    ErrorCode.OPTIMIZER_TIMEOUT: "/docs/SETUP.md#osrm-vroom",
-    ErrorCode.OPTIMIZER_ERROR: "/docs/SETUP.md#osrm-vroom",
-    ErrorCode.FLEET_NO_VEHICLES: "/docs/SETUP.md#fleet-setup",
-    ErrorCode.AUTH_KEY_INVALID: "/docs/SETUP.md#api-key",
-    ErrorCode.AUTH_KEY_MISSING: "/docs/SETUP.md#api-key",
-    ErrorCode.SERVICE_UNAVAILABLE: "/docs/SETUP.md#services",
+    ErrorCode.UPLOAD_INVALID_FORMAT: "/docs/CSV_FORMAT.md#before-processing-file-level-errors",
+    ErrorCode.UPLOAD_FILE_TOO_LARGE: "/docs/CSV_FORMAT.md#before-processing-file-level-errors",
+    ErrorCode.UPLOAD_EMPTY_FILE: "/docs/CSV_FORMAT.md#before-processing-file-level-errors",
+    ErrorCode.UPLOAD_NO_VALID_ORDERS: "/docs/CSV_FORMAT.md#during-processing-row-level-errors",
+    ErrorCode.UPLOAD_NO_ALLOCATED: "/docs/CSV_FORMAT.md#cdcms-export-format",
+    ErrorCode.GEOCODING_NOT_CONFIGURED: "/docs/GOOGLE-MAPS.md#setting-up-a-google-maps-api-key",
+    ErrorCode.GEOCODING_QUOTA_EXCEEDED: "/docs/GOOGLE-MAPS.md#over_query_limit",
+    ErrorCode.GEOCODING_FAILED: "/docs/GOOGLE-MAPS.md#common-errors",
+    ErrorCode.OPTIMIZER_UNAVAILABLE: "/docs/SETUP.md#osrm-not-ready",
+    ErrorCode.OPTIMIZER_TIMEOUT: "/docs/SETUP.md#osrm-not-ready",
+    ErrorCode.OPTIMIZER_ERROR: "/docs/SETUP.md#osrm-not-ready",
+    ErrorCode.FLEET_NO_VEHICLES: "/docs/SETUP.md#step-11-cdcms-data-workflow",
+    ErrorCode.AUTH_KEY_INVALID: "/docs/SETUP.md#step-6-environment-variables",
+    ErrorCode.AUTH_KEY_MISSING: "/docs/SETUP.md#step-6-environment-variables",
+    ErrorCode.SERVICE_UNAVAILABLE: "/docs/SETUP.md#troubleshooting-1",
 }
 
 
