@@ -72,31 +72,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENF-01 | — | Pending |
-| ENF-02 | — | Pending |
-| ENF-03 | — | Pending |
-| ENF-04 | — | Pending |
-| FPR-01 | — | Pending |
-| FPR-02 | — | Pending |
-| FPR-03 | — | Pending |
-| RTP-01 | — | Pending |
-| RTP-02 | — | Pending |
-| RTP-03 | — | Pending |
-| LIC-01 | — | Pending |
-| LIC-02 | — | Pending |
-| LIC-03 | — | Pending |
-| BLD-01 | — | Pending |
-| BLD-02 | — | Pending |
-| BLD-03 | — | Pending |
-| DOC-01 | — | Pending |
-| DOC-02 | — | Pending |
-| DOC-03 | — | Pending |
+| ENF-01 | Phase 6 | Pending |
+| ENF-02 | Phase 6 | Pending |
+| ENF-03 | Phase 7 | Pending |
+| ENF-04 | Phase 6 | Pending |
+| FPR-01 | Phase 5 | Pending |
+| FPR-02 | Phase 5 | Pending |
+| FPR-03 | Phase 5 | Pending |
+| RTP-01 | Phase 7 | Pending |
+| RTP-02 | Phase 8 | Pending |
+| RTP-03 | Phase 8 | Pending |
+| LIC-01 | Phase 9 | Pending |
+| LIC-02 | Phase 9 | Pending |
+| LIC-03 | Phase 9 | Pending |
+| BLD-01 | Phase 6 | Pending |
+| BLD-02 | Phase 6 | Pending |
+| BLD-03 | Phase 6 | Pending |
+| DOC-01 | Phase 10 | Pending |
+| DOC-02 | Phase 10 | Pending |
+| DOC-03 | Phase 10 | Pending |
 
 **Coverage:**
 - v2.1 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19 ⚠️
+- Mapped to phases: 19/19
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-10*
-*Last updated: 2026-03-10 after initial definition*
+*Last updated: 2026-03-10 after roadmap creation*

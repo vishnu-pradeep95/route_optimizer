@@ -8,6 +8,7 @@
 - ✅ **v1.3 Office-Ready Deployment** -- Phases 13-20 (shipped 2026-03-07)
 - ✅ **v1.4 Ship-Ready QA** -- Phases 21-24 (shipped 2026-03-09)
 - ✅ **v2.0 Documentation & Error Handling** -- Phases 1-4 (shipped 2026-03-10)
+- 🚧 **v2.1 Licensing & Distribution Security** -- Phases 5-10 (in progress)
 
 ## Phases
 
@@ -79,7 +80,113 @@
 
 </details>
 
+### 🚧 v2.1 Licensing & Distribution Security (In Progress)
+
+**Milestone Goal:** Close all identified loopholes in the licensing and distribution system that allow customers to circumvent license enforcement.
+
+- [ ] **Phase 5: Fingerprinting Overhaul** - Replace unstable Docker/MAC fingerprint with machine-id + CPU model signals
+- [ ] **Phase 6: Build Pipeline -- Dev-Mode Stripping and Cython Compilation** - Strip dev bypass from builds and compile licensing modules to native .so
+- [ ] **Phase 7: Enforcement Module** - Move enforcement logic and integrity manifest into compiled module with single entry point
+- [ ] **Phase 8: Runtime Protection** - Add periodic license and integrity re-validation during operation
+- [ ] **Phase 9: License Management** - Renewal mechanism and expiry visibility for monitoring
+- [ ] **Phase 10: End-to-End Validation** - E2E tests exercising the full security pipeline plus customer migration documentation
+
+## Phase Details
+
+### Phase 5: Fingerprinting Overhaul
+**Goal**: Machine identity is stable across container recreation, WSL reboots, and routine Docker operations
+**Depends on**: Nothing (first phase in v2.1)
+**Requirements**: FPR-01, FPR-02, FPR-03
+**Success Criteria** (what must be TRUE):
+  1. Running `get_machine_id.py` on the host produces the same fingerprint before and after a WSL restart
+  2. Running `get_machine_id.py` inside the Docker API container produces the same fingerprint as the host script
+  3. Rebuilding or recreating the API container (`docker compose up -d --force-recreate api`) does not change the fingerprint
+  4. The fingerprint formula uses `/etc/machine-id` and `/proc/cpuinfo` CPU model (not container ID or MAC address)
+**Plans**: TBD
+
+Plans:
+- [ ] 05-01: TBD
+- [ ] 05-02: TBD
+
+### Phase 6: Build Pipeline -- Dev-Mode Stripping and Cython Compilation
+**Goal**: Distributed builds contain no dev-mode bypass and licensing modules are compiled to native machine code
+**Depends on**: Phase 5 (new fingerprint formula must be in place before compiling)
+**Requirements**: ENF-01, ENF-02, ENF-04, BLD-01, BLD-02, BLD-03
+**Success Criteria** (what must be TRUE):
+  1. Running `grep -r "ENVIRONMENT"` on an unpacked distribution tarball returns zero matches in Python source files
+  2. The distribution tarball contains `.so` files (not `.py` or `.pyc`) for all `core/licensing/` modules
+  3. Running `python -c "from core.licensing.license_manager import get_machine_fingerprint"` inside a Docker container built from the tarball succeeds (no ImportError)
+  4. The HMAC derivation seed in the compiled `.so` differs from the seed in any previously shipped `.pyc` file
+  5. `build-dist.sh` completes without errors and produces a tarball with the correct pipeline ordering (strip -> hash -> compile -> validate -> package)
+**Plans**: TBD
+
+Plans:
+- [ ] 06-01: TBD
+- [ ] 06-02: TBD
+- [ ] 06-03: TBD
+
+### Phase 7: Enforcement Module
+**Goal**: All enforcement logic lives in a compiled module with a single entry point; main.py contains no inline enforcement code
+**Depends on**: Phase 6 (Cython compilation pipeline must be working)
+**Requirements**: ENF-03, RTP-01
+**Success Criteria** (what must be TRUE):
+  1. `main.py` calls `enforce(app)` (or equivalent single function) and contains zero lines of license validation, middleware registration, or enforcement logic
+  2. A SHA256 integrity manifest of protected files is embedded in the compiled `.so` and verified at startup -- tampering with `main.py` causes the API to refuse to start with a clear error
+  3. The enforcement module stores license state internally (not on `app.state` or any other Python-accessible object)
+**Plans**: TBD
+
+Plans:
+- [ ] 07-01: TBD
+- [ ] 07-02: TBD
+
+### Phase 8: Runtime Protection
+**Goal**: License validity and file integrity are continuously verified during operation, not just at startup
+**Depends on**: Phase 7 (enforcement module with integrity checking must exist)
+**Requirements**: RTP-02, RTP-03
+**Success Criteria** (what must be TRUE):
+  1. After the API has been running and served 500+ requests, modifying a protected file (e.g., `main.py`) causes the next request to fail with a license/integrity error
+  2. After the API has been running and served 500+ requests with an expired license, the next periodic check causes requests to fail with a license expiry error
+  3. Re-validation runs fully offline (no network calls) and does not block the event loop (response latency stays under 100ms during re-validation)
+**Plans**: TBD
+
+Plans:
+- [ ] 08-01: TBD
+
+### Phase 9: License Management
+**Goal**: License renewal is a simple file drop without re-keying, and license expiry is visible to monitoring tools
+**Depends on**: Phase 5 (stable fingerprint for renewal keys)
+**Requirements**: LIC-01, LIC-02, LIC-03
+**Success Criteria** (what must be TRUE):
+  1. Generating a renewal key with `generate_license.py --renew` and dropping it as `renewal.key` in the deployment extends the license expiry without requiring a new fingerprint exchange
+  2. API responses include an `X-License-Expires-In` header showing remaining days (e.g., `X-License-Expires-In: 45d`)
+  3. The `/health` endpoint body includes license status fields (valid/expired/grace period, expiry date, fingerprint match)
+**Plans**: TBD
+
+Plans:
+- [ ] 09-01: TBD
+- [ ] 09-02: TBD
+
+### Phase 10: End-to-End Validation
+**Goal**: The complete v2.1 security pipeline is tested end-to-end and customer migration is documented
+**Depends on**: Phase 8, Phase 9 (all features must be implemented before full integration testing)
+**Requirements**: DOC-01, DOC-02, DOC-03
+**Success Criteria** (what must be TRUE):
+  1. Playwright E2E tests pass for: integrity tamper detection, periodic re-validation triggering, license renewal via file drop, and fingerprint mismatch rejection
+  2. `docs/LICENSING.md` documents the new fingerprint formula, renewal workflow, integrity checking, and periodic re-validation
+  3. `docs/SETUP.md` and `docs/ERROR-MAP.md` are updated with all new error messages and configuration changes from v2.1
+  4. A customer migration document exists with step-by-step instructions for transitioning from the old fingerprint/HMAC to the new one (covering the breaking change)
+**Plans**: TBD
+
+Plans:
+- [ ] 10-01: TBD
+- [ ] 10-02: TBD
+- [ ] 10-03: TBD
+
 ## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 5 -> 6 -> 7 -> 8 -> 9 -> 10
+(Phase 9 depends on Phase 5, not Phase 8, so could theoretically run after Phase 5, but sequencing after Phase 8 avoids context-switching)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -111,6 +218,12 @@
 | 2. Error Handling Infrastructure | v2.0 | 4/4 | Complete | 2026-03-10 |
 | 3. Error Handling Polish | v2.0 | 1/1 | Complete | 2026-03-10 |
 | 4. Documentation Accuracy Refresh | v2.0 | 2/2 | Complete | 2026-03-10 |
+| 5. Fingerprinting Overhaul | v2.1 | 0/? | Not started | - |
+| 6. Build Pipeline -- Dev-Mode Stripping and Cython | v2.1 | 0/? | Not started | - |
+| 7. Enforcement Module | v2.1 | 0/? | Not started | - |
+| 8. Runtime Protection | v2.1 | 0/? | Not started | - |
+| 9. License Management | v2.1 | 0/? | Not started | - |
+| 10. End-to-End Validation | v2.1 | 0/? | Not started | - |
 
 ---
 *Full phase details archived in `.planning/milestones/`*

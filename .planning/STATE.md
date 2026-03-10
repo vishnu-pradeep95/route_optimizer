@@ -1,13 +1,13 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: Defining requirements
-stopped_at: v2.1 milestone context gathered, ready for roadmap creation
-last_updated: "2026-03-10T13:58:40.521Z"
-last_activity: 2026-03-10 — Milestone v2.1 started
+milestone: v2.1
+milestone_name: Licensing & Distribution Security
+status: Ready to plan
+stopped_at: Roadmap created with 6 phases (5-10), ready to plan Phase 5
+last_updated: "2026-03-10T14:30:00.000Z"
+last_activity: 2026-03-10 — Roadmap created for v2.1
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,19 +20,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** v2.1 Licensing & Distribution Security
+**Current focus:** v2.1 Licensing & Distribution Security -- Phase 5 (Fingerprinting Overhaul)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-10 — Milestone v2.1 started
+Phase: 5 (first of 6 in v2.1) -- Fingerprinting Overhaul
+Plan: -- (ready to plan)
+Status: Ready to plan
+Last activity: 2026-03-10 -- Roadmap created for v2.1
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 64 (8 v1.0 + 16 v1.1 + 9 v1.2 + 10 v1.3 + 10 v1.4 + 2 post-v1.4 + 9 v2.0)
+- Total plans completed: 64 (across v1.0-v2.0)
 
 **By Milestone:**
 
@@ -44,6 +46,7 @@ Last activity: 2026-03-10 — Milestone v2.1 started
 | v1.3 Office-Ready Deployment | 8 (13-20) | 10 | 2026-02-21 -> 2026-03-07 |
 | v1.4 Ship-Ready QA | 4 (21-24) | 10 | 2026-03-08 -> 2026-03-09 |
 | v2.0 Doc & Error Handling | 4 (1-4) | 9 | 2026-03-09 -> 2026-03-10 |
+| v2.1 Licensing Security | 6 (5-10) | TBD | 2026-03-10 -> ... |
 
 ## Accumulated Context
 
@@ -58,31 +61,24 @@ See `.planning/milestones/` for full phase details per milestone.
 
 ### Blockers/Concerns
 
-- Physical Android device testing required for outdoor contrast validation -- browser DevTools cannot replicate Kerala sunlight conditions.
-- 8 GB laptop testing required for install script validation -- OSRM OOM (exit 137) will not surface on developer machines.
-- Google Maps API key is currently invalid (REQUEST_DENIED) -- E2E tests must use pre-geocoded seed data to bypass this.
-
-### Quick Tasks Completed
-
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 1 | Fix 500 error on fresh-clone CSV upload and track reset script in git | 2026-03-09 | c91525d | [1-fix-500-error-on-fresh-clone-csv-upload-](./quick/1-fix-500-error-on-fresh-clone-csv-upload-/) |
-| 2 | Document OSRM readiness check and add Docker dependency conditions | 2026-03-09 | 3b994e5 | [2-document-osrm-readiness-check-and-add-tr](./quick/2-document-osrm-readiness-check-and-add-tr/) |
-| 3 | Commit uncommitted files: VITE_API_KEY Docker build, .gitignore cleanup, package-lock.json | 2026-03-10 | e544988 | [3-commit-uncommitted-files](./quick/3-commit-uncommitted-files/) |
+- BREAKING CHANGE: Fingerprint formula change (Phase 5) invalidates all existing customer licenses. Must coordinate migration in Phase 10.
+- Cython async limitation: `async def` cannot be compiled by Cython (FastAPI#1921). Enforcement middleware must call synchronous compiled functions from an uncompiled async wrapper.
+- Physical Android device testing required for outdoor contrast validation.
+- Google Maps API key is currently invalid (REQUEST_DENIED) -- E2E tests must use pre-geocoded seed data.
 
 ### Security Audit Findings (v2.1 trigger)
 
-| # | Loophole | Severity | Description |
-|---|----------|----------|-------------|
-| 1 | ENVIRONMENT=development bypass | CRITICAL | Default docker-compose.yml uses `ENVIRONMENT=${ENVIRONMENT:-development}`, skipping all license enforcement |
-| 2 | Enforcement in plain-text main.py | CRITICAL | Dev-mode override (main.py:184-203) ships as readable source, trivially editable |
-| 3 | Fingerprint spoofable via Docker | MEDIUM | hostname + MAC + container_id all controllable via docker-compose settings |
-| 4 | .pyc decompilation trivial | MEDIUM | Tools like pycdc/uncompyle6 recover source from .pyc in minutes |
-| 5 | License checked only at startup | LOW-MEDIUM | No periodic re-validation; patching app.state after startup bypasses permanently |
-| 6 | No file integrity verification | LOW-MEDIUM | No checksum on main.py; customer can edit any .py file freely |
+| # | Loophole | Severity | Phase |
+|---|----------|----------|-------|
+| 1 | ENVIRONMENT=development bypass | CRITICAL | Phase 6 |
+| 2 | Enforcement in plain-text main.py | CRITICAL | Phase 7 |
+| 3 | Fingerprint spoofable via Docker | MEDIUM | Phase 5 |
+| 4 | .pyc decompilation trivial | MEDIUM | Phase 6 |
+| 5 | License checked only at startup | LOW-MEDIUM | Phase 8 |
+| 6 | No file integrity verification | LOW-MEDIUM | Phase 7 |
 
 ## Session Continuity
 
-Last session: 2026-03-10T13:58:40.519Z
-Stopped at: v2.1 milestone context gathered, ready for roadmap creation
-Resume file: .planning/milestones/v2.1/CONTEXT.md
+Last session: 2026-03-10
+Stopped at: Roadmap created with 6 phases (5-10), ready to plan Phase 5
+Resume file: None
