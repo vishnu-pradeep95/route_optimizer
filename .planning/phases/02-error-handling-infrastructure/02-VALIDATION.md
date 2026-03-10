@@ -22,6 +22,8 @@ created: 2026-03-09
 | **Quick run command** | `pytest tests/apps/kerala_delivery/api/ -x -q` |
 | **Full suite command** | `pytest tests/ -x -q` |
 | **Estimated runtime** | ~30 seconds |
+| **E2E framework** | Playwright (npx playwright test) |
+| **E2E config** | `playwright.config.ts` |
 
 ---
 
@@ -29,7 +31,8 @@ created: 2026-03-09
 
 - **After every task commit:** Run `pytest tests/apps/kerala_delivery/api/ -x -q`
 - **After every plan wave:** Run `pytest tests/ -x -q`
-- **Before `/gsd:verify-work`:** Full suite must be green + Playwright MCP E2E pass
+- **After Plan 04:** Run `npx playwright test --project=dashboard e2e/dashboard-errors.spec.ts`
+- **Before `/gsd:verify-work`:** Full suite must be green + Playwright E2E pass
 - **Max feedback latency:** 30 seconds
 
 ---
@@ -38,28 +41,28 @@ created: 2026-03-09
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 02-01-01 | 01 | 1 | ERR-01 | unit | `pytest tests/apps/kerala_delivery/api/test_errors.py -x` | ❌ W0 | ⬜ pending |
-| 02-01-02 | 01 | 1 | ERR-02 | integration | `pytest tests/apps/kerala_delivery/api/test_middleware.py -x` | ❌ W0 | ⬜ pending |
-| 02-01-03 | 01 | 1 | ERR-03 | integration | `pytest tests/apps/kerala_delivery/api/test_api.py -x` | ✅ partial | ⬜ pending |
-| 02-01-04 | 01 | 1 | ERR-04 | unit | `pytest tests/apps/kerala_delivery/api/test_health.py -x` | ❌ W0 | ⬜ pending |
-| 02-01-05 | 01 | 1 | ERR-05 | integration | `pytest tests/apps/kerala_delivery/api/test_api.py::test_health -x` | ✅ partial | ⬜ pending |
-| 02-01-06 | 01 | 1 | ERR-06 | unit | `pytest tests/apps/kerala_delivery/api/test_retry.py -x` | ❌ W0 | ⬜ pending |
-| 02-02-01 | 02 | 2 | ERR-07 | e2e | Playwright MCP | ❌ W0 | ⬜ pending |
-| 02-02-02 | 02 | 2 | ERR-08 | e2e | Playwright MCP | ❌ W0 | ⬜ pending |
-| 02-02-03 | 02 | 2 | ERR-09 | e2e | Playwright MCP | ❌ W0 | ⬜ pending |
+| 02-01-T1 | 01 | 1 | ERR-01, ERR-02 | unit + integration | `pytest tests/apps/kerala_delivery/api/test_errors.py tests/apps/kerala_delivery/api/test_middleware.py -x` | W0 (created by task) | pending |
+| 02-01-T2 | 01 | 1 | ERR-03 | integration | `pytest tests/apps/kerala_delivery/api/test_api.py -x` | partial (existing) | pending |
+| 02-02-T1 | 02 | 2 | ERR-04, ERR-06 | unit | `pytest tests/apps/kerala_delivery/api/test_health.py tests/apps/kerala_delivery/api/test_retry.py -x` | W0 (created by task) | pending |
+| 02-02-T2 | 02 | 2 | ERR-05 | integration | `pytest tests/apps/kerala_delivery/api/ -x` | partial (existing) | pending |
+| 02-03-T1 | 03 | 3 | ERR-07, ERR-08 | build | `cd apps/kerala_delivery/dashboard && npx tsc --noEmit` | N/A | pending |
+| 02-03-T2 | 03 | 3 | ERR-07, ERR-09 | build | `cd apps/kerala_delivery/dashboard && npm run build` | N/A | pending |
+| 02-03-T3 | 03 | 3 | ERR-07, ERR-08, ERR-09 | manual | Human visual verification | N/A | pending |
+| 02-04-T1 | 04 | 4 | ERR-07, ERR-08, ERR-09 | e2e | `npx playwright test --project=dashboard e2e/dashboard-errors.spec.ts` | W0 (created by task) | pending |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: pending -- green -- red -- flaky*
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] `tests/apps/kerala_delivery/api/test_errors.py` — stubs for ERR-01 (ErrorResponse model validation)
-- [ ] `tests/apps/kerala_delivery/api/test_middleware.py` — stubs for ERR-02 (RequestIDMiddleware)
-- [ ] `tests/apps/kerala_delivery/api/test_health.py` — stubs for ERR-04 (startup health gates)
-- [ ] `tests/apps/kerala_delivery/api/test_retry.py` — stubs for ERR-06 (retry logic)
+- [ ] `tests/apps/kerala_delivery/api/test_errors.py` -- created by Plan 01 Task 1 (TDD: tests first)
+- [ ] `tests/apps/kerala_delivery/api/test_middleware.py` -- created by Plan 01 Task 1 (TDD: tests first)
+- [ ] `tests/apps/kerala_delivery/api/test_health.py` -- created by Plan 02 Task 1 (TDD: tests first)
+- [ ] `tests/apps/kerala_delivery/api/test_retry.py` -- created by Plan 02 Task 1 (TDD: tests first)
+- [ ] `e2e/dashboard-errors.spec.ts` -- created by Plan 04 Task 1
 
-*Existing `test_api.py` covers ERR-03 and ERR-05 partially — will need updates.*
+*Existing `test_api.py` covers ERR-03 and ERR-05 partially -- will need updates.*
 
 ---
 
