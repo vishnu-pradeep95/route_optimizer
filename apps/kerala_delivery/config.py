@@ -8,7 +8,6 @@ Values sourced from:
 - HPCL LPG distributor specs
 - Piaggio Ape Xtra LDX vehicle specifications
 - Kerala road/traffic observations
-- Design doc: plan/kerala_delivery_route_system_design.md
 """
 
 import os
@@ -136,7 +135,6 @@ VROOM_URL = os.environ.get("VROOM_URL", "http://localhost:3000")
 # GPS drift in dense Kerala neighborhoods can put drivers on the wrong street.
 # Start at 50m (conservative). Once you have real-world accuracy data from
 # drivers' phones, tune down to 30m for tighter tracking.
-# See: plan/kerala_delivery_route_system_design.md, Section 10 (GPS drift risk)
 GPS_ACCURACY_THRESHOLD_M = 50.0
 
 # =============================================================================

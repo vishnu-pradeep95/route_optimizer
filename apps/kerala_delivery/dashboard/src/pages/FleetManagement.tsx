@@ -50,8 +50,7 @@ const DEFAULT_DEPOT_LNG = 75.5796;
 /**
  * Default max payload in kg for a Piaggio Ape Xtra LDX.
  * 446 kg = 496 kg rated payload × 0.9 safety factor.
- * Source: plan/kerala_delivery_route_system_design.md, Section 3.
- * Also: apps/kerala_delivery/config.py VEHICLE_MAX_WEIGHT_KG
+ * See: apps/kerala_delivery/config.py VEHICLE_MAX_WEIGHT_KG
  *
  * Why 90%? Overloaded three-wheelers are unstable on narrow Kerala
  * roads — the 10% margin accounts for packaging weight, fuel, and
@@ -71,7 +70,6 @@ const MAX_RATED_PAYLOAD_KG = 496;
  * Non-negotiable: the Motor Vehicles Department caps three-wheeler
  * delivery speeds at 40 km/h in urban zones after accidents linked
  * to quick-commerce delivery pressure.
- * Source: plan/kerala_delivery_route_system_design.md, Safety Constraints
  */
 const MAX_SPEED_LIMIT_KMH = 40;
 

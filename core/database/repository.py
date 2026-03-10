@@ -421,7 +421,6 @@ async def save_telemetry(
     # can put drivers on the wrong street. The threshold is configurable per
     # deployment: 50m is a conservative default; tune down to 30m once we
     # have real-world accuracy data from Kerala drivers.
-    # See: plan/kerala_delivery_route_system_design.md, Section 10 (GPS drift risk)
     if accuracy_m is not None and accuracy_m > accuracy_threshold_m:
         return None, False
 

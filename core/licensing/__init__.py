@@ -26,6 +26,4 @@ Security notes:
       but raises the bar slightly above "open the file and delete the check".
     - This module is in core/ (not apps/) because licensing is reusable
       across any deployment of the platform.
-
-See: plan/kerala_delivery_route_system_design.md, Phase 4C
 """

@@ -487,7 +487,6 @@ if _dashboard_dir.exists() and any(_dashboard_dir.iterdir()):
 # This is an internal operations tool with a small user base (dispatchers +
 # driver app). API key auth is simpler to implement and debug. JWT is better
 # for multi-tenant SaaS — we'll migrate if/when needed in Phase 3+.
-# See: plan/session-journal.md (OPEN: C1 auth discussion)
 # SECURITY: auto_error=False so we get None (not 403) when the header is
 # missing — our verify_api_key function handles the error with a clear message.
 _api_key_scheme = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -1015,7 +1014,6 @@ async def upload_and_optimize(
         # This prevents "10-minute delivery" promises that pressure drivers.
         # Rather than rejecting orders, we WIDEN narrow windows to the minimum.
         # The original window_end is extended; window_start stays as-is.
-        # See: plan/kerala_delivery_route_system_design.md (Safety Constraints)
         min_window = config.MIN_DELIVERY_WINDOW_MINUTES
         widened_count = 0
         for order in orders:

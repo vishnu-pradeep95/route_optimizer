@@ -5,7 +5,6 @@
 -- PostGIS extension provides spatial types (geometry, geography) and
 -- spatial indexes (GiST) for GPS coordinate queries.
 --
--- Design reference: plan/kerala_delivery_route_system_design.md, Section 5
 -- SRID 4326 = WGS84 (standard GPS coordinate system, used worldwide)
 -- =============================================================================
 
