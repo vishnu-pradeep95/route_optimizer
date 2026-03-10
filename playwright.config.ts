@@ -44,7 +44,7 @@ export default defineConfig({
     },
     {
       name: 'dashboard',
-      testMatch: 'dashboard.spec.ts',
+      testMatch: 'dashboard*.spec.ts',
       use: {
         viewport: { width: 1280, height: 800 },
       },
