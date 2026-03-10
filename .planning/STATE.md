@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
 status: executing
-stopped_at: Completed 07-01-PLAN.md (enforcement foundation)
-last_updated: "2026-03-10T23:33:19.000Z"
-last_activity: 2026-03-10 -- Phase 7 Plan 01 complete
+stopped_at: Completed 07-02-PLAN.md (enforcement wiring & build manifest)
+last_updated: "2026-03-10T23:39:45.000Z"
+last_activity: 2026-03-10 -- Phase 7 complete (enforcement module)
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 46
+  completed_plans: 2
+  percent: 58
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 7 -- Enforcement Module
-Plan: 1 of 2 complete
-Status: Executing
-Last activity: 2026-03-10 -- Phase 7 Plan 01 complete (enforcement foundation)
+Plan: 2 of 2 complete
+Status: Phase complete
+Last activity: 2026-03-10 -- Phase 7 complete (enforcement module)
 
-Progress: [████████░░] 46% (6/12 plans across 6 phases)
+Progress: [█████░░░░░] 58% (7/12 plans across 6 phases)
 
 ## Performance Metrics
 
@@ -69,6 +69,9 @@ Progress: [████████░░] 46% (6/12 plans across 6 phases)
 - Phase 7-01: Empty _INTEGRITY_MANIFEST dict signals dev environment -- verify_integrity() returns success without checking
 - Phase 7-01: verify_integrity() uses hashlib.file_digest() (Python 3.11+) for clean SHA256 computation
 
+- Phase 7-02: Manifest injection uses sed pipe delimiters -- SHA256 hex only contains [0-9a-f], no special char risk
+- Phase 7-02: enforcement.py preserved as .py in tarball -- Cython cannot compile async def
+
 See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase details per milestone.
 
 ### Pending Todos
@@ -87,11 +90,11 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 | # | Loophole | Severity | Phase |
 |---|----------|----------|-------|
 | 1 | ~~ENVIRONMENT=development bypass~~ | ~~CRITICAL~~ | ✓ Phase 6 (06-01) |
-| 2 | Enforcement in plain-text main.py | CRITICAL | Phase 7 |
+| 2 | ~~Enforcement in plain-text main.py~~ | ~~CRITICAL~~ | ✓ Phase 7 (07-02) |
 | 3 | ~~Fingerprint spoofable via Docker~~ | ~~MEDIUM~~ | ✓ Phase 5 |
 | 4 | ~~.pyc decompilation trivial~~ | ~~MEDIUM~~ | ✓ Phase 6 (06-03) |
 | 5 | License checked only at startup | LOW-MEDIUM | Phase 8 |
-| 6 | No file integrity verification | LOW-MEDIUM | Phase 7 |
+| 6 | ~~No file integrity verification~~ | ~~LOW-MEDIUM~~ | ✓ Phase 7 (07-01, 07-02) |
 
 ## Performance Metrics (v2.1)
 
@@ -103,9 +106,10 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 | 06-01 | ENVIRONMENT production-default | 6min | 2 | 2 |
 | 06-03 | Cython build pipeline | 6min | 2 | 3 |
 | 07-01 | Enforcement foundation | 4min | 2 | 5 |
+| 07-02 | Enforcement wiring & manifest | 3min | 2 | 2 |
 
 ## Session Continuity
 
-Last session: 2026-03-10T23:33:19.000Z
-Stopped at: Completed 07-01-PLAN.md (enforcement foundation)
-Resume file: .planning/milestones/v2.1-phases/07-enforcement-module/07-01-SUMMARY.md
+Last session: 2026-03-10T23:39:45.000Z
+Stopped at: Completed 07-02-PLAN.md (enforcement wiring & build manifest)
+Resume file: .planning/milestones/v2.1-phases/07-enforcement-module/07-02-SUMMARY.md
