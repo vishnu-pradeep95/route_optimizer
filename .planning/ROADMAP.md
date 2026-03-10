@@ -140,9 +140,11 @@ Plans:
 **Requirements**: [DOC-VALIDATE, DOC-CLEANUP]
 **Depends on:** Phase 2
 **Gap Closure:** Closes documentation tech debt from v1.0 audit
+**Plans:** 2 plans
 
 Plans:
-- [ ] 04-01-PLAN.md -- Update ERROR-MAP.md line references, clean stale code comments
+- [x] 04-01-PLAN.md -- Update ERROR-MAP.md line references, clean stale code comments
+- [ ] 04-02-PLAN.md -- Fix 7 off-by-1/2 line references in ERROR-MAP.md (gap closure)
 
 ---
 *Full phase details for v1.0-v1.4 archived in `.planning/milestones/`*
