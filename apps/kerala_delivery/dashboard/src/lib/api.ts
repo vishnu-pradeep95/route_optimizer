@@ -26,6 +26,7 @@ import type {
   ImportFailure,
   DuplicateLocationWarning,
 } from "../types";
+import { isApiError, type ApiError } from "./errors";
 
 /**
  * Base URL for API requests.
@@ -67,8 +68,17 @@ async function apiFetch<T>(path: string): Promise<T> {
     const response = await fetch(url, { headers, cache: "no-store" });
 
     if (!response.ok) {
-      // Extract error detail from FastAPI's standard error format if available
+      // Parse response body -- if it matches ErrorResponse shape, throw as typed ApiError
       const errorBody = await response.text();
+      try {
+        const parsed = JSON.parse(errorBody);
+        if (isApiError(parsed)) {
+          throw parsed;
+        }
+      } catch (parseErr) {
+        // Not JSON or not ApiError shape -- fall through to generic error
+        if (isApiError(parseErr)) throw parseErr;
+      }
       throw new Error(
         `API error ${response.status}: ${errorBody || response.statusText}`
       );
@@ -76,6 +86,10 @@ async function apiFetch<T>(path: string): Promise<T> {
 
     return (await response.json()) as T;
   } catch (error) {
+    // Re-throw typed ApiError objects directly
+    if (isApiError(error)) {
+      throw error;
+    }
     // Re-throw API errors as-is; wrap network errors with user-friendly context
     if (error instanceof Error && error.message.startsWith("API error")) {
       throw error;
@@ -125,6 +139,14 @@ async function apiWrite<T>(path: string, method: string, body?: unknown): Promis
 
   if (!response.ok) {
     const errorBody = await response.text();
+    try {
+      const parsed = JSON.parse(errorBody);
+      if (isApiError(parsed)) {
+        throw parsed;
+      }
+    } catch (parseErr) {
+      if (isApiError(parseErr)) throw parseErr;
+    }
     throw new Error(`API error ${response.status}: ${errorBody || response.statusText}`);
   }
 
@@ -281,6 +303,22 @@ export interface UploadResponse {
   duplicate_warnings?: DuplicateLocationWarning[];
 }
 
+/**
+ * Error class for upload failures that carries the typed ApiError.
+ *
+ * Pages can check `instanceof ApiUploadError` to access the structured
+ * error object for ErrorBanner display. Falls back to Error.message
+ * for legacy catch blocks.
+ */
+export class ApiUploadError extends Error {
+  public apiError: ApiError;
+  constructor(apiError: ApiError) {
+    super(apiError.user_message);
+    this.name = "ApiUploadError";
+    this.apiError = apiError;
+  }
+}
+
 export async function uploadAndOptimize(file: File): Promise<UploadResponse> {
   const url = `${BASE_URL}/api/upload-orders`;
   const formData = new FormData();
@@ -300,6 +338,14 @@ export async function uploadAndOptimize(file: File): Promise<UploadResponse> {
 
   if (!response.ok) {
     const errorBody = await response.text();
+    try {
+      const parsed = JSON.parse(errorBody);
+      if (isApiError(parsed)) {
+        throw new ApiUploadError(parsed);
+      }
+    } catch (parseErr) {
+      if (parseErr instanceof ApiUploadError) throw parseErr;
+    }
     throw new Error(
       `Upload failed (${response.status}): ${errorBody || response.statusText}`
     );

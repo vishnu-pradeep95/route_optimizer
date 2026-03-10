@@ -160,8 +160,30 @@ export interface RunsResponse {
 
 // --- Health check ---
 
-export interface HealthResponse {
+/** Status of an individual service in the health response. */
+export interface ServiceStatus {
   status: string;
+  message: string;
+}
+
+/**
+ * Enhanced health response from GET /health.
+ *
+ * Includes per-service status for PostgreSQL, OSRM, VROOM, and Google API.
+ * Overall status is "healthy" | "degraded" | "unhealthy".
+ * Backward-compatible: the `status` field still works for simple checks.
+ */
+export interface HealthResponse {
+  status: "healthy" | "degraded" | "unhealthy" | string;
+  service?: string;
+  version?: string;
+  uptime_seconds?: number;
+  services?: {
+    postgresql: ServiceStatus;
+    osrm: ServiceStatus;
+    vroom: ServiceStatus;
+    google_api: ServiceStatus;
+  };
 }
 
 // --- UI constants ---
