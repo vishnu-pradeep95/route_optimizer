@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
-status: Ready to plan
-stopped_at: Roadmap created with 6 phases (5-10), ready to plan Phase 5
-last_updated: "2026-03-10T14:30:00.000Z"
-last_activity: 2026-03-10 — Roadmap created for v2.1
+status: Executing
+stopped_at: Completed 05-01-PLAN.md (fingerprint formula replacement)
+last_updated: "2026-03-10T20:13:22.000Z"
+last_activity: 2026-03-10 — Completed Phase 5 Plan 1 (fingerprint formula)
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 5 (first of 6 in v2.1) -- Fingerprinting Overhaul
-Plan: -- (ready to plan)
-Status: Ready to plan
-Last activity: 2026-03-10 -- Roadmap created for v2.1
+Plan: 1 of 2 complete -- next: 05-02 (docker compose bind mount)
+Status: Executing
+Last activity: 2026-03-10 -- Completed 05-01 fingerprint formula replacement
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [#####░░░░░] 8% (1/12 plans across 6 phases)
 
 ## Performance Metrics
 
@@ -52,8 +52,10 @@ Progress: [░░░░░░░░░░] 0%
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-See `.planning/milestones/` for full phase details per milestone.
+- Phase 5-01: Dropped MAC from fingerprint (WSL2 generates random MAC on reboot, microsoft/WSL#5352)
+- Phase 5-01: Used exact match (not similarity scoring) for fingerprint validation
+
+See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase details per milestone.
 
 ### Pending Todos
 
@@ -77,8 +79,14 @@ See `.planning/milestones/` for full phase details per milestone.
 | 5 | License checked only at startup | LOW-MEDIUM | Phase 8 |
 | 6 | No file integrity verification | LOW-MEDIUM | Phase 7 |
 
+## Performance Metrics (v2.1)
+
+| Phase | Plan | Duration | Tasks | Files |
+|-------|------|----------|-------|-------|
+| 05-01 | Fingerprint formula | 5min | 3 | 3 |
+
 ## Session Continuity
 
 Last session: 2026-03-10
-Stopped at: Roadmap created with 6 phases (5-10), ready to plan Phase 5
+Stopped at: Completed 05-01-PLAN.md (fingerprint formula replacement)
 Resume file: None

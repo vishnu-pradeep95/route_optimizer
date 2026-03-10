@@ -16,9 +16,9 @@ Requirements for v2.1 Licensing & Distribution Security. Each maps to roadmap ph
 
 ### Fingerprinting
 
-- [ ] **FPR-01**: Machine fingerprint uses /etc/machine-id + /proc/cpuinfo CPU model (replaces container_id + MAC)
+- [x] **FPR-01**: Machine fingerprint uses /etc/machine-id + /proc/cpuinfo CPU model (replaces container_id + MAC)
 - [ ] **FPR-02**: Docker Compose mounts /etc/machine-id read-only into API container
-- [ ] **FPR-03**: get_machine_id.py updated to collect new fingerprint signals
+- [x] **FPR-03**: get_machine_id.py updated to collect new fingerprint signals
 
 ### Runtime Protection
 
@@ -76,9 +76,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENF-02 | Phase 6 | Pending |
 | ENF-03 | Phase 7 | Pending |
 | ENF-04 | Phase 6 | Pending |
-| FPR-01 | Phase 5 | Pending |
+| FPR-01 | Phase 5 | Complete |
 | FPR-02 | Phase 5 | Pending |
-| FPR-03 | Phase 5 | Pending |
+| FPR-03 | Phase 5 | Complete |
 | RTP-01 | Phase 7 | Pending |
 | RTP-02 | Phase 8 | Pending |
 | RTP-03 | Phase 8 | Pending |
