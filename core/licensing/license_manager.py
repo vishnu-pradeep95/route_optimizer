@@ -41,26 +41,20 @@ from typing import Optional
 # HMAC secret derivation
 # =============================================================================
 
-# Why this strange constant instead of a plain "SECRET_KEY"?
-# - A grep for "SECRET" or "KEY" or "PASSWORD" won't find this
-# - PBKDF2 with 100k iterations derives the actual HMAC key
-# - This is security through obscurity (not great), but combined with
-#   .pyc-only distribution, it raises the bar against casual tampering
-# - A determined reverse engineer CAN extract this — that's acceptable
-#   for our threat model (preventing casual copying, not piracy rings)
-_DERIVATION_SEED = b"kerala-logistics-platform-2025-route-optimizer"
-_PBKDF2_ITERATIONS = 100_000
+# Cryptographically random seed -- compiled to .so in distribution builds.
+# PBKDF2 derives the actual HMAC key. See docs/LICENSING.md for design.
+_DERIVATION_SEED = bytes.fromhex(
+    "28c238b88e41c0af1de923f79091f4d4d06d38ed6f880373102951c98807aef4"  # os.urandom(32)
+)
+_PBKDF2_SALT = bytes.fromhex(
+    "cd6bcd0839706543c90e568d7c2e1584"  # os.urandom(16)
+)
+_PBKDF2_ITERATIONS = 200_000
 
-# Why derive with PBKDF2 instead of using the seed directly?
-# PBKDF2 is a standard key derivation function that makes brute-force
-# attacks slower. Even though our seed isn't really a password, using
-# PBKDF2 is defense-in-depth: if someone finds the seed, they still
-# need to know the iteration count and salt to derive the HMAC key.
-# See: https://docs.python.org/3/library/hashlib.html#hashlib.pbkdf2_hmac
 _HMAC_KEY = hashlib.pbkdf2_hmac(
     "sha256",
     _DERIVATION_SEED,
-    salt=b"lpg-delivery-hmac-salt",
+    salt=_PBKDF2_SALT,
     iterations=_PBKDF2_ITERATIONS,
 )
 
