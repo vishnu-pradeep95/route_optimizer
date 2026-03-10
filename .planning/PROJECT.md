@@ -77,6 +77,9 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ Error handling infrastructure: ErrorResponse model, 22 ErrorCodes, request ID tracing, startup health gates, retry logic, frontend error UI — Phase 2
 - ✓ fetchHealth preserves 503 per-service JSON body for degraded health bar display — Phase 3
 - ✓ All 15 ERROR_HELP_URLS anchors match actual doc headings (Python + TypeScript in sync) — Phase 3
+- ✓ Stable machine fingerprint using /etc/machine-id + CPU model (replaces hostname+MAC+container_id) — Phase 5
+- ✓ Docker bind mount for host-container fingerprint consistency — Phase 5
+- ✓ 13 new fingerprint unit tests with mocked filesystem (38 total fingerprint tests) — Phase 5
 
 ### Active
 
@@ -177,6 +180,8 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 
 | Direct fetch() for /health endpoint | apiFetch throws on 503, discarding per-service JSON body | ✓ Good — health bar shows service breakdown on degraded state |
 | FLEET_NO_VEHICLES → #step-11-cdcms-data-workflow | Closest relevant heading in SETUP.md (no Fleet Setup section) | ✓ Good — best available anchor |
+| Drop MAC from fingerprint formula | WSL2 generates random MAC on every reboot (microsoft/WSL#5352) | ✓ Good — fingerprint stable across reboots |
+| Read-only bind mount for /etc/machine-id | Prevent container writes to host identity file | ✓ Good — secure host-container identity sharing |
 
 ---
-*Last updated: 2026-03-10 after v2.1 milestone start (Licensing & Distribution Security)*
+*Last updated: 2026-03-10 after Phase 5 (Fingerprinting Overhaul)*
