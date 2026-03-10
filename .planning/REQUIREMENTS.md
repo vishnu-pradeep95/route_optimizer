@@ -10,7 +10,7 @@ Requirements for v2.1 Licensing & Distribution Security. Each maps to roadmap ph
 ### Enforcement Hardening
 
 - [x] **ENF-01**: Dev-mode code stripped from distributed builds (no ENVIRONMENT=development bypass exists in tarball)
-- [ ] **ENF-02**: Licensing module compiled to native .so via Cython (replaces decompilable .pyc)
+- [x] **ENF-02**: Licensing module compiled to native .so via Cython (replaces decompilable .pyc)
 - [ ] **ENF-03**: Enforcement logic lives in compiled module with single `enforce(app)` entry point (main.py has no inline enforcement)
 - [x] **ENF-04**: HMAC derivation seed rotated (old .pyc seed is compromised)
 
@@ -34,9 +34,9 @@ Requirements for v2.1 Licensing & Distribution Security. Each maps to roadmap ph
 
 ### Build Pipeline
 
-- [ ] **BLD-01**: build-dist.sh pipeline: strip dev-mode → hash protected files → Cython compile → validate .so import → package tarball
-- [ ] **BLD-02**: Build-time .so import validation inside Docker before packaging (catches platform mismatch)
-- [ ] **BLD-03**: Cython -O2 optimization flags and embedsignature=False applied
+- [x] **BLD-01**: build-dist.sh pipeline: strip dev-mode → hash protected files → Cython compile → validate .so import → package tarball
+- [x] **BLD-02**: Build-time .so import validation inside Docker before packaging (catches platform mismatch)
+- [x] **BLD-03**: Cython -O2 optimization flags and embedsignature=False applied
 
 ### Testing & Documentation
 
@@ -73,7 +73,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | ENF-01 | Phase 6 | Complete |
-| ENF-02 | Phase 6 | Pending |
+| ENF-02 | Phase 6 | Complete |
 | ENF-03 | Phase 7 | Pending |
 | ENF-04 | Phase 6 | Complete |
 | FPR-01 | Phase 5 | Complete |
@@ -85,9 +85,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LIC-01 | Phase 9 | Pending |
 | LIC-02 | Phase 9 | Pending |
 | LIC-03 | Phase 9 | Pending |
-| BLD-01 | Phase 6 | Pending |
-| BLD-02 | Phase 6 | Pending |
-| BLD-03 | Phase 6 | Pending |
+| BLD-01 | Phase 6 | Complete |
+| BLD-02 | Phase 6 | Complete |
+| BLD-03 | Phase 6 | Complete |
 | DOC-01 | Phase 10 | Pending |
 | DOC-02 | Phase 10 | Pending |
 | DOC-03 | Phase 10 | Pending |
