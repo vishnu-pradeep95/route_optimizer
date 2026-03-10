@@ -111,13 +111,15 @@ Plans:
 
 ### Phase 2: Error Handling Infrastructure
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Replace ad-hoc HTTPException error responses with a consistent ErrorResponse model, add request ID tracing, startup health gates for PostgreSQL/OSRM/VROOM, retry logic for transient failures, and frontend error differentiation with color-coded banners, inline error tables, and per-service health display.
+**Requirements**: [ERR-01, ERR-02, ERR-03, ERR-04, ERR-05, ERR-06, ERR-07, ERR-08, ERR-09]
 **Depends on:** Phase 1
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 2 to break down)
+- [ ] 02-01-PLAN.md -- ErrorResponse model, ErrorCode enum, request ID middleware, global exception handler, migrate all HTTPExceptions
+- [ ] 02-02-PLAN.md -- Startup health gates, enhanced /health endpoint, tenacity retry decorators
+- [ ] 02-03-PLAN.md -- Frontend error UI (ErrorBanner, ErrorTable, ErrorDetail), api.ts integration, per-service health display
 
 ---
 *Full phase details for v1.0-v1.4 archived in `.planning/milestones/`*
