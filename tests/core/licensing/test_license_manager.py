@@ -595,3 +595,27 @@ class TestEdgeCases:
         monkeypatch.setenv("LICENSE_KEY", key)
 
         assert is_license_valid() is True
+
+
+# =============================================================================
+# HMAC seed rotation regression tests
+# =============================================================================
+
+
+class TestHMACSeedRotation:
+    """Verify old HMAC seed no longer produces valid keys."""
+
+    def test_old_seed_key_is_invalid(self, fixed_fingerprint):
+        """A key signed with the old (pre-v2.1) HMAC seed must not validate."""
+        import hmac as hmac_mod
+        import hashlib as hl
+
+        # Old compromised values (deliberately kept here for regression testing)
+        old_seed = b"kerala-logistics-platform-2025-route-optimizer"
+        old_salt = b"lpg-delivery-hmac-salt"
+        old_iterations = 100_000
+        old_key = hl.pbkdf2_hmac("sha256", old_seed, salt=old_salt, iterations=old_iterations)
+
+        # Verify the current HMAC key differs from the old one
+        from core.licensing.license_manager import _HMAC_KEY
+        assert old_key != _HMAC_KEY, "HMAC key must differ from old compromised key"
