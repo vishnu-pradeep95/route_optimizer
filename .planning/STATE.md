@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
-status: planning
-stopped_at: Phase 6 context gathered
-last_updated: "2026-03-10T21:16:38.267Z"
-last_activity: 2026-03-10 -- Phase 5 complete, transitioned to Phase 6
+status: executing
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-03-10T22:36:14Z"
+last_activity: 2026-03-10 -- Phase 6 Plan 02 complete (HMAC credential rotation)
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 17
+  total_plans: 3
+  completed_plans: 1
+  percent: 22
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 6 -- Build Pipeline (Dev-Mode Stripping and Cython Compilation)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-03-10 -- Phase 5 complete, transitioned to Phase 6
+Plan: 2 of 3 complete (06-02 done, 06-01 and 06-03 remaining)
+Status: Executing
+Last activity: 2026-03-10 -- Phase 6 Plan 02 complete (HMAC credential rotation)
 
-Progress: [##░░░░░░░░] 17% (2/12 plans across 6 phases)
+Progress: [##░░░░░░░░] 22% (3/12 plans across 6 phases)
 
 ## Performance Metrics
 
@@ -56,6 +56,9 @@ Progress: [##░░░░░░░░] 17% (2/12 plans across 6 phases)
 - Phase 5-01: Dropped MAC from fingerprint (WSL2 generates random MAC on reboot, microsoft/WSL#5352)
 - Phase 5-01: Used exact match (not similarity scoring) for fingerprint validation
 - Phase 5-02: Read-only bind mount (:ro) for /etc/machine-id to prevent container writes to host identity
+- Phase 6-02: HMAC seed stored as bytes.fromhex() -- not greppable, not human-readable
+- Phase 6-02: PBKDF2 iterations doubled to 200k for stronger key derivation
+- Phase 6-02: Migration docs written in Phase 6 while context fresh (execution deferred to Phase 10)
 
 See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase details per milestone.
 
@@ -87,9 +90,10 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 |-------|------|----------|-------|-------|
 | 05-01 | Fingerprint formula | 5min | 3 | 3 |
 | 05-02 | Docker compose bind mount | 2min | 2 | 2 |
+| 06-02 | HMAC credential rotation | 5min | 3 | 4 |
 
 ## Session Continuity
 
-Last session: 2026-03-10T21:16:38.254Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/milestones/v2.1-phases/06-build-pipeline/06-CONTEXT.md
+Last session: 2026-03-10T22:36:14Z
+Stopped at: Completed 06-02-PLAN.md
+Resume file: .planning/milestones/v2.1-phases/06-build-pipeline/06-02-SUMMARY.md
