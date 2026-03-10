@@ -53,7 +53,7 @@ See `.planning/milestones/` for full phase details per milestone.
 
 ### Pending Todos
 
-5 pending -- see `.planning/todos/pending/`
+2 pending -- see `.planning/todos/pending/`
 
 ### Blockers/Concerns
 
