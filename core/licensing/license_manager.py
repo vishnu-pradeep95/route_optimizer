@@ -437,3 +437,57 @@ def is_license_valid() -> bool:
     """
     info = validate_license()
     return info.status in (LicenseStatus.VALID, LicenseStatus.GRACE)
+
+
+# =============================================================================
+# Integrity manifest (populated by build-dist.sh before Cython compilation)
+# =============================================================================
+
+# Placeholder replaced by build-dist.sh Step 4 with real SHA256 hashes.
+# Empty dict = development environment (no build), verify_integrity() returns success.
+_INTEGRITY_MANIFEST: dict[str, str] = {}
+
+# =============================================================================
+# Internal license state (not on app.state -- inside compiled .so)
+# =============================================================================
+
+_license_state: LicenseInfo | None = None
+
+
+def get_license_status() -> LicenseStatus | None:
+    """Return current license status. Called by middleware on every request.
+    Returns None if set_license_state() was never called (middleware passes through)."""
+    if _license_state is None:
+        return None
+    return _license_state.status
+
+
+def set_license_state(info: LicenseInfo) -> None:
+    """Store license state internally. Called once at startup by enforce()."""
+    global _license_state
+    _license_state = info
+
+
+def verify_integrity(base_path: str = "/app") -> tuple[bool, list[str]]:
+    """Verify protected files against embedded SHA256 manifest.
+    Returns (all_ok, list_of_failure_messages).
+    Empty manifest = dev environment = returns (True, [])."""
+    import pathlib
+
+    if not _INTEGRITY_MANIFEST:
+        return True, []
+
+    failures = []
+    base = pathlib.Path(base_path)
+
+    for rel_path, expected_hash in _INTEGRITY_MANIFEST.items():
+        file_path = base / rel_path
+        if not file_path.exists():
+            failures.append(f"{rel_path}: file not found")
+            continue
+        with open(file_path, "rb") as f:
+            actual_hash = hashlib.file_digest(f, "sha256").hexdigest()
+        if actual_hash != expected_hash:
+            failures.append(f"{rel_path} has been modified")
+
+    return len(failures) == 0, failures

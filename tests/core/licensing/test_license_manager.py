@@ -602,6 +602,48 @@ class TestEdgeCases:
 # =============================================================================
 
 
+# =============================================================================
+# State management exports (Phase 7 additions)
+# =============================================================================
+
+
+class TestStateManagementExports:
+    """Verify new Phase 7 exports are importable and functional."""
+
+    def test_get_license_status_importable(self):
+        """get_license_status is importable from license_manager."""
+        from core.licensing.license_manager import get_license_status
+
+        # Returns None when no state has been set
+        import core.licensing.license_manager as lm
+        original = lm._license_state
+        lm._license_state = None
+        try:
+            assert get_license_status() is None
+        finally:
+            lm._license_state = original
+
+    def test_set_license_state_importable(self):
+        """set_license_state is importable and works with LicenseInfo."""
+        from core.licensing.license_manager import set_license_state, get_license_status
+
+        import core.licensing.license_manager as lm
+        original = lm._license_state
+        try:
+            info = LicenseInfo(
+                customer_id="import-test",
+                fingerprint="abcd1234",
+                expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+                status=LicenseStatus.VALID,
+                days_remaining=30,
+                message="Test",
+            )
+            set_license_state(info)
+            assert get_license_status() == LicenseStatus.VALID
+        finally:
+            lm._license_state = original
+
+
 class TestHMACSeedRotation:
     """Verify old HMAC seed no longer produces valid keys."""
 
