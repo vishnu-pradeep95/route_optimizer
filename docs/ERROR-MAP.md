@@ -14,11 +14,11 @@ This artifact maps every user-facing error message documented in CSV_FORMAT.md t
 
 | Message | Code Location | Status |
 |---------|--------------|--------|
-| "Unsupported file type (.pdf). Accepted: .csv, .xls, .xlsx" | `apps/kerala_delivery/api/main.py:863` | verified |
-| "Unexpected content type (application/pdf). Upload a CSV or Excel file." | `apps/kerala_delivery/api/main.py:874` | verified |
-| "File too large (15.2 MB). Maximum: 10 MB." | `apps/kerala_delivery/api/main.py:893` | verified |
-| "No 'Allocated-Printed' orders found in CDCMS export. Check that the file has orders with status 'Allocated-Printed'." | `apps/kerala_delivery/api/main.py:921` | verified |
-| "No valid orders found in file" | `apps/kerala_delivery/api/main.py:1008` | verified |
+| "Unsupported file type (.pdf). Accepted: .csv, .xls, .xlsx" | `apps/kerala_delivery/api/main.py:862` | verified |
+| "Unexpected content type (application/pdf). Upload a CSV or Excel file." | `apps/kerala_delivery/api/main.py:873` | verified |
+| "File too large (15.2 MB). Maximum: 10 MB." | `apps/kerala_delivery/api/main.py:892` | verified |
+| "No 'Allocated-Printed' orders found in CDCMS export. Check that the file has orders with status 'Allocated-Printed'." | `apps/kerala_delivery/api/main.py:920` | verified |
+| "No valid orders found in file" | `apps/kerala_delivery/api/main.py:1007` | verified |
 | "Missing address column 'address' -- make sure you're uploading the correct file format" | `core/data_import/csv_importer.py:301-302` | verified |
 | "Required columns missing: ConsumerAddress, OrderNo -- make sure you're uploading the raw CDCMS export" | `core/data_import/cdcms_preprocessor.py:352-354` | verified |
 | "The 'ConsumerAddress' column exists but all values are empty. Check the file format." | `core/data_import/cdcms_preprocessor.py:370-372` | verified |
@@ -47,5 +47,5 @@ This artifact maps every user-facing error message documented in CSV_FORMAT.md t
 | "Google Maps quota exceeded -- contact IT" | `apps/kerala_delivery/api/main.py:96-97` (GEOCODING_REASON_MAP, keys: OVER_QUERY_LIMIT, OVER_DAILY_LIMIT) | verified |
 | "Address could not be processed -- check for unusual characters" | `apps/kerala_delivery/api/main.py:98` (GEOCODING_REASON_MAP, key: INVALID_REQUEST) | verified |
 | "Google Maps is temporarily unavailable -- try again in a few minutes" | `apps/kerala_delivery/api/main.py:99` (GEOCODING_REASON_MAP, key: UNKNOWN_ERROR) | verified |
-| "Geocoding service not configured (missing API key)" | `apps/kerala_delivery/api/main.py:1125` (no geocoder configured fallback) | verified |
-| "Could not find this address -- try checking the spelling" | `apps/kerala_delivery/api/main.py:1100` (GEOCODING_REASON_MAP.get default fallback) | verified |
+| "Geocoding service not configured (missing API key)" | `apps/kerala_delivery/api/main.py:1123` (no geocoder configured fallback) | verified |
+| "Could not find this address -- try checking the spelling" | `apps/kerala_delivery/api/main.py:1098` (GEOCODING_REASON_MAP.get default fallback) | verified |
