@@ -84,8 +84,8 @@
 
 **Milestone Goal:** Close all identified loopholes in the licensing and distribution system that allow customers to circumvent license enforcement.
 
-- [ ] **Phase 5: Fingerprinting Overhaul** - Replace unstable Docker/MAC fingerprint with machine-id + CPU model signals
-- [ ] **Phase 6: Build Pipeline -- Dev-Mode Stripping and Cython Compilation** - Strip dev bypass from builds and compile licensing modules to native .so
+- [x] **Phase 5: Fingerprinting Overhaul** - Replace unstable Docker/MAC fingerprint with machine-id + CPU model signals -- completed 2026-03-10
+- [x] **Phase 6: Build Pipeline -- Dev-Mode Stripping and Cython Compilation** - Strip dev bypass from builds and compile licensing modules to native .so -- completed 2026-03-10
 - [ ] **Phase 7: Enforcement Module** - Move enforcement logic and integrity manifest into compiled module with single entry point
 - [ ] **Phase 8: Runtime Protection** - Add periodic license and integrity re-validation during operation
 - [ ] **Phase 9: License Management** - Renewal mechanism and expiry visibility for monitoring
@@ -105,8 +105,8 @@
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — TDD fingerprint formula: MAC decision + tests + implementation in license_manager.py and get_machine_id.py
-- [ ] 05-02-PLAN.md — Docker bind mounts + integration verification of host-container fingerprint match
+- [x] 05-01-PLAN.md — TDD fingerprint formula: MAC decision + tests + implementation in license_manager.py and get_machine_id.py
+- [x] 05-02-PLAN.md — Docker bind mounts + integration verification of host-container fingerprint match
 
 ### Phase 6: Build Pipeline -- Dev-Mode Stripping and Cython Compilation
 **Goal**: Distributed builds contain no dev-mode bypass and licensing modules are compiled to native machine code
@@ -121,9 +121,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Refactor main.py ENVIRONMENT checks to production-default (no dev bypass when ENVIRONMENT unset)
-- [ ] 06-02-PLAN.md — Rotate HMAC seed/salt/iterations and clean __init__.py docstring
-- [ ] 06-03-PLAN.md — Cython build pipeline: Dockerfile.build + cython_build.py + upgraded build-dist.sh
+- [x] 06-01-PLAN.md — Refactor main.py ENVIRONMENT checks to production-default (no dev bypass when ENVIRONMENT unset)
+- [x] 06-02-PLAN.md — Rotate HMAC seed/salt/iterations and clean __init__.py docstring
+- [x] 06-03-PLAN.md — Cython build pipeline: Dockerfile.build + cython_build.py + upgraded build-dist.sh
 
 ### Phase 7: Enforcement Module
 **Goal**: All enforcement logic lives in a compiled module with a single entry point; main.py contains no inline enforcement code
@@ -218,8 +218,8 @@ Phases execute in numeric order: 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 2. Error Handling Infrastructure | v2.0 | 4/4 | Complete | 2026-03-10 |
 | 3. Error Handling Polish | v2.0 | 1/1 | Complete | 2026-03-10 |
 | 4. Documentation Accuracy Refresh | v2.0 | 2/2 | Complete | 2026-03-10 |
-| 5. Fingerprinting Overhaul | v2.1 | 0/2 | Not started | - |
-| 6. Build Pipeline -- Dev-Mode Stripping and Cython | v2.1 | 0/3 | Not started | - |
+| 5. Fingerprinting Overhaul | v2.1 | 2/2 | Complete | 2026-03-10 |
+| 6. Build Pipeline -- Dev-Mode Stripping and Cython | v2.1 | 3/3 | Complete | 2026-03-10 |
 | 7. Enforcement Module | v2.1 | 0/? | Not started | - |
 | 8. Runtime Protection | v2.1 | 0/? | Not started | - |
 | 9. License Management | v2.1 | 0/? | Not started | - |

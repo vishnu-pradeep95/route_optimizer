@@ -58,7 +58,7 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ CSV format reference with error glossary and address cleaning pipeline — v1.3
 - ✓ README/DEPLOY.md accuracy and non-technical audience restructure — v1.3
 - ✓ Plain-English error messages for upload validation and geocoding — v1.3
-- ✓ Distribution build with compiled licensing module (.pyc) — v1.3
+- ✓ Distribution build with compiled licensing module (.pyc → .so in Phase 6) — v1.3
 - ✓ OSRM Docker image pinned to v5.27.1 for deployment resilience — v1.3
 - ✓ Error message documentation synced with code (25 messages traced) — v1.3
 - ✓ Playwright E2E test suite (38 tests: API, Driver PWA, Dashboard, License) — v1.4
@@ -80,6 +80,11 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ Stable machine fingerprint using /etc/machine-id + CPU model (replaces hostname+MAC+container_id) — Phase 5
 - ✓ Docker bind mount for host-container fingerprint consistency — Phase 5
 - ✓ 13 new fingerprint unit tests with mocked filesystem (38 total fingerprint tests) — Phase 5
+- ✓ Production-default ENVIRONMENT logic — dev conveniences gated behind explicit ENVIRONMENT=development — Phase 6
+- ✓ HMAC seed rotated to 32-byte cryptographic random with 200k PBKDF2 iterations — Phase 6
+- ✓ Distribution build with compiled licensing module (.so via Cython, not .pyc) — Phase 6
+- ✓ Zero ENVIRONMENT references in distributed Python files (build-time stripping + validation) — Phase 6
+- ✓ Customer migration documentation for v2.1 breaking changes (fingerprint + HMAC) — Phase 6
 
 ### Active
 
@@ -182,6 +187,12 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | FLEET_NO_VEHICLES → #step-11-cdcms-data-workflow | Closest relevant heading in SETUP.md (no Fleet Setup section) | ✓ Good — best available anchor |
 | Drop MAC from fingerprint formula | WSL2 generates random MAC on every reboot (microsoft/WSL#5352) | ✓ Good — fingerprint stable across reboots |
 | Read-only bind mount for /etc/machine-id | Prevent container writes to host identity file | ✓ Good — secure host-container identity sharing |
+| Production-default ENVIRONMENT logic | Omitting ENVIRONMENT must not grant dev privileges | ✓ Good — 4 locations inverted, /docs /redoc /openapi.json all gated |
+| bytes.fromhex() for HMAC seed/salt | Not greppable as ASCII strings, raises extraction bar | ✓ Good — old human-readable strings eliminated |
+| PBKDF2 iterations 100k → 200k | Stronger key derivation with negligible startup cost | ✓ Good — measurable brute-force cost increase |
+| Docker-based Cython compilation | Build in python:3.12-slim matching runtime for ABI compatibility | ✓ Good — .so imports validated inside same base image |
+| sed strip-devmode in build pipeline | Hardcode _is_dev_mode=False in staged copy, delete ENVIRONMENT refs | ✓ Good — zero-tolerance grep validation passes |
+| Migration docs written in Phase 6 | Document while both breaking changes (fingerprint + HMAC) are in context | ✓ Good — deferred execution to Phase 10 |
 
 ---
-*Last updated: 2026-03-10 after Phase 5 (Fingerprinting Overhaul)*
+*Last updated: 2026-03-10 after Phase 6 (Build Pipeline)*
