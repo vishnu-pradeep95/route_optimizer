@@ -465,6 +465,7 @@ _INTEGRITY_MANIFEST: dict[str, str] = {}
 
 _license_state: LicenseInfo | None = None
 _request_counter: int = 0
+_REVALIDATION_INTERVAL = int(os.environ.get("REVALIDATION_INTERVAL", "500"))
 
 
 def get_license_status() -> LicenseStatus | None:
@@ -536,10 +537,11 @@ def verify_integrity(base_path: str = "/app") -> tuple[bool, list[str]]:
 
 
 def maybe_revalidate(base_path: str = "/app") -> None:
-    """Periodic re-validation: integrity + license expiry check every 500 requests.
+    """Periodic re-validation: integrity + license expiry check every N requests.
 
     Called by enforcement middleware on every request. Increments a counter
-    and triggers full re-validation when counter hits 500.
+    and triggers full re-validation when counter hits _REVALIDATION_INTERVAL
+    (default 500, configurable via REVALIDATION_INTERVAL env var).
 
     Re-validation includes:
     1. File integrity verification against embedded SHA256 manifest
@@ -550,7 +552,7 @@ def maybe_revalidate(base_path: str = "/app") -> None:
     """
     global _request_counter
     _request_counter += 1
-    if _request_counter % 500 != 0:
+    if _request_counter % _REVALIDATION_INTERVAL != 0:
         return
     _request_counter = 0
 

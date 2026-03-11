@@ -53,5 +53,9 @@ export default defineConfig({
       name: 'license',
       testMatch: 'license.spec.ts',
     },
+    {
+      name: 'security-pipeline',
+      testMatch: 'security-pipeline.spec.ts',
+    },
   ],
 });
