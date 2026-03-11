@@ -143,6 +143,13 @@ grep -n "_lifespan_is_dev = False" "$STAGED_MAIN" || { error "Failed to strip _l
 
 success "Dev-mode gates hardcoded to False in staged main.py"
 
+# Also strip ENVIRONMENT from enforcement.py (ships as .py, not compiled to .so)
+# enforcement.py has: _is_dev_mode = os.environ.get("ENVIRONMENT") == "development"
+STAGED_ENFORCE="$STAGE/core/licensing/enforcement.py"
+sed -i 's|_is_dev_mode = os.environ.get("ENVIRONMENT") == "development"|_is_dev_mode = False|' "$STAGED_ENFORCE"
+grep -n "_is_dev_mode = False" "$STAGED_ENFORCE" || { error "Failed to strip _is_dev_mode gate from enforcement.py"; exit 1; }
+success "Dev-mode gate hardcoded to False in staged enforcement.py"
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Step 3: STRIP VALIDATION -- Zero ENVIRONMENT references in staged .py files
 # ═══════════════════════════════════════════════════════════════════════════
@@ -219,7 +226,7 @@ header "Validating .so imports (Docker)"
 
 # Mount the staged directory and test imports inside the same base image
 docker run --rm -v "$STAGE:/app:ro" -w /app -e PYTHONPATH=/app python:3.12-slim \
-    python -c "from core.licensing.license_manager import get_machine_fingerprint, validate_license, encode_license_key, get_license_status, set_license_state, verify_integrity; print('All imports OK')" \
+    python -c "from core.licensing.license_manager import get_machine_fingerprint, validate_license, encode_license_key, get_license_status, set_license_state, verify_integrity, maybe_revalidate, get_license_info; print('All imports OK')" \
     || { error ".so import validation failed inside Docker! Platform mismatch?"; exit 1; }
 
 success "Import validation passed (.so licensing module loads in Docker)"

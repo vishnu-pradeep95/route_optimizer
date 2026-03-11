@@ -8,7 +8,7 @@
 - ✅ **v1.3 Office-Ready Deployment** -- Phases 13-20 (shipped 2026-03-07)
 - ✅ **v1.4 Ship-Ready QA** -- Phases 21-24 (shipped 2026-03-09)
 - ✅ **v2.0 Documentation & Error Handling** -- Phases 1-4 (shipped 2026-03-10)
-- 🚧 **v2.1 Licensing & Distribution Security** -- Phases 5-10 (in progress)
+- 🚧 **v2.1 Licensing & Distribution Security** -- Phases 5-11 (in progress)
 
 ## Phases
 
@@ -90,6 +90,7 @@
 - [ ] **Phase 8: Runtime Protection** - Add periodic license and integrity re-validation during operation
 - [ ] **Phase 9: License Management** - Renewal mechanism and expiry visibility for monitoring
 - [x] **Phase 10: End-to-End Validation** - E2E tests exercising the full security pipeline plus customer migration documentation (completed 2026-03-11)
+- [ ] **Phase 11: Integration Gap Fixes** - Fix critical build and deployment integration breaks found by milestone audit
 
 ## Phase Details
 
@@ -182,6 +183,20 @@ Plans:
 - [ ] 10-01-PLAN.md — E2E security pipeline tests: REVALIDATION_INTERVAL env var, Docker Compose services, Playwright security-pipeline.spec.ts, CI job
 - [ ] 10-02-PLAN.md — Documentation rewrite: LICENSING.md from scratch, ERROR-MAP.md + SETUP.md + MIGRATION.md updates
 
+### Phase 11: Integration Gap Fixes
+**Goal**: Distribution builds complete successfully and production deployments have correct machine fingerprint
+**Depends on**: Phase 10 (audit identified the gaps)
+**Requirements**: ENF-01, FPR-02, BLD-02
+**Gap Closure**: Closes gaps from v2.1 milestone audit
+**Success Criteria** (what must be TRUE):
+  1. `build-dist.sh` Step 3 (ENVIRONMENT validation) passes — enforcement.py has no ENVIRONMENT references in staging
+  2. `docker-compose.prod.yml` api service volumes include `/etc/machine-id:/etc/machine-id:ro` matching dev and test compose files
+  3. `build-dist.sh` Step 6 import validation checks all 8 exports including `maybe_revalidate` and `get_license_info`
+**Plans**: 1 plan
+
+Plans:
+- [ ] 11-01-PLAN.md — Fix build-dist.sh ENVIRONMENT stripping + import validation, add machine-id mount to docker-compose.prod.yml
+
 ## Progress
 
 **Execution Order:**
@@ -224,6 +239,7 @@ Phases execute in numeric order: 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 8. Runtime Protection | v2.1 | 0/2 | Not started | - |
 | 9. License Management | v2.1 | 0/2 | Not started | - |
 | 10. End-to-End Validation | v2.1 | 0/2 | Not started | - |
+| 11. Integration Gap Fixes | v2.1 | 0/1 | Not started | - |
 
 ---
 *Full phase details archived in `.planning/milestones/`*
