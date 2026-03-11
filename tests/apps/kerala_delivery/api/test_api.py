@@ -2670,3 +2670,167 @@ class TestGeocodingReasonMapFormat:
         assert "failed" not in fallback.lower(), f"Fallback contains 'failed': {fallback}"
         assert "SOME_UNKNOWN_STATUS" not in fallback, f"Fallback leaks raw status code: {fallback}"
         assert " -- " in fallback, f"Fallback missing fix action: {fallback}"
+
+
+# =============================================================================
+# ADDR-01: API response must include address_raw field
+# =============================================================================
+
+
+class TestAddressRawApiField:
+    """Verify that GET /api/routes/{vehicle_id} response stops include
+    an 'address_raw' field mapped from RouteStop.address_original.
+
+    This field gives drivers access to the completely unprocessed CDCMS
+    ConsumerAddress text, separate from the cleaned address_display.
+    """
+
+    @pytest.mark.addr01
+    def test_stop_response_includes_address_raw_key(self, client, mock_run_id):
+        """Each stop in GET /api/routes/{vehicle_id} must have 'address_raw' key."""
+        from core.database.models import OptimizationRunDB, RouteDB
+        from shapely.geometry import Point
+        from geoalchemy2.shape import from_shape
+
+        mock_run = MagicMock(spec=OptimizationRunDB)
+        mock_run.id = mock_run_id
+
+        mock_stop = MagicMock()
+        mock_stop.order = MagicMock()
+        mock_stop.order.order_id = "ORD-ADDR01-001"
+        mock_stop.location = from_shape(Point(75.5700, 11.5950), srid=4326)
+        mock_stop.address_display = "Kuniyil K, Near Vallikkadu"
+        mock_stop.address_original = "KUNIYILK, NR.VALLIKKADU"
+        mock_stop.sequence = 1
+        mock_stop.distance_from_prev_km = 2.5
+        mock_stop.duration_from_prev_minutes = 5.0
+        mock_stop.weight_kg = 14.2
+        mock_stop.quantity = 1
+        mock_stop.notes = ""
+        mock_stop.status = "pending"
+
+        mock_route = MagicMock(spec=RouteDB)
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "VEH-01"
+        mock_route.driver_name = "Driver 1"
+        mock_route.stops = [mock_stop]
+        mock_route.total_distance_km = 2.5
+        mock_route.total_duration_minutes = 5.0
+        mock_route.total_weight_kg = 14.2
+        mock_route.total_items = 1
+        mock_route.created_at = datetime.now(timezone.utc)
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=mock_run)
+            mock_repo.get_route_for_vehicle = AsyncMock(return_value=mock_route)
+            from core.database.repository import route_db_to_pydantic
+            mock_repo.route_db_to_pydantic = route_db_to_pydantic
+
+            resp = client.get("/api/routes/VEH-01")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        stop = data["stops"][0]
+        assert "address_raw" in stop, (
+            f"Stop response missing 'address_raw' key. Keys present: {list(stop.keys())}"
+        )
+
+    @pytest.mark.addr01
+    def test_address_raw_value_matches_address_original(self, client, mock_run_id):
+        """The 'address_raw' value should match the unprocessed CDCMS text
+        (address_original on the RouteStop model)."""
+        from core.database.models import OptimizationRunDB, RouteDB
+        from shapely.geometry import Point
+        from geoalchemy2.shape import from_shape
+
+        mock_run = MagicMock(spec=OptimizationRunDB)
+        mock_run.id = mock_run_id
+
+        mock_stop = MagicMock()
+        mock_stop.order = MagicMock()
+        mock_stop.order.order_id = "ORD-ADDR01-002"
+        mock_stop.location = from_shape(Point(75.5700, 11.5950), srid=4326)
+        mock_stop.address_display = "Kuniyil K, Near Vallikkadu"
+        mock_stop.address_original = "KUNIYILK, NR.VALLIKKADU"
+        mock_stop.sequence = 1
+        mock_stop.distance_from_prev_km = 2.5
+        mock_stop.duration_from_prev_minutes = 5.0
+        mock_stop.weight_kg = 14.2
+        mock_stop.quantity = 1
+        mock_stop.notes = ""
+        mock_stop.status = "pending"
+
+        mock_route = MagicMock(spec=RouteDB)
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "VEH-01"
+        mock_route.driver_name = "Driver 1"
+        mock_route.stops = [mock_stop]
+        mock_route.total_distance_km = 2.5
+        mock_route.total_duration_minutes = 5.0
+        mock_route.total_weight_kg = 14.2
+        mock_route.total_items = 1
+        mock_route.created_at = datetime.now(timezone.utc)
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=mock_run)
+            mock_repo.get_route_for_vehicle = AsyncMock(return_value=mock_route)
+            from core.database.repository import route_db_to_pydantic
+            mock_repo.route_db_to_pydantic = route_db_to_pydantic
+
+            resp = client.get("/api/routes/VEH-01")
+
+        data = resp.json()
+        stop = data["stops"][0]
+        assert stop["address_raw"] == "KUNIYILK, NR.VALLIKKADU", (
+            f"address_raw should be the unprocessed text but got: {stop.get('address_raw')}"
+        )
+
+    @pytest.mark.addr01
+    def test_address_raw_null_when_address_original_missing(self, client, mock_run_id):
+        """When address_original is None (pre-v2.2 data), address_raw should be null."""
+        from core.database.models import OptimizationRunDB, RouteDB
+        from shapely.geometry import Point
+        from geoalchemy2.shape import from_shape
+
+        mock_run = MagicMock(spec=OptimizationRunDB)
+        mock_run.id = mock_run_id
+
+        mock_stop = MagicMock()
+        mock_stop.order = MagicMock()
+        mock_stop.order.order_id = "ORD-ADDR01-003"
+        mock_stop.location = from_shape(Point(75.5700, 11.5950), srid=4326)
+        mock_stop.address_display = "Kuniyil K, Near Vallikkadu"
+        mock_stop.address_original = None  # Pre-v2.2: no original text stored
+        mock_stop.sequence = 1
+        mock_stop.distance_from_prev_km = 2.5
+        mock_stop.duration_from_prev_minutes = 5.0
+        mock_stop.weight_kg = 14.2
+        mock_stop.quantity = 1
+        mock_stop.notes = ""
+        mock_stop.status = "pending"
+
+        mock_route = MagicMock(spec=RouteDB)
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "VEH-01"
+        mock_route.driver_name = "Driver 1"
+        mock_route.stops = [mock_stop]
+        mock_route.total_distance_km = 2.5
+        mock_route.total_duration_minutes = 5.0
+        mock_route.total_weight_kg = 14.2
+        mock_route.total_items = 1
+        mock_route.created_at = datetime.now(timezone.utc)
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=mock_run)
+            mock_repo.get_route_for_vehicle = AsyncMock(return_value=mock_route)
+            from core.database.repository import route_db_to_pydantic
+            mock_repo.route_db_to_pydantic = route_db_to_pydantic
+
+            resp = client.get("/api/routes/VEH-01")
+
+        data = resp.json()
+        stop = data["stops"][0]
+        assert "address_raw" in stop, "address_raw key must be present even when null"
+        assert stop["address_raw"] is None, (
+            f"address_raw should be null for pre-v2.2 data but got: {stop['address_raw']}"
+        )
