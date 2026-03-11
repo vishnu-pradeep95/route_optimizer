@@ -245,7 +245,19 @@ def clean_cdcms_address(raw_address: str, *, area_suffix: str = "") -> str:
     # ``THANAL`` → THANAL, "ARUNIMA" → ARUNIMA, "CHAITHANIYA" → CHAITHANIYA
     addr = addr.replace("``", "").replace('""', "").replace('"', " ")
 
-    # Step 4: Expand common Kerala address abbreviations
+    # Step 4: Expand common Kerala address abbreviations (first pass — inline patterns)
+    #
+    # Two-pass abbreviation strategy:
+    #   Pass 1 (here): Inline patterns that work on concatenated text BEFORE word
+    #   splitting — e.g., ([a-zA-Z])PO\. catches "KUNIYILPO." because the letter
+    #   before PO is part of the same token. NR[.;:] with \b also works here
+    #   because NR is typically preceded by a space or start-of-string.
+    #
+    #   Pass 2 (Step 5c): Standalone patterns (\bPO\b, \bNR\b) that rely on word
+    #   boundaries — these only work AFTER word splitting (Step 5b) creates the
+    #   boundaries. Example: "CHORODEEASTPO WEST" → after split "CHORODEEAST PO WEST"
+    #   → then \bPO\b matches.
+    #
     # NR. / NR; / NR: → Near (geocoders understand "Near" better)
     addr = re.sub(r"\bNR[.;:]\s*", "Near ", addr, flags=re.IGNORECASE)
 
@@ -254,9 +266,6 @@ def clean_cdcms_address(raw_address: str, *, area_suffix: str = "") -> str:
     # This is very common in CDCMS — the PO name runs directly into "PO."
     # Must come BEFORE the standalone PO pattern below.
     addr = re.sub(r"([a-zA-Z])PO\.", r"\1 P.O.", addr, flags=re.IGNORECASE)
-
-    # PO / PO. as a standalone word → P.O. (Post Office abbreviation)
-    addr = re.sub(r"\bPO\b\.?\s*", "P.O. ", addr, flags=re.IGNORECASE)
 
     # (H) → House (common CDCMS notation for "house")
     addr = re.sub(r"\(H\)", "House", addr, flags=re.IGNORECASE)
@@ -267,6 +276,98 @@ def clean_cdcms_address(raw_address: str, *, area_suffix: str = "") -> str:
     # "4/146AMINAS" → "4/146 AMINAS"
     # "MUTTUNGAL-POBALAVADI" → leave hyphens alone, handle PO separately
     addr = re.sub(r"(\d)([A-Z])", r"\1 \2", addr)
+
+    # Step 5b: Split trailing 1-3 uppercase letters from concatenated ALL-CAPS words.
+    # CDCMS concatenates address parts without separators:
+    #   "ANANDAMANDIRAMK" → "ANANDAMANDIRAM K" (K is a person's initial)
+    #   "KUNIYILK" → "KUNIYIL K"
+    #   "VALIYAPARAMBATHKB" → "VALIYAPARAMBATH KB"
+    #
+    # This is a heuristic — we can't perfectly distinguish "PARAMBATH" (real word)
+    # from "KUNIYILK" (concatenation) in ALL-CAPS text. We use a conservative
+    # approach: only split words of 8+ characters, only when the word is not in
+    # a protected set of known abbreviations and common Kerala place/house names
+    # that would be false positives.
+    #
+    # Protected set includes:
+    # - Known abbreviations that should never be split (KSEB, BSNL, KSRTC)
+    # - Common Kerala address words of 8+ chars that appear in CDCMS data and
+    #   would be incorrectly split (PARAMBATH, VALLIKKADU, etc.)
+    # This set will grow as we encounter more false positives in real data.
+    _PROTECTED_WORDS = {
+        # Abbreviations
+        "KSEB", "BSNL", "KSRTC", "KT", "EK",
+        # Common Kerala place/house name words (8+ chars) that must not be split.
+        # These end in patterns that look like trailing initials but are actually
+        # natural word endings (TH, DU, RY, RA, TY, etc.)
+        "PARAMBATH", "VALLIKKADU", "KALAMASSERY", "PALLIVATAKARA",
+        "ONTHAMKAINATTY", "VATAKARA", "KAINATTY", "VALIYAPARAMBATH",
+        "RAYARANGOTH", "EYYAMKUTTI", "SREESHYLAM", "MUTTUNGAL",
+        "MADATHIL", "PANAKKULATHIL", "KALARIKKANDI", "PADINJARA",
+        "MEATHALA", "BALAVADI", "MASTERVALLIKKADU", "MALAYILVALLIKKAD",
+        "SREESHYLAMMUTTUNGAL", "POBALAVADI",
+    }
+
+    # Suffixes that are meaningful abbreviations — when found at the end of a
+    # concatenated word, prefer splitting at this boundary over a single letter.
+    _MEANINGFUL_SUFFIXES = {"PO", "NR", "KB", "NKB"}
+
+    def _split_word_if_concatenated(token):
+        """Split trailing 1-3 uppercase letters from a long ALL-CAPS word.
+
+        Only applies to words that are:
+        - Entirely uppercase (ALL-CAPS CDCMS text)
+        - 8+ characters long (shorter words are unlikely concatenations)
+        - Not in the protected set of known words/abbreviations
+
+        Split priority:
+        1. If a 2-3 letter suffix (ignoring trailing punctuation) is a known
+           meaningful abbreviation (PO, NR, KB), split there.
+        2. If the prefix after removing 2-3 chars is a protected/known word,
+           split there.
+        3. Default: split off the last 1 character as an initial.
+        """
+        # Separate trailing punctuation (dots, semicolons, colons) from the
+        # alpha core. E.g., "MUTTUNGALNR." → core="MUTTUNGALNR", trail="."
+        core = token.rstrip(".;:")
+        trail = token[len(core):]
+
+        if not core.isupper() or len(core) < 8:
+            return token
+        if core in _PROTECTED_WORDS:
+            return token
+
+        # Priority 1: Check if trailing 2-3 chars are a meaningful abbreviation
+        for suffix_len in (3, 2):
+            if len(core) - suffix_len >= 5:
+                suffix = core[-suffix_len:]
+                if suffix in _MEANINGFUL_SUFFIXES:
+                    return core[:-suffix_len] + " " + suffix + trail
+
+        # Priority 2: Check if removing 2-3 chars reveals a protected prefix
+        for suffix_len in (3, 2):
+            if len(core) - suffix_len >= 5:
+                prefix = core[:-suffix_len]
+                if prefix in _PROTECTED_WORDS:
+                    return prefix + " " + core[-suffix_len:] + trail
+
+        # Priority 3: Default to splitting off last 1 character (person's initial)
+        if len(core) - 1 >= 5:
+            return core[:-1] + " " + core[-1] + trail
+
+        return token
+
+    # Apply trailing letter split to each whitespace-delimited token.
+    words = addr.split()
+    words = [_split_word_if_concatenated(w) for w in words]
+    addr = " ".join(words)
+
+    # Step 5c: Second-pass abbreviation expansion (standalone patterns).
+    # Now that word splitting has created boundaries, standalone \bPO\b and \bNR\b
+    # patterns will match words that were previously concatenated.
+    # Example: "CHORODEEAST PO WEST" — PO is now a standalone word after Step 5b.
+    addr = re.sub(r"\bPO\b\.?\s*", "P.O. ", addr, flags=re.IGNORECASE)
+    addr = re.sub(r"\bNR\b[.;:]?\s*", "Near ", addr, flags=re.IGNORECASE)
 
     # Step 6: Collapse multiple spaces and clean up
     addr = re.sub(r"\s+", " ", addr).strip()
@@ -280,10 +381,12 @@ def clean_cdcms_address(raw_address: str, *, area_suffix: str = "") -> str:
     addr = addr.title()
 
     # Step 9: Fix common title-case artifacts
-    # "P.o." → "P.O.", "Po." → "P.O.", "Kseb" → "KSEB"
+    # "P.o." → "P.O.", "Po." → "P.O.", "Kseb" → "KSEB", "Bsnl" → "BSNL", "Ksrtc" → "KSRTC"
     addr = re.sub(r"\bP\.?o\.\b", "P.O.", addr)
     addr = re.sub(r"\bPo\.\b", "P.O.", addr)
     addr = re.sub(r"\bKseb\b", "KSEB", addr)
+    addr = re.sub(r"\bBsnl\b", "BSNL", addr)
+    addr = re.sub(r"\bKsrtc\b", "KSRTC", addr)
 
     # Step 10: Append area suffix for geocoding context
     if area_suffix:
