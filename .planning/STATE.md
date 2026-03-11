@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
-status: planning
-stopped_at: Phase 9 context gathered
-last_updated: "2026-03-11T02:11:22.242Z"
-last_activity: 2026-03-11 -- Phase 8 complete, transitioning to Phase 9
+status: executing
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-03-11T02:30:07Z"
+last_activity: 2026-03-11 -- Phase 9 plan 01 complete (renewal mechanism)
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 75
+  total_plans: 2
+  completed_plans: 1
+  percent: 79
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 9 -- License Management
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-03-11 -- Phase 8 complete, transitioning to Phase 9
+Plan: 1 of 2 complete
+Status: Executing
+Last activity: 2026-03-11 -- Phase 9 plan 01 complete (renewal mechanism)
 
-Progress: [████████░░] 75% (9/12 plans across 6 phases)
+Progress: [████████░░] 79% (10/12 plans across 6 phases)
 
 ## Performance Metrics
 
@@ -81,6 +81,10 @@ Progress: [████████░░] 75% (9/12 plans across 6 phases)
 - Phase 8-02: maybe_revalidate() called for ALL requests including /health -- counter increments consistently
 - Phase 8-02: Status re-read placed immediately after maybe_revalidate() before any branching logic
 
+- Phase 9-01: Renewal check (Step 0) placed before validate_license() to avoid one-way state guard blocking INVALID->VALID
+- Phase 9-01: Post-renewal file handling is best-effort -- read-only Docker volumes log warning but don't crash
+- Phase 9-01: _LICENSE_KEY_PATHS and _RENEWAL_KEY_PATHS as module-level lists for testability (patchable in tests)
+
 See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase details per milestone.
 
 ### Pending Todos
@@ -118,9 +122,10 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 | 07-02 | Enforcement wiring & manifest | 3min | 2 | 2 |
 | 08-01 | Re-validation + state guard | 4min | 2 | 3 |
 | 08-02 | Middleware revalidation wiring | 3min | 1 | 2 |
+| 09-01 | License renewal mechanism | 5min | 2 | 7 |
 
 ## Session Continuity
 
-Last session: 2026-03-11T02:11:22.241Z
-Stopped at: Phase 9 context gathered
-Resume file: .planning/milestones/v2.1-phases/09-license-management/09-CONTEXT.md
+Last session: 2026-03-11T02:30:07Z
+Stopped at: Completed 09-01-PLAN.md
+Resume file: .planning/milestones/v2.1-phases/09-license-management/09-02-PLAN.md

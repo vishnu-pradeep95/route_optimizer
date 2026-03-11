@@ -28,7 +28,7 @@ Requirements for v2.1 Licensing & Distribution Security. Each maps to roadmap ph
 
 ### License Management
 
-- [ ] **LIC-01**: License renewal extends expiry without full re-keying cycle (customer drops renewal.key file)
+- [x] **LIC-01**: License renewal extends expiry without full re-keying cycle (customer drops renewal.key file)
 - [ ] **LIC-02**: X-License-Expires-In response header on API responses for monitoring
 - [ ] **LIC-03**: License status included in /health endpoint body for diagnostics
 
@@ -82,7 +82,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RTP-01 | Phase 7 | Complete |
 | RTP-02 | Phase 8 | Complete |
 | RTP-03 | Phase 8 | Complete |
-| LIC-01 | Phase 9 | Pending |
+| LIC-01 | Phase 9 | Complete |
 | LIC-02 | Phase 9 | Pending |
 | LIC-03 | Phase 9 | Pending |
 | BLD-01 | Phase 6 | Complete |
