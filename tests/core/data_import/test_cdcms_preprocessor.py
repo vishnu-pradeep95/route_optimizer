@@ -358,6 +358,165 @@ class TestCleanCdcmsAddress:
 
 
 # =============================================================================
+# ADDR-02: Trailing letter split on ALL-CAPS input
+# =============================================================================
+
+
+class TestWordSplitting:
+    """Tests for ADDR-02: splitting trailing uppercase letters from concatenated words.
+
+    CDCMS addresses are often concatenated without separators. The trailing
+    letter split regex detects 1-3 trailing uppercase letters stuck to longer
+    words (5+ total characters) and inserts a space before them.
+    """
+
+    @pytest.mark.parametrize(
+        "raw_input, expected_substring",
+        [
+            # Single trailing letter: K stuck to ANANDAMANDIRAM
+            ("ANANDAMANDIRAMK", "Anandamandiram K"),
+            # Single trailing letter: K stuck to KUNIYIL
+            ("KUNIYILK", "Kuniyil K"),
+            # Two trailing letters: KB stuck to VALIYAPARAMBATH
+            ("VALIYAPARAMBATHKB", "Valiyaparambath Kb"),
+            # Three trailing letters: NKB stuck to VALIYAPARAMBATH
+            ("VALIYAPARAMBATHNKB", "Valiyaparambath Nkb"),
+        ],
+        ids=[
+            "single-trailing-K",
+            "single-trailing-K-short-word",
+            "two-trailing-KB",
+            "three-trailing-NKB",
+        ],
+    )
+    def test_trailing_letters_split(self, raw_input, expected_substring):
+        """Trailing 1-3 letters should be split from words of 5+ total chars."""
+        result = clean_cdcms_address(raw_input, area_suffix="")
+        assert expected_substring in result, (
+            f"Expected '{expected_substring}' in '{result}' "
+            f"(input: '{raw_input}')"
+        )
+
+    @pytest.mark.parametrize(
+        "raw_input",
+        [
+            "MAYA",   # 4 chars total — too short to split
+            "RAVI",   # 4 chars — should not split
+            "AKM",    # 3 chars — too short
+        ],
+        ids=["maya-4chars", "ravi-4chars", "akm-3chars"],
+    )
+    def test_short_words_not_split(self, raw_input):
+        """Words shorter than 5 characters should NOT be split."""
+        result = clean_cdcms_address(raw_input, area_suffix="")
+        # After title case, the word should be intact (no extra spaces)
+        assert " " not in result.strip(), (
+            f"Short word '{raw_input}' was incorrectly split: '{result}'"
+        )
+
+    def test_already_spaced_text_unchanged(self):
+        """Text that already has proper spacing should not be modified."""
+        result = clean_cdcms_address(
+            "VALIYA PARAMBATH NEAR SCHOOL",
+            area_suffix="",
+        )
+        assert "Valiya Parambath Near School" == result
+
+    def test_trailing_split_in_multi_word_address(self):
+        """Trailing letter split should work within a full address string."""
+        result = clean_cdcms_address(
+            "4/146 ANANDAMANDIRAMK VALLIKKADU",
+            area_suffix="",
+        )
+        assert "Anandamandiram K" in result
+        assert "Vallikkadu" in result
+
+
+class TestKnownAbbreviationsPreserved:
+    """Tests verifying that known abbreviations are NOT split by trailing letter regex.
+
+    Kerala abbreviations like KSEB, BSNL, KSRTC must be preserved as-is,
+    even though they end with 1-3 letter groups that match the trailing
+    letter split pattern.
+    """
+
+    @pytest.mark.parametrize(
+        "abbreviation",
+        ["KSEB", "BSNL", "KSRTC"],
+        ids=["kseb", "bsnl", "ksrtc"],
+    )
+    def test_abbreviation_not_split(self, abbreviation):
+        """Known abbreviations should not be split into separate letters."""
+        result = clean_cdcms_address(
+            f"NEAR {abbreviation} OFFICE",
+            area_suffix="",
+        )
+        assert abbreviation in result, (
+            f"Abbreviation '{abbreviation}' was split or mangled in: '{result}'"
+        )
+
+
+# =============================================================================
+# ADDR-03: Abbreviation expansion after word splitting
+# =============================================================================
+
+
+class TestStepOrdering:
+    """Tests for ADDR-03: standalone abbreviation expansion runs after word splitting.
+
+    The inline PO pattern (([a-zA-Z])PO\\.) handles concatenated cases like
+    "KUNIYILPO." correctly in Step 4. But the standalone \\bPO\\b pattern
+    only works at word boundaries — so it needs to run AFTER word splitting
+    creates those boundaries.
+    """
+
+    def test_standalone_po_after_word_split(self):
+        """Standalone PO should be expanded to P.O. even after word splitting creates it."""
+        # After trailing letter split: "CHORODEEAST PO WEST"
+        # Then standalone PO pattern should catch "PO" at word boundary
+        result = clean_cdcms_address(
+            "CHORODEEASTPO WEST",
+            area_suffix="",
+        )
+        assert "P.O." in result, (
+            f"Standalone PO not expanded after word split: '{result}'"
+        )
+
+    def test_standalone_nr_after_word_split(self):
+        """Standalone NR with punctuation should be expanded to Near after word splitting."""
+        result = clean_cdcms_address(
+            "MUTTUNGALNR. KAINATTY",
+            area_suffix="",
+        )
+        assert "Near" in result, (
+            f"NR. not expanded: '{result}'"
+        )
+
+    def test_inline_po_still_works(self):
+        """The inline PO pattern ([a-zA-Z])PO\\. should still work in its original position."""
+        result = clean_cdcms_address(
+            "KUNIYILPO. CHORODE EAST",
+            area_suffix="",
+        )
+        assert "P.O." in result, (
+            f"Inline PO pattern broken: '{result}'"
+        )
+
+    def test_combined_word_split_and_abbreviation(self):
+        """Full pipeline: word split + abbreviation expansion in correct order."""
+        result = clean_cdcms_address(
+            "ANANDAMANDIRAMK NR. KSEB OFFICE",
+            area_suffix="",
+        )
+        # Trailing K should be split: "ANANDAMANDIRAM K"
+        assert "Anandamandiram K" in result
+        # NR. should be expanded to Near
+        assert "Near" in result
+        # KSEB should be preserved
+        assert "KSEB" in result
+
+
+# =============================================================================
 # Validation tests
 # =============================================================================
 
