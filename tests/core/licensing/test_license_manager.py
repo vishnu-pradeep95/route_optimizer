@@ -1006,7 +1006,11 @@ class TestMaybeRevalidate:
         assert license_manager._license_state.customer_id == "valid-test"
 
     def test_license_expiry_uses_dataclasses_replace(self, monkeypatch):
-        """License expiry re-check uses dataclasses.replace() to create new LicenseInfo."""
+        """License expiry re-check uses dataclasses.replace() to create new LicenseInfo.
+
+        Note: uses dataclasses.replace() to preserve customer_id/fingerprint/expires_at
+        while updating status/days_remaining/message during state transitions.
+        """
         from core.licensing.license_manager import maybe_revalidate
 
         monkeypatch.setattr(license_manager, "_INTEGRITY_MANIFEST", {"file.py": "abc123"})
@@ -1034,3 +1038,69 @@ class TestMaybeRevalidate:
         assert new_state.expires_at == original_info.expires_at
         # But status should have changed
         assert new_state.status != LicenseStatus.VALID
+
+
+# =============================================================================
+# get_license_info() tests (Phase 9 additions)
+# =============================================================================
+
+
+class TestGetLicenseInfo:
+    """Tests for get_license_info() -- accessor for full LicenseInfo object.
+
+    get_license_info() returns the full LicenseInfo dataclass (or None in dev
+    mode when no state has been set). This is the shared foundation for the
+    expiry header and health endpoint enrichment.
+    """
+
+    @pytest.fixture(autouse=True)
+    def reset_license_state(self):
+        """Reset module-level license state before and after each test."""
+        license_manager._license_state = None
+        yield
+        license_manager._license_state = None
+
+    def test_returns_none_when_no_state_set(self):
+        """get_license_info() returns None when _license_state is None (no state set)."""
+        from core.licensing.license_manager import get_license_info
+
+        assert get_license_info() is None
+
+    def test_returns_full_license_info_when_state_set(self):
+        """get_license_info() returns full LicenseInfo object when state is set."""
+        from core.licensing.license_manager import get_license_info
+
+        info = LicenseInfo(
+            customer_id="info-test",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=90),
+            status=LicenseStatus.VALID,
+            days_remaining=90,
+            message="License valid -- 90 days remaining",
+        )
+        set_license_state(info)
+
+        result = get_license_info()
+        assert result is not None
+        assert result.customer_id == "info-test"
+        assert result.fingerprint == "a1b2c3d4e5f6a7b8"
+        assert result.status == LicenseStatus.VALID
+        assert result.days_remaining == 90
+        assert result.message == "License valid -- 90 days remaining"
+
+    def test_returns_same_object_as_set(self):
+        """get_license_info() returns the exact same LicenseInfo object that was set."""
+        from core.licensing.license_manager import get_license_info
+
+        info = LicenseInfo(
+            customer_id="identity-test",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+            status=LicenseStatus.GRACE,
+            days_remaining=-3,
+            message="Grace period",
+        )
+        set_license_state(info)
+
+        result = get_license_info()
+        assert result is info  # Same object identity
