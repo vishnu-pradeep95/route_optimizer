@@ -147,10 +147,11 @@ Plans:
   1. After the API has been running and served 500+ requests, modifying a protected file (e.g., `main.py`) causes the next request to fail with a license/integrity error
   2. After the API has been running and served 500+ requests with an expired license, the next periodic check causes requests to fail with a license expiry error
   3. Re-validation runs fully offline (no network calls) and does not block the event loop (response latency stays under 100ms during re-validation)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 08-01: TBD
+- [ ] 08-01-PLAN.md — TDD maybe_revalidate() + counter + state guard in license_manager.py
+- [ ] 08-02-PLAN.md — Wire maybe_revalidate() into enforcement middleware
 
 ### Phase 9: License Management
 **Goal**: License renewal is a simple file drop without re-keying, and license expiry is visible to monitoring tools
@@ -221,7 +222,7 @@ Phases execute in numeric order: 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 5. Fingerprinting Overhaul | v2.1 | 2/2 | Complete | 2026-03-10 |
 | 6. Build Pipeline -- Dev-Mode Stripping and Cython | v2.1 | 3/3 | Complete | 2026-03-10 |
 | 7. Enforcement Module | v2.1 | 0/2 | Not started | - |
-| 8. Runtime Protection | v2.1 | 0/? | Not started | - |
+| 8. Runtime Protection | v2.1 | 0/2 | Not started | - |
 | 9. License Management | v2.1 | 0/? | Not started | - |
 | 10. End-to-End Validation | v2.1 | 0/? | Not started | - |
 
