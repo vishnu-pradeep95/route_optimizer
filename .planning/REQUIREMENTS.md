@@ -3,55 +3,68 @@
 **Defined:** 2026-03-10
 **Core Value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
 
-## v2.1 Requirements
+## v2.2 Requirements
 
-Requirements for v2.1 Licensing & Distribution Security. Each maps to roadmap phases.
+Requirements for v2.2 Address Preprocessing Pipeline. Each maps to roadmap phases.
 
-### Enforcement Hardening
+### Address Preprocessing
 
-- [ ] **ENF-01**: Dev-mode code stripped from distributed builds (no ENVIRONMENT=development bypass exists in tarball)
-- [ ] **ENF-02**: Licensing module compiled to native .so via Cython (replaces decompilable .pyc)
-- [ ] **ENF-03**: Enforcement logic lives in compiled module with single `enforce(app)` entry point (main.py has no inline enforcement)
-- [ ] **ENF-04**: HMAC derivation seed rotated (old .pyc seed is compromised)
+- [ ] **ADDR-01**: Driver app and navigation links always show the cleaned original address (address_raw), never Google's formatted_address
+- [ ] **ADDR-02**: Regex splits lowercase-to-uppercase transitions in concatenated CDCMS text (e.g., `ANANDAMANDIRAMK` -> `ANANDAMANDIRAM K`)
+- [ ] **ADDR-03**: Abbreviation expansion (NR, PO) runs after word splitting so patterns are detected at word boundaries
+- [ ] **ADDR-04**: Place name dictionary (~285 entries) built from OSM Overpass + India Post APIs and committed to repo
+- [ ] **ADDR-05**: Dictionary-aware word splitter splits concatenated text at known place name boundaries (e.g., `MUTTUNGALPOBALAVADI` -> `MUTTUNGAL P.O. BALAVADI`)
+- [ ] **ADDR-06**: Fuzzy matching (RapidFuzz) handles transliteration variants of Kerala place names with length-dependent thresholds
 
-### Fingerprinting
+### Geocode Validation
 
-- [x] **FPR-01**: Machine fingerprint uses /etc/machine-id + /proc/cpuinfo CPU model (replaces container_id + MAC)
-- [x] **FPR-02**: Docker Compose mounts /etc/machine-id read-only into API container
-- [x] **FPR-03**: get_machine_id.py updated to collect new fingerprint signals
+- [ ] **GVAL-01**: Geocoded coordinates validated against 30km radius from Vatakara depot via haversine distance check
+- [ ] **GVAL-02**: Out-of-zone geocode results trigger automatic retry with CDCMS area name only
+- [ ] **GVAL-03**: Failed area-name retry falls back to area centroid coordinates from place name dictionary
+- [ ] **GVAL-04**: Confidence score adjusted based on validation outcome (1.0 direct hit, 0.7 area retry, 0.3 centroid fallback)
 
-### Runtime Protection
+### API & Driver UI
 
-- [ ] **RTP-01**: SHA256 integrity manifest of protected files embedded in compiled .so
-- [ ] **RTP-02**: Integrity checked at startup and during periodic re-validation
-- [ ] **RTP-03**: License + integrity re-validated every 500 requests (fully offline, no internet required)
+- [ ] **APUI-01**: API route response includes geocode_confidence field for each delivery stop
+- [ ] **APUI-02**: API route response includes location_approximate flag (true when confidence < 0.5)
+- [ ] **APUI-03**: Driver PWA hero card shows "Approx. location" warning badge for approximate stops
+- [ ] **APUI-04**: Driver PWA compact cards show orange dot indicator for approximate stops
 
-### License Management
+### Testing & Metrics
 
-- [ ] **LIC-01**: License renewal extends expiry without full re-keying cycle (customer drops renewal.key file)
-- [ ] **LIC-02**: X-License-Expires-In response header on API responses for monitoring
-- [ ] **LIC-03**: License status included in /health endpoint body for diagnostics
+- [ ] **TEST-01**: Full pipeline tested with sample CDCMS CSV -- all addresses geocode within 30km zone or are flagged approximate
+- [ ] **TEST-02**: Original "HDFC ERGO" bug verified fixed (wrong-location address handled correctly by validation)
+- [ ] **TEST-03**: Accuracy metrics measured and documented: geocode success rate (>90%), fallback rate (<10%), dictionary coverage (>80% of area names)
+- [ ] **TEST-04**: Approach B (NER model) upgrade criteria documented with measurable thresholds
 
-### Build Pipeline
+## v2.1 Requirements (Parallel — Main Branch)
 
-- [ ] **BLD-01**: build-dist.sh pipeline: strip dev-mode → hash protected files → Cython compile → validate .so import → package tarball
-- [ ] **BLD-02**: Build-time .so import validation inside Docker before packaging (catches platform mismatch)
-- [ ] **BLD-03**: Cython -O2 optimization flags and embedsignature=False applied
+v2.1 Licensing & Distribution Security is being executed in parallel on the main branch.
+See main branch `.planning/REQUIREMENTS.md` for full v2.1 tracking.
 
-### Testing & Documentation
+### Fingerprinting (Complete)
 
-- [ ] **DOC-01**: E2E tests for integrity failure, periodic re-validation, license renewal, fingerprint mismatch scenarios
-- [ ] **DOC-02**: docs/LICENSING.md, SETUP.md, ERROR-MAP.md updated for all v2.1 changes
-- [ ] **DOC-03**: Customer migration procedure documented (fingerprint formula change + HMAC seed rotation)
+- [x] **FPR-01**: Machine fingerprint uses /etc/machine-id + CPU model
+- [x] **FPR-02**: Docker Compose mounts /etc/machine-id read-only
+- [x] **FPR-03**: get_machine_id.py updated for new fingerprint signals
+
+### Remaining (In Progress on Main)
+
+- ENF-01 through ENF-04: Enforcement hardening
+- RTP-01 through RTP-03: Runtime protection
+- LIC-01 through LIC-03: License management
+- BLD-01 through BLD-03: Build pipeline
+- DOC-01 through DOC-03: Testing & documentation
 
 ## Future Requirements
 
 Deferred to future release. Tracked but not in current roadmap.
 
-### Advanced Protection
+### Address Intelligence
 
-- **ADV-01**: Fingerprint similarity scoring (fuzzy match on partial signal changes)
-- **ADV-02**: Renewal notification logging (WARNING at 30 days, ERROR in grace period)
+- **AINT-01**: NER model (Approach B) for addresses not matched by dictionary (conditional on >10% validation failures)
+- **AINT-02**: Circuit breaker for bulk geocoding API failures with batch-level warning
+- **AINT-03**: Batch-level "all approximate" banner in Driver PWA when API key is invalid
 
 ## Out of Scope
 
@@ -59,12 +72,12 @@ Explicitly excluded. Documented to prevent scope creep.
 
 | Feature | Reason |
 |---------|--------|
-| Call-home license verification | Offline deployment requirement is a hard constraint |
-| Hardware dongle support | Overkill for single-customer deployment |
-| Centralized license server | Makes sense at 50+ customers, not 1 |
-| Code obfuscation (PyArmor, pyobfuscate) | Obfuscation theater -- Cython .so is sufficient deterrent |
-| Multi-browser testing | All users on Chrome |
-| Visual regression tests | Requires baseline image management, not needed for security milestone |
+| NER model implementation | Conditional on accuracy metrics -- documented as upgrade path only |
+| Multiple geocoding providers | Mixing providers creates coordinate inconsistency |
+| Fuzzy address matching for cache keys | False positives assign wrong cached coordinates |
+| Real-time dictionary updates | Dictionary is static, refreshed manually via build script |
+| Reverse geocoding for validation | $45K/year at scale, haversine check is sufficient |
+| Malayalam script processing | CDCMS data is romanized; dictionary stores Malayalam as metadata only |
 
 ## Traceability
 
@@ -72,31 +85,30 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENF-01 | Phase 6 | Pending |
-| ENF-02 | Phase 6 | Pending |
-| ENF-03 | Phase 7 | Pending |
-| ENF-04 | Phase 6 | Pending |
-| FPR-01 | Phase 5 | Complete |
-| FPR-02 | Phase 5 | Complete |
-| FPR-03 | Phase 5 | Complete |
-| RTP-01 | Phase 7 | Pending |
-| RTP-02 | Phase 8 | Pending |
-| RTP-03 | Phase 8 | Pending |
-| LIC-01 | Phase 9 | Pending |
-| LIC-02 | Phase 9 | Pending |
-| LIC-03 | Phase 9 | Pending |
-| BLD-01 | Phase 6 | Pending |
-| BLD-02 | Phase 6 | Pending |
-| BLD-03 | Phase 6 | Pending |
-| DOC-01 | Phase 10 | Pending |
-| DOC-02 | Phase 10 | Pending |
-| DOC-03 | Phase 10 | Pending |
+| ADDR-01 | — | Pending |
+| ADDR-02 | — | Pending |
+| ADDR-03 | — | Pending |
+| ADDR-04 | — | Pending |
+| ADDR-05 | — | Pending |
+| ADDR-06 | — | Pending |
+| GVAL-01 | — | Pending |
+| GVAL-02 | — | Pending |
+| GVAL-03 | — | Pending |
+| GVAL-04 | — | Pending |
+| APUI-01 | — | Pending |
+| APUI-02 | — | Pending |
+| APUI-03 | — | Pending |
+| APUI-04 | — | Pending |
+| TEST-01 | — | Pending |
+| TEST-02 | — | Pending |
+| TEST-03 | — | Pending |
+| TEST-04 | — | Pending |
 
 **Coverage:**
-- v2.1 requirements: 19 total
-- Mapped to phases: 19/19
-- Unmapped: 0
+- v2.2 requirements: 18 total
+- Mapped to phases: 0
+- Unmapped: 18 ⚠️
 
 ---
 *Requirements defined: 2026-03-10*
-*Last updated: 2026-03-10 after roadmap creation*
+*Last updated: 2026-03-10 after initial definition*
