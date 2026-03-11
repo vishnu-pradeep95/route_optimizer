@@ -1,13 +1,13 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.2
-milestone_name: Address Preprocessing Pipeline
-status: ready_to_plan
-stopped_at: null
-last_updated: "2026-03-10"
-last_activity: 2026-03-10 -- Roadmap created for v2.2 (5 phases, 18 requirements)
+milestone: v2.1
+milestone_name: Licensing & Distribution Security
+status: planning
+stopped_at: Phase 11 context gathered
+last_updated: "2026-03-11T01:41:56.847Z"
+last_activity: 2026-03-10 -- Roadmap created for v2.2
 progress:
-  total_phases: 5
+  total_phases: 11
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -72,6 +72,6 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 
 ## Session Continuity
 
-Last session: 2026-03-10
-Stopped at: Roadmap created for v2.2, ready to plan Phase 11
-Resume file: None
+Last session: 2026-03-11T01:41:56.845Z
+Stopped at: Phase 11 context gathered
+Resume file: .planning/phases/11-foundation-fixes/11-CONTEXT.md
