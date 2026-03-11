@@ -475,6 +475,11 @@ def get_license_status() -> LicenseStatus | None:
     return _license_state.status
 
 
+def get_license_info() -> LicenseInfo | None:
+    """Return full license info. None if no state set (dev mode)."""
+    return _license_state
+
+
 def set_license_state(info: LicenseInfo) -> None:
     """Store license state internally. Called at startup by enforce() and
     during periodic re-validation by maybe_revalidate().
