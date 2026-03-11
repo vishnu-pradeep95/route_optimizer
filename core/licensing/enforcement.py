@@ -22,6 +22,7 @@ from core.licensing.license_manager import (
     GRACE_PERIOD_DAYS,
     LicenseInfo,
     LicenseStatus,
+    get_license_info,
     get_license_status,
     maybe_revalidate,
     set_license_state,
@@ -33,6 +34,59 @@ logger = logging.getLogger(__name__)
 
 _is_dev_mode = os.environ.get("ENVIRONMENT") == "development"
 
+# File paths for renewal key lookup and post-renewal file handling
+_RENEWAL_KEY_PATHS = ["renewal.key", "/app/renewal.key"]
+_LICENSE_KEY_PATHS = ["license.key", "/app/license.key"]
+
+
+def _try_load_renewal_key() -> tuple[LicenseInfo | None, str | None]:
+    """Try to load and validate renewal.key.
+
+    Checks renewal.key in the current directory and /app/renewal.key (Docker).
+    If found and valid (VALID or GRACE status), returns (LicenseInfo, key_content).
+    If not found or invalid, returns (None, None).
+    """
+    for path in _RENEWAL_KEY_PATHS:
+        try:
+            with open(path, "r") as f:
+                key = f.read().strip()
+            if key:
+                info = validate_license(key)
+                if info.status in (LicenseStatus.VALID, LicenseStatus.GRACE):
+                    return info, key
+                else:
+                    logger.warning("renewal.key present but invalid: %s", info.message)
+        except FileNotFoundError:
+            continue
+    return None, None
+
+
+def _handle_post_renewal(key_content: str) -> None:
+    """Post-renewal file handling: replace license.key, delete renewal.key.
+
+    Both operations are best-effort: if the Docker volume is read-only,
+    the warning is logged but the API still runs with the renewed license
+    in memory.
+    """
+    # Write renewed key content to license.key
+    for path in _LICENSE_KEY_PATHS:
+        try:
+            with open(path, "w") as f:
+                f.write(key_content)
+            logger.info("Replaced %s with renewal key content", path)
+            break
+        except OSError as e:
+            logger.warning("Could not write renewal to %s: %s", path, e)
+
+    # Delete renewal.key
+    for path in _RENEWAL_KEY_PATHS:
+        try:
+            os.remove(path)
+            logger.info("Deleted %s after successful renewal", path)
+            break
+        except OSError as e:
+            logger.warning("Could not delete %s: %s", path, e)
+
 
 def enforce(app: FastAPI) -> None:
     """Single entry point for all license enforcement.
@@ -42,8 +96,23 @@ def enforce(app: FastAPI) -> None:
     2. Verify file integrity against embedded manifest
     3. Register middleware for ongoing enforcement
     """
-    # Step 1: Validate license
-    license_info = validate_license()
+    # Step 0: Check for renewal.key (before normal validation)
+    # CRITICAL: renewal must happen BEFORE set_license_state() because the
+    # one-way state guard blocks INVALID->VALID upgrades. The renewal key
+    # becomes the initial license_info, and set_license_state() is called
+    # once with the renewed state.
+    renewal_info, renewal_key = _try_load_renewal_key()
+    if renewal_info:
+        logger.info(
+            "License renewed via renewal.key -- customer=%s, new expiry=%s",
+            renewal_info.customer_id,
+            renewal_info.expires_at.strftime("%Y-%m-%d"),
+        )
+        license_info = renewal_info
+        _handle_post_renewal(renewal_key)
+    else:
+        # Step 1: Normal validation
+        license_info = validate_license()
 
     if license_info.status == LicenseStatus.VALID:
         logger.info(
