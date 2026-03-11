@@ -789,3 +789,248 @@ class TestStateGuard:
         assert any("rejected" in msg.lower() for msg in caplog.messages), (
             f"Expected 'rejected' in log messages, got: {caplog.messages}"
         )
+
+
+# =============================================================================
+# maybe_revalidate() tests (Phase 8 additions)
+# =============================================================================
+
+
+class TestMaybeRevalidate:
+    """Tests for maybe_revalidate() -- periodic re-validation of integrity and license expiry.
+
+    maybe_revalidate() increments a request counter and triggers full
+    re-validation every 500 requests. Re-validation includes integrity
+    manifest verification and license expiry re-check.
+    """
+
+    @pytest.fixture(autouse=True)
+    def reset_state(self):
+        """Reset module-level license state and request counter before/after each test."""
+        license_manager._license_state = None
+        license_manager._request_counter = 0
+        yield
+        license_manager._license_state = None
+        license_manager._request_counter = 0
+
+    def test_increments_counter_on_every_call(self):
+        """maybe_revalidate() increments _request_counter on every call."""
+        from core.licensing.license_manager import maybe_revalidate
+
+        assert license_manager._request_counter == 0
+        maybe_revalidate()
+        assert license_manager._request_counter == 1
+        maybe_revalidate()
+        assert license_manager._request_counter == 2
+
+    def test_no_revalidation_on_calls_1_to_499(self, monkeypatch):
+        """maybe_revalidate() does NOT trigger re-validation on calls 1-499."""
+        from core.licensing.license_manager import maybe_revalidate
+
+        # Set a non-empty manifest so re-validation would trigger if counter hit
+        monkeypatch.setattr(license_manager, "_INTEGRITY_MANIFEST", {"file.py": "abc123"})
+        mock_verify = MagicMock(return_value=(True, []))
+        monkeypatch.setattr(license_manager, "verify_integrity", mock_verify)
+
+        for _ in range(499):
+            maybe_revalidate()
+
+        mock_verify.assert_not_called()
+        assert license_manager._request_counter == 499
+
+    def test_triggers_revalidation_on_call_500(self, monkeypatch):
+        """maybe_revalidate() DOES trigger re-validation on call 500 (counter % 500 == 0)."""
+        from core.licensing.license_manager import maybe_revalidate
+
+        monkeypatch.setattr(license_manager, "_INTEGRITY_MANIFEST", {"file.py": "abc123"})
+        mock_verify = MagicMock(return_value=(True, []))
+        monkeypatch.setattr(license_manager, "verify_integrity", mock_verify)
+
+        # Set valid license state so expiry check doesn't error
+        set_license_state(_make_info(LicenseStatus.VALID))
+
+        for _ in range(500):
+            maybe_revalidate()
+
+        mock_verify.assert_called_once()
+
+    def test_counter_resets_after_revalidation(self, monkeypatch):
+        """_request_counter resets to 0 after re-validation fires."""
+        from core.licensing.license_manager import maybe_revalidate
+
+        monkeypatch.setattr(license_manager, "_INTEGRITY_MANIFEST", {"file.py": "abc123"})
+        mock_verify = MagicMock(return_value=(True, []))
+        monkeypatch.setattr(license_manager, "verify_integrity", mock_verify)
+
+        set_license_state(_make_info(LicenseStatus.VALID))
+
+        for _ in range(500):
+            maybe_revalidate()
+
+        assert license_manager._request_counter == 0
+
+    def test_skips_revalidation_in_dev_mode(self, monkeypatch):
+        """maybe_revalidate() skips re-validation when _INTEGRITY_MANIFEST is empty (dev mode)."""
+        from core.licensing.license_manager import maybe_revalidate
+
+        monkeypatch.setattr(license_manager, "_INTEGRITY_MANIFEST", {})
+        mock_verify = MagicMock(return_value=(True, []))
+        monkeypatch.setattr(license_manager, "verify_integrity", mock_verify)
+
+        for _ in range(500):
+            maybe_revalidate()
+
+        # verify_integrity should NOT have been called in dev mode
+        mock_verify.assert_not_called()
+
+    def test_calls_verify_integrity(self, monkeypatch):
+        """maybe_revalidate() calls verify_integrity() during re-validation."""
+        from core.licensing.license_manager import maybe_revalidate
+
+        monkeypatch.setattr(license_manager, "_INTEGRITY_MANIFEST", {"file.py": "abc123"})
+        mock_verify = MagicMock(return_value=(True, []))
+        monkeypatch.setattr(license_manager, "verify_integrity", mock_verify)
+
+        set_license_state(_make_info(LicenseStatus.VALID))
+
+        for _ in range(500):
+            maybe_revalidate()
+
+        mock_verify.assert_called_once()
+
+    def test_integrity_failure_raises_system_exit(self, monkeypatch):
+        """Integrity failure raises SystemExit with descriptive message."""
+        from core.licensing.license_manager import maybe_revalidate
+
+        monkeypatch.setattr(license_manager, "_INTEGRITY_MANIFEST", {"file.py": "abc123"})
+        mock_verify = MagicMock(return_value=(False, ["file.py has been modified"]))
+        monkeypatch.setattr(license_manager, "verify_integrity", mock_verify)
+
+        license_manager._request_counter = 499
+
+        with pytest.raises(SystemExit, match="integrity check failed"):
+            maybe_revalidate()
+
+    def test_integrity_failure_logs_errors(self, monkeypatch, caplog):
+        """Integrity failure logs error for each failure before raising SystemExit."""
+        import logging
+        from core.licensing.license_manager import maybe_revalidate
+
+        monkeypatch.setattr(license_manager, "_INTEGRITY_MANIFEST", {"file.py": "abc123"})
+        failures = ["file.py has been modified", "config.py: file not found"]
+        mock_verify = MagicMock(return_value=(False, failures))
+        monkeypatch.setattr(license_manager, "verify_integrity", mock_verify)
+
+        license_manager._request_counter = 499
+
+        with caplog.at_level(logging.ERROR, logger="core.licensing.license_manager"):
+            with pytest.raises(SystemExit):
+                maybe_revalidate()
+
+        error_messages = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+        assert len(error_messages) >= 2
+        assert any("file.py has been modified" in msg for msg in error_messages)
+        assert any("config.py: file not found" in msg for msg in error_messages)
+
+    def test_license_expiry_valid_to_grace_transition(self, monkeypatch):
+        """License expiry re-check detects VALID->GRACE transition (when expires_at passed)."""
+        from core.licensing.license_manager import maybe_revalidate
+
+        monkeypatch.setattr(license_manager, "_INTEGRITY_MANIFEST", {"file.py": "abc123"})
+        mock_verify = MagicMock(return_value=(True, []))
+        monkeypatch.setattr(license_manager, "verify_integrity", mock_verify)
+
+        # Set license state as VALID but with expires_at in the past (3 days ago)
+        expired_info = LicenseInfo(
+            customer_id="expiry-test",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) - timedelta(days=3),
+            status=LicenseStatus.VALID,
+            days_remaining=30,
+            message="Was valid, now expired",
+        )
+        license_manager._license_state = expired_info
+
+        for _ in range(500):
+            maybe_revalidate()
+
+        assert get_license_status() == LicenseStatus.GRACE
+
+    def test_license_expiry_grace_to_invalid_transition(self, monkeypatch):
+        """License expiry re-check detects GRACE->INVALID transition (grace period exhausted)."""
+        from core.licensing.license_manager import maybe_revalidate
+
+        monkeypatch.setattr(license_manager, "_INTEGRITY_MANIFEST", {"file.py": "abc123"})
+        mock_verify = MagicMock(return_value=(True, []))
+        monkeypatch.setattr(license_manager, "verify_integrity", mock_verify)
+
+        # Set license state as GRACE but with expires_at far in the past (30 days)
+        long_expired_info = LicenseInfo(
+            customer_id="expiry-test",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) - timedelta(days=30),
+            status=LicenseStatus.GRACE,
+            days_remaining=-30,
+            message="Was grace, now expired beyond grace",
+        )
+        license_manager._license_state = long_expired_info
+
+        for _ in range(500):
+            maybe_revalidate()
+
+        assert get_license_status() == LicenseStatus.INVALID
+
+    def test_license_expiry_no_transition_when_still_valid(self, monkeypatch):
+        """License expiry re-check does NOT transition when license still valid."""
+        from core.licensing.license_manager import maybe_revalidate
+
+        monkeypatch.setattr(license_manager, "_INTEGRITY_MANIFEST", {"file.py": "abc123"})
+        mock_verify = MagicMock(return_value=(True, []))
+        monkeypatch.setattr(license_manager, "verify_integrity", mock_verify)
+
+        # Set license state as VALID with expires_at in the future
+        valid_info = LicenseInfo(
+            customer_id="valid-test",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=100),
+            status=LicenseStatus.VALID,
+            days_remaining=100,
+            message="Still valid",
+        )
+        license_manager._license_state = valid_info
+
+        for _ in range(500):
+            maybe_revalidate()
+
+        assert get_license_status() == LicenseStatus.VALID
+        assert license_manager._license_state.customer_id == "valid-test"
+
+    def test_license_expiry_uses_dataclasses_replace(self, monkeypatch):
+        """License expiry re-check uses dataclasses.replace() to create new LicenseInfo."""
+        from core.licensing.license_manager import maybe_revalidate
+
+        monkeypatch.setattr(license_manager, "_INTEGRITY_MANIFEST", {"file.py": "abc123"})
+        mock_verify = MagicMock(return_value=(True, []))
+        monkeypatch.setattr(license_manager, "verify_integrity", mock_verify)
+
+        # Set license state as VALID but with expires_at in the past
+        original_info = LicenseInfo(
+            customer_id="replace-test",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) - timedelta(days=3),
+            status=LicenseStatus.VALID,
+            days_remaining=30,
+            message="Original message",
+        )
+        license_manager._license_state = original_info
+
+        for _ in range(500):
+            maybe_revalidate()
+
+        # Verify the new state preserves customer_id and fingerprint from original
+        new_state = license_manager._license_state
+        assert new_state.customer_id == "replace-test"
+        assert new_state.fingerprint == "a1b2c3d4e5f6a7b8"
+        assert new_state.expires_at == original_info.expires_at
+        # But status should have changed
+        assert new_state.status != LicenseStatus.VALID
