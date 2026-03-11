@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** v2.1 Licensing & Distribution Security -- Phase 7 (Enforcement Module)
+**Current focus:** v2.1 Licensing & Distribution Security -- Phase 8 (Runtime Protection)
 
 ## Current Position
 
-Phase: 7 -- Enforcement Module
-Plan: 2 of 2 complete
-Status: Phase complete
-Last activity: 2026-03-10 -- Phase 7 complete (enforcement module)
+Phase: 8 -- Runtime Protection
+Plan: 1 of 2 complete
+Status: In progress
+Last activity: 2026-03-11 -- Plan 08-01 complete (re-validation + state guard)
 
-Progress: [█████░░░░░] 58% (7/12 plans across 6 phases)
+Progress: [██████░░░░] 62% (8/12 plans across 6 phases)
 
 ## Performance Metrics
 
@@ -72,6 +72,11 @@ Progress: [█████░░░░░] 58% (7/12 plans across 6 phases)
 - Phase 7-02: Manifest injection uses sed pipe delimiters -- SHA256 hex only contains [0-9a-f], no special char risk
 - Phase 7-02: enforcement.py preserved as .py in tarball -- Cython cannot compile async def
 
+- Phase 8-01: _STATUS_SEVERITY ordering (VALID=0, GRACE=1, INVALID=2) enables one-way state guard
+- Phase 8-01: Counter resets to 0 after re-validation (not 1) -- exactly 500 requests between checks
+- Phase 8-01: Dev mode skip uses same `not _INTEGRITY_MANIFEST` pattern as verify_integrity() and enforce()
+- Phase 8-01: dataclasses.replace() preserves customer_id/fingerprint/expires_at during state transitions
+
 See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase details per milestone.
 
 ### Pending Todos
@@ -93,7 +98,7 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 | 2 | ~~Enforcement in plain-text main.py~~ | ~~CRITICAL~~ | ✓ Phase 7 (07-02) |
 | 3 | ~~Fingerprint spoofable via Docker~~ | ~~MEDIUM~~ | ✓ Phase 5 |
 | 4 | ~~.pyc decompilation trivial~~ | ~~MEDIUM~~ | ✓ Phase 6 (06-03) |
-| 5 | License checked only at startup | LOW-MEDIUM | Phase 8 |
+| 5 | ~~License checked only at startup~~ | ~~LOW-MEDIUM~~ | ✓ Phase 8 (08-01) |
 | 6 | ~~No file integrity verification~~ | ~~LOW-MEDIUM~~ | ✓ Phase 7 (07-01, 07-02) |
 
 ## Performance Metrics (v2.1)
@@ -107,9 +112,10 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 | 06-03 | Cython build pipeline | 6min | 2 | 3 |
 | 07-01 | Enforcement foundation | 4min | 2 | 5 |
 | 07-02 | Enforcement wiring & manifest | 3min | 2 | 2 |
+| 08-01 | Re-validation + state guard | 4min | 2 | 3 |
 
 ## Session Continuity
 
-Last session: 2026-03-11T01:31:09.554Z
-Stopped at: Phase 8 context gathered
-Resume file: .planning/milestones/v2.1-phases/08-api-dead-code-hygiene/08-CONTEXT.md
+Last session: 2026-03-11T01:51:05Z
+Stopped at: Completed 08-01-PLAN.md
+Resume file: .planning/milestones/v2.1-phases/08-api-dead-code-hygiene/08-02-PLAN.md

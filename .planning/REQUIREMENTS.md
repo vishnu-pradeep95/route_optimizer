@@ -23,8 +23,8 @@ Requirements for v2.1 Licensing & Distribution Security. Each maps to roadmap ph
 ### Runtime Protection
 
 - [x] **RTP-01**: SHA256 integrity manifest of protected files embedded in compiled .so
-- [ ] **RTP-02**: Integrity checked at startup and during periodic re-validation
-- [ ] **RTP-03**: License + integrity re-validated every 500 requests (fully offline, no internet required)
+- [x] **RTP-02**: Integrity checked at startup and during periodic re-validation
+- [x] **RTP-03**: License + integrity re-validated every 500 requests (fully offline, no internet required)
 
 ### License Management
 
@@ -80,8 +80,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FPR-02 | Phase 5 | Complete |
 | FPR-03 | Phase 5 | Complete |
 | RTP-01 | Phase 7 | Complete |
-| RTP-02 | Phase 8 | Pending |
-| RTP-03 | Phase 8 | Pending |
+| RTP-02 | Phase 8 | Complete |
+| RTP-03 | Phase 8 | Complete |
 | LIC-01 | Phase 9 | Pending |
 | LIC-02 | Phase 9 | Pending |
 | LIC-03 | Phase 9 | Pending |
