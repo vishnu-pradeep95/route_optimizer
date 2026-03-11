@@ -183,6 +183,34 @@ nano .env   # or: code .env
 | `POSTGRES_DB` | Defaults to `routing_opt` | No |
 | Other values | Defaults work for local development | — |
 
+### License Configuration (v2.1)
+
+The licensing system requires configuration for production deployments. In
+development mode (`ENVIRONMENT=development`), license enforcement is skipped.
+
+| Variable / File | Purpose | Required? |
+|---|---|---|
+| `LICENSE_KEY` | License key string (env var in `.env.production`) | **Production only** |
+| `license.key` | License key file (alternative to env var, project root) | **Production only** (if `LICENSE_KEY` not set) |
+| `renewal.key` | Renewal key file (project root, auto-detected on startup) | Only during renewal |
+| `/etc/machine-id` | Host machine identity (bind-mounted read-only into Docker) | **Production only** -- already in `docker-compose.yml` |
+| `REVALIDATION_INTERVAL` | Override periodic re-validation interval (default: 500 requests) | Testing only |
+
+**Docker bind mount for machine identity:**
+
+The `docker-compose.yml` already includes the required bind mount:
+
+```yaml
+volumes:
+  - /etc/machine-id:/etc/machine-id:ro
+```
+
+This ensures the Docker container generates the same machine fingerprint as the
+host, so a single license key works in both environments.
+
+See [LICENSING.md](LICENSING.md) for full details on key generation, activation,
+and renewal.
+
 ---
 
 ## Step 7: VS Code Setup (Recommended)
@@ -260,6 +288,59 @@ You should see version numbers for Python, Docker, and Git with no errors.
 | **Dashboard: type check** | `cd apps/kerala_delivery/dashboard && npx tsc --noEmit` |
 | **Batch: import orders** | `python scripts/import_orders.py data/sample_orders.csv --dry-run` |
 | **Batch: geocode addresses** | `python scripts/geocode_batch.py --from-csv data/sample_orders.csv --dry-run` |
+
+---
+
+## License Monitoring
+
+### Checking license status
+
+The `/health` endpoint includes a `license` section (v2.1+):
+
+```bash
+curl -s http://localhost:8000/health | python3 -m json.tool
+```
+
+Example output:
+
+```json
+{
+  "status": "healthy",
+  "license": {
+    "status": "valid",
+    "expires_at": "2027-03-11",
+    "days_remaining": 365,
+    "fingerprint_match": true
+  }
+}
+```
+
+### Response headers to watch
+
+| Header | Meaning | Action |
+|--------|---------|--------|
+| `X-License-Expires-In: 45d` | License expires in 45 days | No action needed |
+| `X-License-Expires-In: 7d` | License expires in 7 days | Start renewal process |
+| `X-License-Warning: License in grace period` | License expired, in 7-day grace | Renew immediately |
+| `X-License-Status: invalid` | License expired or missing | API returning 503 -- renew now |
+
+### Quick diagnostic commands
+
+```bash
+# Full license status
+curl -s http://localhost:8000/health | python3 -m json.tool
+
+# Check expiry header
+curl -sI http://localhost:8000/api/routes | grep -i "X-License"
+
+# Verify license is valid (should return 200, not 503)
+curl -o /dev/null -s -w "%{http_code}" http://localhost:8000/api/routes
+
+# Check machine fingerprint (run inside Docker container)
+docker compose exec api python scripts/get_machine_id.py
+```
+
+See [LICENSING.md](LICENSING.md) for full monitoring and troubleshooting details.
 
 ---
 

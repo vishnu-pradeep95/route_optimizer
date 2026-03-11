@@ -84,10 +84,45 @@ old keys. This is deliberate defense-in-depth.
 5. **Verify license is active:**
 
    ```bash
-   curl http://localhost:8000/health
+   # Check license status in /health body
+   curl -s http://localhost:8000/health | python3 -m json.tool
    ```
 
-   Response should show `"license": "valid"`.
+   Expected output:
+
+   ```json
+   {
+     "status": "healthy",
+     "license": {
+       "status": "valid",
+       "expires_at": "2027-03-11",
+       "days_remaining": 365,
+       "fingerprint_match": true
+     }
+   }
+   ```
+
+   Verify:
+   - `license.status` is `"valid"`
+   - `license.fingerprint_match` is `true`
+
+   Also check response headers:
+
+   ```bash
+   curl -sI http://localhost:8000/health | grep -i "X-License"
+   ```
+
+   Expected:
+   ```
+   X-License-Expires-In: 365d
+   ```
+
+6. **Verify API endpoints are accessible:**
+
+   ```bash
+   # Should return 200 (not 503)
+   curl -o /dev/null -s -w "%{http_code}" http://localhost:8000/api/routes
+   ```
 
 ## Rollback
 
@@ -103,18 +138,43 @@ key works only with the old version; the new key works only with v2.1+.
 
 ## Checklist
 
-- [ ] Customer fingerprint collected (new formula)
-- [ ] New license key generated and verified
+- [ ] Customer fingerprint collected (new formula: machine-id + CPU model)
+- [ ] New license key generated and verified (`--verify` flag)
 - [ ] New key sent to customer
-- [ ] Customer confirms key saved to .env or license.key
-- [ ] Upgrade performed
-- [ ] `curl /health` shows license valid
+- [ ] Customer confirms key saved to `.env` or `license.key`
+- [ ] Upgrade performed (tarball extracted, system restarted)
+- [ ] `curl /health` shows `license.status = "valid"` and `fingerprint_match = true`
+- [ ] Response headers include `X-License-Expires-In: {N}d`
+- [ ] `/api/routes` returns 200 (not 503)
 - [ ] Old tarball retained as rollback option
 
 ## Timeline
 
-| Milestone | Action |
-|-----------|--------|
-| Phase 5 (complete) | Fingerprint formula changed |
-| Phase 6 (current) | HMAC credentials rotated, migration docs written |
-| Phase 10 (future) | Migration executed for all customers |
+| Phase | Status | Action |
+|-------|--------|--------|
+| Phase 5 | Complete | Fingerprint formula changed (machine-id + CPU model) |
+| Phase 6 | Complete | HMAC credentials rotated, Cython .so compilation, migration docs written |
+| Phase 7 | Complete | File integrity checking, enforcement module |
+| Phase 8 | Complete | Periodic re-validation (every 500 requests) |
+| Phase 9 | Complete | License renewal via file drop, X-License-Expires-In header, /health license section |
+| Phase 10 | Complete | End-to-end validation, documentation rewrite |
+
+---
+
+## What's New in v2.1
+
+### Breaking changes (require new license key)
+
+1. **Fingerprint formula changed** -- Now uses `/etc/machine-id` + CPU model (stable across Docker recreation and WSL2 reboots). Old keys generated with the v1.x formula will not validate.
+2. **HMAC signing credentials rotated** -- New seed stored as `bytes.fromhex()` with PBKDF2 200k iterations. Old keys cannot be verified against the new credentials.
+
+### New features
+
+3. **License renewal via file drop** -- Generate a `renewal.key` with `--renew` flag, customer drops the file and restarts. No new fingerprint exchange needed.
+4. **Monitoring headers** -- `X-License-Expires-In` header on all responses shows days until expiry. `X-License-Warning` header during grace period.
+5. **License status in /health** -- The `/health` endpoint body includes a `license` section with status, expiry date, days remaining, and fingerprint match.
+6. **File integrity checking** -- SHA256 manifest of protected files embedded in compiled `.so`, verified at startup and every 500 requests.
+7. **Periodic re-validation** -- License expiry and file integrity re-checked every 500 requests (offline, no network calls).
+8. **Native .so compilation** -- Licensing module compiled via Cython to native `.so` instead of interpreted formats.
+
+For full details, see [LICENSING.md](LICENSING.md).

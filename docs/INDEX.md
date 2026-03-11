@@ -18,7 +18,8 @@ Each document is tagged with its intended audience:
 | [SETUP.md](SETUP.md) | Developer environment setup and configuration | Developer |
 | [GUIDE.md](GUIDE.md) | Platform architecture, code organization, and learning path | Developer |
 | [DISTRIBUTION.md](DISTRIBUTION.md) | Build and package customer distribution archives | Developer |
-| [LICENSING.md](LICENSING.md) | License key generation, activation, and lifecycle | Developer |
+| [LICENSING.md](LICENSING.md) | License key generation, activation, renewal, security architecture, and lifecycle | Developer |
+| [MIGRATION.md](MIGRATION.md) | Customer migration guide for v2.1 breaking changes | Developer |
 | [ENV-COMPARISON.md](ENV-COMPARISON.md) | Development vs production environment differences | Developer |
 | [ATTRIBUTION.md](ATTRIBUTION.md) | Third-party software licenses and attribution | Developer |
 | [ERROR-MAP.md](ERROR-MAP.md) | Error message traceability from UI to source code | Developer |
