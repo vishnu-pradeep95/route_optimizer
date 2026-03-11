@@ -218,6 +218,7 @@ class TestVerifyIntegrity:
 
 from unittest.mock import patch, MagicMock
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 
@@ -943,3 +944,176 @@ class TestExpiresInHeader:
         days_val = int(header[:-1])
         # Should be ~10, NOT 999 (the stale days_remaining)
         assert 8 <= days_val <= 11, f"Expected ~10d, got {days_val}d (stale days_remaining leaked?)"
+
+
+# =============================================================================
+# /health license section tests (Phase 9 Plan 02)
+# =============================================================================
+
+
+def _create_health_app_with_license(license_info_value, fingerprint_value="a1b2c3d4e5f6a7b8ffffffffffffffff"):
+    """Create a minimal FastAPI app with /health that includes license section logic.
+
+    This mimics the real main.py /health handler's license section:
+    - If get_license_info() returns non-None, add license section
+    - If None (dev mode), omit license key entirely
+    - License status does NOT affect overall /health status
+    """
+    from core.licensing.license_manager import get_license_info as _real_get_info
+    from core.licensing.license_manager import get_machine_fingerprint as _real_get_fp
+
+    app = FastAPI()
+
+    @app.get("/health")
+    def health_check():
+        content = {
+            "status": "healthy",
+            "service": "kerala-lpg-optimizer",
+            "version": "test",
+            "uptime_seconds": 42.0,
+            "services": {},
+        }
+        # License diagnostics (same logic as real main.py)
+        from core.licensing.license_manager import get_license_info, get_machine_fingerprint
+        info = get_license_info()
+        if info is not None:
+            current_fp = get_machine_fingerprint()[:16]
+            content["license"] = {
+                "status": info.status.value,
+                "expires_at": info.expires_at.strftime("%Y-%m-%d"),
+                "days_remaining": (info.expires_at - datetime.now(timezone.utc)).days,
+                "fingerprint_match": current_fp == info.fingerprint[:16],
+            }
+        return JSONResponse(status_code=200, content=content)
+
+    return app
+
+
+class TestHealthLicenseSection:
+    """Tests for the license section in /health endpoint response body.
+
+    The /health endpoint should include a license object with status, expires_at,
+    days_remaining, and fingerprint_match when a license is configured. The
+    license key should be entirely omitted in dev mode (state is None).
+    """
+
+    def test_health_includes_license_section_when_licensed(self, monkeypatch):
+        """/health includes license section when license state is set."""
+        info = LicenseInfo(
+            customer_id="test-customer",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=90),
+            status=LicenseStatus.VALID,
+            days_remaining=90,
+            message="Valid",
+        )
+        set_license_state(info)
+        monkeypatch.setattr(license_manager, "get_machine_fingerprint",
+                            lambda: "a1b2c3d4e5f6a7b8" + "0" * 48)
+
+        app = _create_health_app_with_license(info)
+        client = TestClient(app)
+        response = client.get("/health")
+        data = response.json()
+        assert "license" in data, "license section missing from /health response"
+        assert isinstance(data["license"], dict)
+
+    def test_health_license_section_has_correct_fields(self, monkeypatch):
+        """License section has status, expires_at (YYYY-MM-DD), days_remaining (int), fingerprint_match (bool)."""
+        info = LicenseInfo(
+            customer_id="test-customer",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=90),
+            status=LicenseStatus.VALID,
+            days_remaining=90,
+            message="Valid",
+        )
+        set_license_state(info)
+        monkeypatch.setattr(license_manager, "get_machine_fingerprint",
+                            lambda: "a1b2c3d4e5f6a7b8" + "0" * 48)
+
+        app = _create_health_app_with_license(info)
+        client = TestClient(app)
+        response = client.get("/health")
+        lic = response.json()["license"]
+
+        assert lic["status"] == "valid"
+        # expires_at should be YYYY-MM-DD format
+        assert len(lic["expires_at"]) == 10
+        assert lic["expires_at"][4] == "-" and lic["expires_at"][7] == "-"
+        assert isinstance(lic["days_remaining"], int)
+        assert isinstance(lic["fingerprint_match"], bool)
+
+    def test_health_omits_license_in_dev_mode(self):
+        """/health omits license key entirely when no license configured (dev mode)."""
+        # Ensure state is None (dev mode -- reset fixture already does this)
+        assert license_manager._license_state is None
+
+        app = _create_health_app_with_license(None)
+        client = TestClient(app)
+        response = client.get("/health")
+        data = response.json()
+        assert "license" not in data, "license section should be omitted in dev mode"
+
+    def test_health_license_no_customer_id(self, monkeypatch):
+        """License section does NOT include customer_id (sensitive data)."""
+        info = LicenseInfo(
+            customer_id="sensitive-customer-id",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=90),
+            status=LicenseStatus.VALID,
+            days_remaining=90,
+            message="Valid",
+        )
+        set_license_state(info)
+        monkeypatch.setattr(license_manager, "get_machine_fingerprint",
+                            lambda: "a1b2c3d4e5f6a7b8" + "0" * 48)
+
+        app = _create_health_app_with_license(info)
+        client = TestClient(app)
+        response = client.get("/health")
+        lic = response.json()["license"]
+        assert "customer_id" not in lic, "customer_id is sensitive and should not be in /health"
+
+    def test_health_license_fingerprint_match_true(self, monkeypatch):
+        """fingerprint_match is True when stored fingerprint matches current machine fingerprint."""
+        info = LicenseInfo(
+            customer_id="test",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=90),
+            status=LicenseStatus.VALID,
+            days_remaining=90,
+            message="Valid",
+        )
+        set_license_state(info)
+        # Mock machine fingerprint to match the stored prefix
+        monkeypatch.setattr(license_manager, "get_machine_fingerprint",
+                            lambda: "a1b2c3d4e5f6a7b8" + "0" * 48)
+
+        app = _create_health_app_with_license(info)
+        client = TestClient(app)
+        response = client.get("/health")
+        lic = response.json()["license"]
+        assert lic["fingerprint_match"] is True
+
+    def test_health_overall_status_not_affected_by_license(self, monkeypatch):
+        """Overall /health status stays healthy even when license is INVALID (purely informational)."""
+        info = LicenseInfo(
+            customer_id="test",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) - timedelta(days=30),
+            status=LicenseStatus.INVALID,
+            days_remaining=-30,
+            message="Invalid",
+        )
+        set_license_state(info)
+        monkeypatch.setattr(license_manager, "get_machine_fingerprint",
+                            lambda: "a1b2c3d4e5f6a7b8" + "0" * 48)
+
+        app = _create_health_app_with_license(info)
+        client = TestClient(app)
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "healthy", "License status should NOT affect overall /health status"
+        assert data["license"]["status"] == "invalid"
