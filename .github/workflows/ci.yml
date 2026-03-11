@@ -205,3 +205,78 @@ jobs:
       - name: Tear down Docker Compose
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.license-test.yml down -v
+
+  # ── Security Pipeline E2E Tests ──────────────────────────────────────────
+  # Validates the complete v2.1 security pipeline: fingerprint mismatch,
+  # periodic re-validation, integrity tamper detection, and license renewal.
+  # Runs as a separate job because it starts/stops multiple Docker containers
+  # with different license configurations. Only runs on push to main.
+  e2e-security:
+    name: Security Pipeline E2E
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: [test, docker]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Start database service
+        run: docker compose up -d --wait db
+        env:
+          POSTGRES_PASSWORD: routing_dev_pass
+
+      - name: Run security pipeline E2E tests
+        run: npx playwright test --project=security-pipeline --workers=1
+        env:
+          CI: true
+
+      - name: Capture Docker logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.license-test.yml logs --no-color > security-docker-logs.txt 2>&1
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Upload Docker logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-docker-logs
+          path: security-docker-logs.txt
+          retention-days: 7
+
+      - name: Tear down Docker Compose
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.license-test.yml down -v
