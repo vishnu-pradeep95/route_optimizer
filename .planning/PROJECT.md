@@ -85,6 +85,9 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ Distribution build with compiled licensing module (.so via Cython, not .pyc) — Phase 6
 - ✓ Zero ENVIRONMENT references in distributed Python files (build-time stripping + validation) — Phase 6
 - ✓ Customer migration documentation for v2.1 breaking changes (fingerprint + HMAC) — Phase 6
+- ✓ Periodic runtime re-validation every 500 requests (integrity manifest + license expiry) — Phase 8
+- ✓ One-way license state guard preventing accidental upgrades without restart — Phase 8
+- ✓ Enforcement middleware re-reads license status after re-validation for same-request state reflection — Phase 8
 
 ### Active
 
@@ -193,6 +196,10 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | Docker-based Cython compilation | Build in python:3.12-slim matching runtime for ABI compatibility | ✓ Good — .so imports validated inside same base image |
 | sed strip-devmode in build pipeline | Hardcode _is_dev_mode=False in staged copy, delete ENVIRONMENT refs | ✓ Good — zero-tolerance grep validation passes |
 | Migration docs written in Phase 6 | Document while both breaking changes (fingerprint + HMAC) are in context | ✓ Good — deferred execution to Phase 10 |
+| _STATUS_SEVERITY ordering for state guard | Maps VALID=0, GRACE=1, INVALID=2 for one-way comparison | ✓ Good — simple, prevents accidental upgrades |
+| Counter resets to 0 after re-validation | Next cycle is exactly 500 requests | ✓ Good — predictable re-validation cadence |
+| SystemExit propagation from middleware | maybe_revalidate() not wrapped in try/except | ✓ Good — graceful shutdown on integrity failure |
+| maybe_revalidate() called on all requests | Including /health — consistent counter increment | ✓ Good — predictable revalidation boundaries |
 
 ---
-*Last updated: 2026-03-10 after Phase 6 (Build Pipeline)*
+*Last updated: 2026-03-11 after Phase 8 (Runtime Protection)*
