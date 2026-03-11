@@ -40,7 +40,7 @@ Requirements for v2.1 Licensing & Distribution Security. Each maps to roadmap ph
 
 ### Testing & Documentation
 
-- [ ] **DOC-01**: E2E tests for integrity failure, periodic re-validation, license renewal, fingerprint mismatch scenarios
+- [x] **DOC-01**: E2E tests for integrity failure, periodic re-validation, license renewal, fingerprint mismatch scenarios
 - [ ] **DOC-02**: docs/LICENSING.md, SETUP.md, ERROR-MAP.md updated for all v2.1 changes
 - [ ] **DOC-03**: Customer migration procedure documented (fingerprint formula change + HMAC seed rotation)
 
@@ -88,7 +88,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BLD-01 | Phase 6 | Complete |
 | BLD-02 | Phase 6 | Complete |
 | BLD-03 | Phase 6 | Complete |
-| DOC-01 | Phase 10 | Pending |
+| DOC-01 | Phase 10 | Complete |
 | DOC-02 | Phase 10 | Pending |
 | DOC-03 | Phase 10 | Pending |
 

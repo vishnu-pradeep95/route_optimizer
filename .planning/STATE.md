@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
-status: completed
-stopped_at: Phase 10 context gathered
-last_updated: "2026-03-11T10:59:14.285Z"
-last_activity: 2026-03-11 -- Phase 9 plan 02 complete (expiry header + health license section)
+status: in-progress
+stopped_at: Phase 10 plan 01 complete
+last_updated: "2026-03-11T11:19:05.000Z"
+last_activity: 2026-03-11 -- Phase 10 plan 01 complete (security pipeline E2E tests)
 progress:
   total_phases: 6
   completed_phases: 0
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** v2.1 Licensing & Distribution Security -- Phase 9 (License Management)
+**Current focus:** v2.1 Licensing & Distribution Security -- Phase 10 (End-to-End Validation)
 
 ## Current Position
 
-Phase: 9 -- License Management
-Plan: 2 of 2 complete
-Status: Phase Complete
-Last activity: 2026-03-11 -- Phase 9 plan 02 complete (expiry header + health license section)
+Phase: 10 -- End-to-End Validation
+Plan: 1 of 2 complete
+Status: In Progress
+Last activity: 2026-03-11 -- Phase 10 plan 01 complete (security pipeline E2E tests)
 
-Progress: [█████████░] 83% (11/12 plans across 6 phases)
+Progress: [██████████] 92% (12/13 plans across 6 phases)
 
 ## Performance Metrics
 
@@ -89,6 +89,11 @@ Progress: [█████████░] 83% (11/12 plans across 6 phases)
 - Phase 9-02: No customer_id in /health license section (sensitive data per user decision)
 - Phase 9-02: License status purely informational in /health -- does not degrade overall /health status
 
+- Phase 10-01: REVALIDATION_INTERVAL as module-level constant (works identically in .py and .so)
+- Phase 10-01: Integrity tamper test uses test.skip() in dev mode (empty _INTEGRITY_MANIFEST)
+- Phase 10-01: Separate e2e-security CI job (different Docker lifecycle than regular e2e)
+- Phase 10-01: Dynamic license key generation in beforeAll via generate_license.py (machine-independent)
+
 See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase details per milestone.
 
 ### Pending Todos
@@ -128,9 +133,10 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 | 08-02 | Middleware revalidation wiring | 3min | 1 | 2 |
 | 09-01 | License renewal mechanism | 5min | 2 | 7 |
 | 09-02 | Expiry header + health license | 4min | 2 | 3 |
+| 10-01 | Security pipeline E2E tests | 3min | 2 | 5 |
 
 ## Session Continuity
 
-Last session: 2026-03-11T10:59:14.284Z
-Stopped at: Phase 10 context gathered
-Resume file: .planning/milestones/v2.1-phases/10-end-to-end-validation/10-CONTEXT.md
+Last session: 2026-03-11T11:19:05.000Z
+Stopped at: Completed 10-01-PLAN.md (security pipeline E2E tests)
+Resume file: .planning/milestones/v2.1-phases/10-end-to-end-validation/10-02-PLAN.md
