@@ -37,7 +37,7 @@ Requirements for v2.2 Address Preprocessing Pipeline. Each maps to roadmap phase
 - [ ] **TEST-03**: Accuracy metrics measured and documented: geocode success rate (>90%), fallback rate (<10%), dictionary coverage (>80% of area names)
 - [ ] **TEST-04**: Approach B (NER model) upgrade criteria documented with measurable thresholds
 
-## v2.1 Requirements (Parallel — Main Branch)
+## v2.1 Requirements (Parallel -- Main Branch)
 
 v2.1 Licensing & Distribution Security is being executed in parallel on the main branch.
 See main branch `.planning/REQUIREMENTS.md` for full v2.1 tracking.
@@ -85,30 +85,30 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ADDR-01 | — | Pending |
-| ADDR-02 | — | Pending |
-| ADDR-03 | — | Pending |
-| ADDR-04 | — | Pending |
-| ADDR-05 | — | Pending |
-| ADDR-06 | — | Pending |
-| GVAL-01 | — | Pending |
-| GVAL-02 | — | Pending |
-| GVAL-03 | — | Pending |
-| GVAL-04 | — | Pending |
-| APUI-01 | — | Pending |
-| APUI-02 | — | Pending |
-| APUI-03 | — | Pending |
-| APUI-04 | — | Pending |
-| TEST-01 | — | Pending |
-| TEST-02 | — | Pending |
-| TEST-03 | — | Pending |
-| TEST-04 | — | Pending |
+| ADDR-01 | Phase 11 | Pending |
+| ADDR-02 | Phase 11 | Pending |
+| ADDR-03 | Phase 11 | Pending |
+| ADDR-04 | Phase 12 | Pending |
+| ADDR-05 | Phase 12 | Pending |
+| ADDR-06 | Phase 12 | Pending |
+| GVAL-01 | Phase 13 | Pending |
+| GVAL-02 | Phase 13 | Pending |
+| GVAL-03 | Phase 13 | Pending |
+| GVAL-04 | Phase 13 | Pending |
+| APUI-01 | Phase 14 | Pending |
+| APUI-02 | Phase 14 | Pending |
+| APUI-03 | Phase 14 | Pending |
+| APUI-04 | Phase 14 | Pending |
+| TEST-01 | Phase 15 | Pending |
+| TEST-02 | Phase 15 | Pending |
+| TEST-03 | Phase 15 | Pending |
+| TEST-04 | Phase 15 | Pending |
 
 **Coverage:**
 - v2.2 requirements: 18 total
-- Mapped to phases: 0
-- Unmapped: 18 ⚠️
+- Mapped to phases: 18
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-10*
-*Last updated: 2026-03-10 after initial definition*
+*Last updated: 2026-03-10 after roadmap creation (all 18 requirements mapped to Phases 11-15)*

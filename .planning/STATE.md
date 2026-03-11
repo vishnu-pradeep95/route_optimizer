@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: Address Preprocessing Pipeline
-status: defining
+status: ready_to_plan
 stopped_at: null
 last_updated: "2026-03-10"
-last_activity: 2026-03-10 -- Milestone v2.2 started
+last_activity: 2026-03-10 -- Roadmap created for v2.2 (5 phases, 18 requirements)
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,19 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** v2.2 Address Preprocessing Pipeline
+**Current focus:** Phase 11 -- Foundation Fixes (v2.2 Address Preprocessing Pipeline)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-10 — Milestone v2.2 started
+Phase: 11 (1 of 5 in v2.2) -- Foundation Fixes
+Plan: --
+Status: Ready to plan
+Last activity: 2026-03-10 -- Roadmap created for v2.2
+
+Progress: [..........] 0%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 64 (across v1.0-v2.0)
+- Total plans completed: 64 (across v1.0-v2.0) + 2 (v2.1 Phase 5)
 
 **By Milestone:**
 
@@ -46,7 +48,7 @@ Last activity: 2026-03-10 — Milestone v2.2 started
 | v1.4 Ship-Ready QA | 4 (21-24) | 10 | 2026-03-08 -> 2026-03-09 |
 | v2.0 Doc & Error Handling | 4 (1-4) | 9 | 2026-03-09 -> 2026-03-10 |
 | v2.1 Licensing Security | 6 (5-10) | TBD | 2026-03-10 -> ... (parallel, main branch) |
-| v2.2 Address Preprocessing | TBD | TBD | 2026-03-10 -> ... |
+| v2.2 Address Preprocessing | 5 (11-15) | TBD | 2026-03-10 -> ... |
 
 ## Accumulated Context
 
@@ -64,11 +66,12 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 
 ### Blockers/Concerns
 
-- Google Maps API key is currently invalid (REQUEST_DENIED) -- E2E tests must use pre-geocoded seed data.
-- Physical Android device testing required for outdoor contrast validation.
+- Google Maps API key is currently invalid (REQUEST_DENIED) -- circuit breaker design in Phase 13 must handle this from first upload.
+- Physical Android device testing required for outdoor contrast validation of "Approx. location" badge.
+- Dictionary coverage (Phase 12) is the primary unknown -- 80% threshold is a hard gate before Phase 13.
 
 ## Session Continuity
 
 Last session: 2026-03-10
-Stopped at: Defining requirements for v2.2
+Stopped at: Roadmap created for v2.2, ready to plan Phase 11
 Resume file: None
