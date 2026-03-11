@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
 status: executing
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-03-11T02:30:07Z"
-last_activity: 2026-03-11 -- Phase 9 plan 01 complete (renewal mechanism)
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-03-11T02:38:43Z"
+last_activity: 2026-03-11 -- Phase 9 plan 02 complete (expiry header + health license section)
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 2
-  completed_plans: 1
-  percent: 79
+  completed_plans: 2
+  percent: 83
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 9 -- License Management
-Plan: 1 of 2 complete
-Status: Executing
-Last activity: 2026-03-11 -- Phase 9 plan 01 complete (renewal mechanism)
+Plan: 2 of 2 complete
+Status: Phase Complete
+Last activity: 2026-03-11 -- Phase 9 plan 02 complete (expiry header + health license section)
 
-Progress: [████████░░] 79% (10/12 plans across 6 phases)
+Progress: [█████████░] 83% (11/12 plans across 6 phases)
 
 ## Performance Metrics
 
@@ -85,6 +85,10 @@ Progress: [████████░░] 79% (10/12 plans across 6 phases)
 - Phase 9-01: Post-renewal file handling is best-effort -- read-only Docker volumes log warning but don't crash
 - Phase 9-01: _LICENSE_KEY_PATHS and _RENEWAL_KEY_PATHS as module-level lists for testability (patchable in tests)
 
+- Phase 9-02: Days recalculated from expires_at at response time (not stale days_remaining) for header accuracy
+- Phase 9-02: No customer_id in /health license section (sensitive data per user decision)
+- Phase 9-02: License status purely informational in /health -- does not degrade overall /health status
+
 See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase details per milestone.
 
 ### Pending Todos
@@ -123,9 +127,10 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 | 08-01 | Re-validation + state guard | 4min | 2 | 3 |
 | 08-02 | Middleware revalidation wiring | 3min | 1 | 2 |
 | 09-01 | License renewal mechanism | 5min | 2 | 7 |
+| 09-02 | Expiry header + health license | 4min | 2 | 3 |
 
 ## Session Continuity
 
-Last session: 2026-03-11T02:30:07Z
-Stopped at: Completed 09-01-PLAN.md
-Resume file: .planning/milestones/v2.1-phases/09-license-management/09-02-PLAN.md
+Last session: 2026-03-11T02:38:43Z
+Stopped at: Completed 09-02-PLAN.md (Phase 9 complete)
+Resume file: Next phase
