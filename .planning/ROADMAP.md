@@ -161,11 +161,11 @@ Plans:
   1. Generating a renewal key with `generate_license.py --renew` and dropping it as `renewal.key` in the deployment extends the license expiry without requiring a new fingerprint exchange
   2. API responses include an `X-License-Expires-In` header showing remaining days (e.g., `X-License-Expires-In: 45d`)
   3. The `/health` endpoint body includes license status fields (valid/expired/grace period, expiry date, fingerprint match)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 09-01: TBD
-- [ ] 09-02: TBD
+- [ ] 09-01-PLAN.md — Renewal mechanism: get_license_info() accessor, --renew flag, renewal.key processing in enforce()
+- [ ] 09-02-PLAN.md — Expiry visibility: X-License-Expires-In header on all responses, license section in /health body
 
 ### Phase 10: End-to-End Validation
 **Goal**: The complete v2.1 security pipeline is tested end-to-end and customer migration is documented
@@ -223,7 +223,7 @@ Phases execute in numeric order: 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 6. Build Pipeline -- Dev-Mode Stripping and Cython | v2.1 | 3/3 | Complete | 2026-03-10 |
 | 7. Enforcement Module | v2.1 | 0/2 | Not started | - |
 | 8. Runtime Protection | v2.1 | 0/2 | Not started | - |
-| 9. License Management | v2.1 | 0/? | Not started | - |
+| 9. License Management | v2.1 | 0/2 | Not started | - |
 | 10. End-to-End Validation | v2.1 | 0/? | Not started | - |
 
 ---
