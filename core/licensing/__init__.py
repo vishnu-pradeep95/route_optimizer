@@ -10,6 +10,7 @@ Public API:
     license_manager.get_license_status() -- current license status (per-request)
     license_manager.set_license_state() -- store license state (startup only)
     license_manager.verify_integrity() -- SHA256 manifest verification
+    license_manager.maybe_revalidate() -- periodic integrity + expiry re-check (every 500 requests)
 
     enforcement.enforce(app) -- single entry point for all enforcement
         Import as: from core.licensing.enforcement import enforce

@@ -464,6 +464,7 @@ _INTEGRITY_MANIFEST: dict[str, str] = {}
 # =============================================================================
 
 _license_state: LicenseInfo | None = None
+_request_counter: int = 0
 
 
 def get_license_status() -> LicenseStatus | None:
@@ -527,3 +528,61 @@ def verify_integrity(base_path: str = "/app") -> tuple[bool, list[str]]:
             failures.append(f"{rel_path} has been modified")
 
     return len(failures) == 0, failures
+
+
+def maybe_revalidate(base_path: str = "/app") -> None:
+    """Periodic re-validation: integrity + license expiry check every 500 requests.
+
+    Called by enforcement middleware on every request. Increments a counter
+    and triggers full re-validation when counter hits 500.
+
+    Re-validation includes:
+    1. File integrity verification against embedded SHA256 manifest
+    2. License expiry re-check (detects VALID->GRACE->INVALID transitions)
+
+    Skipped in dev mode (empty _INTEGRITY_MANIFEST).
+    Raises SystemExit on integrity failure (graceful shutdown).
+    """
+    global _request_counter
+    _request_counter += 1
+    if _request_counter % 500 != 0:
+        return
+    _request_counter = 0
+
+    # Skip in dev mode (no manifest = no files to check)
+    if not _INTEGRITY_MANIFEST:
+        return
+
+    # 1. Integrity re-check
+    ok, failures = verify_integrity(base_path)
+    if not ok:
+        for f in failures:
+            logger.error("Runtime integrity check failed: %s", f)
+        raise SystemExit("Runtime integrity check failed. Protected files modified.")
+
+    # 2. License expiry re-check
+    if _license_state is not None and _license_state.status != LicenseStatus.INVALID:
+        from dataclasses import replace
+
+        now = datetime.now(timezone.utc)
+        days_remaining = (_license_state.expires_at - now).days
+
+        if days_remaining >= 0:
+            new_status = LicenseStatus.VALID
+        elif abs(days_remaining) <= GRACE_PERIOD_DAYS + 1:
+            new_status = LicenseStatus.GRACE
+        else:
+            new_status = LicenseStatus.INVALID
+
+        if new_status != _license_state.status:
+            new_msg = (
+                f"License state changed during re-validation: "
+                f"{_license_state.status.value} -> {new_status.value}"
+            )
+            new_info = replace(
+                _license_state,
+                status=new_status,
+                days_remaining=days_remaining,
+                message=new_msg,
+            )
+            set_license_state(new_info)
