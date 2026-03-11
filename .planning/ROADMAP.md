@@ -188,11 +188,12 @@ Plans:
   3. Concatenated CDCMS text like `ANANDAMANDIRAMK` is split at the lowercase-to-uppercase transition into `ANANDAMANDIRAM K`
   4. Abbreviation expansion (NR -> Nagar, PO -> P.O.) runs after word splitting so that abbreviations at word boundaries are correctly detected
   5. All existing unit tests for `clean_cdcms_address()` continue to pass (no regressions from step reordering)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 11-01: TBD
-- [ ] 11-02: TBD
+- [ ] 11-01-PLAN.md -- TDD: Word splitting regex and abbreviation step reorder in clean_cdcms_address()
+- [ ] 11-02-PLAN.md -- Backend data flow fix: address_original column, address_display bug fix, API response update
+- [ ] 11-03-PLAN.md -- Driver PWA dual-address display and coordinate-based navigation
 
 ### Phase 12: Place Name Dictionary and Address Splitter
 **Goal**: A domain-specific Kerala place name dictionary powers intelligent word splitting of concatenated CDCMS text, correctly separating addresses like `MUTTUNGALPOBALAVADI` into `MUTTUNGAL P.O. BALAVADI`
@@ -298,7 +299,7 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15
 | 8. Runtime Protection | v2.1 | 0/? | Not started | - |
 | 9. License Management | v2.1 | 0/? | Not started | - |
 | 10. End-to-End Validation | v2.1 | 0/? | Not started | - |
-| 11. Foundation Fixes | v2.2 | 0/? | Not started | - |
+| 11. Foundation Fixes | v2.2 | 0/3 | Planned | - |
 | 12. Place Name Dictionary and Address Splitter | v2.2 | 0/? | Not started | - |
 | 13. Geocode Validation and Fallback Chain | v2.2 | 0/? | Not started | - |
 | 14. API Confidence Fields and Driver PWA Badge | v2.2 | 0/? | Not started | - |
