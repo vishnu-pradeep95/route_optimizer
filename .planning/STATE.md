@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
-status: planning
-stopped_at: Phase 11 context gathered
-last_updated: "2026-03-11T01:41:56.847Z"
-last_activity: 2026-03-10 -- Roadmap created for v2.2
+status: executing
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-03-11T11:00:53.191Z"
+last_activity: 2026-03-11 -- Completed Plan 11-01 (CDCMS word splitting)
 progress:
   total_phases: 11
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 3
+  completed_plans: 1
+  percent: 33
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 11 (1 of 5 in v2.2) -- Foundation Fixes
-Plan: --
-Status: Ready to plan
-Last activity: 2026-03-10 -- Roadmap created for v2.2
+Plan: 02 of 3
+Status: Executing
+Last activity: 2026-03-11 -- Completed Plan 11-01 (CDCMS word splitting)
 
-Progress: [..........] 0%
+Progress: [|||.......] 33%
 
 ## Performance Metrics
 
@@ -49,6 +49,7 @@ Progress: [..........] 0%
 | v2.0 Doc & Error Handling | 4 (1-4) | 9 | 2026-03-09 -> 2026-03-10 |
 | v2.1 Licensing Security | 6 (5-10) | TBD | 2026-03-10 -> ... (parallel, main branch) |
 | v2.2 Address Preprocessing | 5 (11-15) | TBD | 2026-03-10 -> ... |
+| Phase 11 P01 | 11min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -57,8 +58,12 @@ Progress: [..........] 0%
 - Phase 5-01: Dropped MAC from fingerprint (WSL2 generates random MAC on reboot, microsoft/WSL#5352)
 - Phase 5-01: Used exact match (not similarity scoring) for fingerprint validation
 - Phase 5-02: Read-only bind mount (:ro) for /etc/machine-id to prevent container writes to host identity
+- Phase 11-01: Used protected word set (not pure regex) for trailing letter split -- ALL-CAPS text has no casing cues to distinguish real words from concatenations
+- Phase 11-01: Three-priority split heuristic: meaningful suffix (PO/NR/KB) > protected prefix match > single trailing initial
+- Phase 11-01: Pipeline expanded from 10 to 12 steps for trailing letter split and second-pass abbreviation expansion
 
 See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase details per milestone.
+- [Phase 11]: Used protected word set (not pure regex) for trailing letter split
 
 ### Pending Todos
 
@@ -72,6 +77,6 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 
 ## Session Continuity
 
-Last session: 2026-03-11T01:41:56.845Z
-Stopped at: Phase 11 context gathered
-Resume file: .planning/phases/11-foundation-fixes/11-CONTEXT.md
+Last session: 2026-03-11T11:00:49.000Z
+Stopped at: Completed 11-01-PLAN.md
+Resume file: None
