@@ -589,13 +589,24 @@ class TestRuntimeRevalidation:
         assert response.json()["license_status"] == "invalid"
 
     def test_system_exit_from_revalidate_propagates(self, monkeypatch):
-        """SystemExit raised by maybe_revalidate() propagates through middleware (not caught)."""
+        """SystemExit raised by maybe_revalidate() propagates through middleware (not caught).
+
+        Note: Starlette/anyio may wrap SystemExit in a BaseExceptionGroup, so we
+        check for either SystemExit directly or a group containing one.
+        """
         app = self._create_enforced_app(LicenseStatus.VALID, monkeypatch)
 
         with patch("core.licensing.enforcement.maybe_revalidate", side_effect=SystemExit("integrity failure")):
-            client = TestClient(app, raise_server_exceptions=False)
-            with pytest.raises(SystemExit):
+            client = TestClient(app, raise_server_exceptions=True)
+            try:
                 client.get("/test")
+                pytest.fail("Expected SystemExit to propagate")
+            except SystemExit:
+                pass  # Direct propagation
+            except BaseExceptionGroup as eg:
+                # anyio wraps SystemExit in an ExceptionGroup
+                system_exits = eg.subgroup(SystemExit)
+                assert system_exits is not None, f"Expected SystemExit in group, got: {eg}"
 
     def test_existing_valid_passthrough_unchanged(self, monkeypatch):
         """Existing behavior: VALID license passes through with 200 (no regression)."""

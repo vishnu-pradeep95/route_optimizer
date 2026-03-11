@@ -23,6 +23,7 @@ from core.licensing.license_manager import (
     LicenseInfo,
     LicenseStatus,
     get_license_status,
+    maybe_revalidate,
     set_license_state,
     validate_license,
     verify_integrity,
@@ -98,6 +99,10 @@ def enforce(app: FastAPI) -> None:
     async def license_enforcement_middleware(request: Request, call_next):
         """Check license status on every request via compiled accessor."""
         status = get_license_status()  # Calls into .so -- fast, no I/O
+
+        if status is not None:
+            maybe_revalidate()  # Periodic check, may raise SystemExit
+            status = get_license_status()  # Re-read: may have changed
 
         if status is None:
             return await call_next(request)
