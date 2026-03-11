@@ -9,7 +9,7 @@ Requirements for v2.2 Address Preprocessing Pipeline. Each maps to roadmap phase
 
 ### Address Preprocessing
 
-- [ ] **ADDR-01**: Driver app and navigation links always show the cleaned original address (address_raw), never Google's formatted_address
+- [x] **ADDR-01**: Driver app and navigation links always show the cleaned original address (address_raw), never Google's formatted_address
 - [x] **ADDR-02**: Regex splits lowercase-to-uppercase transitions in concatenated CDCMS text (e.g., `ANANDAMANDIRAMK` -> `ANANDAMANDIRAM K`)
 - [x] **ADDR-03**: Abbreviation expansion (NR, PO) runs after word splitting so patterns are detected at word boundaries
 - [ ] **ADDR-04**: Place name dictionary (~285 entries) built from OSM Overpass + India Post APIs and committed to repo
@@ -85,7 +85,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ADDR-01 | Phase 11 | Pending |
+| ADDR-01 | Phase 11 | Complete |
 | ADDR-02 | Phase 11 | Complete |
 | ADDR-03 | Phase 11 | Complete |
 | ADDR-04 | Phase 12 | Pending |
