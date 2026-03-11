@@ -14,6 +14,7 @@ Protected by the SHA256 integrity manifest embedded in the compiled .so.
 
 import logging
 import os
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -86,6 +87,16 @@ def _handle_post_renewal(key_content: str) -> None:
             break
         except OSError as e:
             logger.warning("Could not delete %s: %s", path, e)
+
+
+def _compute_expires_header() -> str | None:
+    """Compute X-License-Expires-In value. Returns None if no license state."""
+    info = get_license_info()
+    if info is None:
+        return None
+    # Recalculate from expires_at for accuracy (not stale days_remaining)
+    days = (info.expires_at - datetime.now(timezone.utc)).days
+    return f"{days}d"
 
 
 def enforce(app: FastAPI) -> None:
@@ -180,20 +191,31 @@ def enforce(app: FastAPI) -> None:
             response = await call_next(request)
             if status != LicenseStatus.VALID:
                 response.headers["X-License-Status"] = status.value
+            expires_val = _compute_expires_header()
+            if expires_val:
+                response.headers["X-License-Expires-In"] = expires_val
             return response
 
         if status == LicenseStatus.INVALID:
-            return JSONResponse(
+            resp = JSONResponse(
                 status_code=503,
                 content={
                     "detail": "License expired or invalid. Contact support.",
                     "license_status": "invalid",
                 },
             )
+            expires_val = _compute_expires_header()
+            if expires_val:
+                resp.headers["X-License-Expires-In"] = expires_val
+            return resp
 
         response = await call_next(request)
 
         if status == LicenseStatus.GRACE:
             response.headers["X-License-Warning"] = "License in grace period"
+
+        expires_val = _compute_expires_header()
+        if expires_val:
+            response.headers["X-License-Expires-In"] = expires_val
 
         return response
