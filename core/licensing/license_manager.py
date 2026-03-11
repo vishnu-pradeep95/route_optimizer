@@ -29,12 +29,15 @@ Data flow:
 import base64
 import hashlib
 import hmac
+import logging
 import os
 import struct
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -77,6 +80,15 @@ class LicenseStatus(Enum):
     VALID = "valid"
     GRACE = "grace"
     INVALID = "invalid"
+
+
+# Severity ordering for one-way state transition guard.
+# Higher severity = worse state. Upgrades (lower severity) are blocked.
+_STATUS_SEVERITY = {
+    LicenseStatus.VALID: 0,
+    LicenseStatus.GRACE: 1,
+    LicenseStatus.INVALID: 2,
+}
 
 
 # =============================================================================
@@ -463,8 +475,32 @@ def get_license_status() -> LicenseStatus | None:
 
 
 def set_license_state(info: LicenseInfo) -> None:
-    """Store license state internally. Called once at startup by enforce()."""
+    """Store license state internally. Called at startup by enforce() and
+    during periodic re-validation by maybe_revalidate().
+
+    One-way guard: state can only degrade (VALID->GRACE->INVALID) or stay
+    at the same severity. Upgrades (e.g. INVALID->VALID) are rejected --
+    a restart is required to upgrade license state.
+
+    First-time set (when _license_state is None) always succeeds.
+    """
     global _license_state
+    if _license_state is not None:
+        current_severity = _STATUS_SEVERITY[_license_state.status]
+        new_severity = _STATUS_SEVERITY[info.status]
+        if new_severity < current_severity:
+            logger.warning(
+                "Rejected license state upgrade from %s to %s (restart required)",
+                _license_state.status.value,
+                info.status.value,
+            )
+            return
+        if new_severity > current_severity:
+            logger.warning(
+                "License state degraded from %s to %s",
+                _license_state.status.value,
+                info.status.value,
+            )
     _license_state = info
 
 
