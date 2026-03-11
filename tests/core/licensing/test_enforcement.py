@@ -460,3 +460,175 @@ class TestEnforcementMiddleware:
         assert response.status_code == 200
         assert "X-License-Status" in response.headers
         assert response.headers["X-License-Status"] == "invalid"
+
+
+# =============================================================================
+# Runtime re-validation middleware integration tests
+# =============================================================================
+
+
+class TestRuntimeRevalidation:
+    """Tests for middleware integration with maybe_revalidate().
+
+    Verifies that the enforcement middleware calls maybe_revalidate() on every
+    request when license state is set, re-reads status afterward, and allows
+    SystemExit to propagate for graceful shutdown.
+    """
+
+    @pytest.fixture(autouse=True)
+    def reset_request_counter(self):
+        """Reset the request counter before and after each test."""
+        license_manager._request_counter = 0
+        yield
+        license_manager._request_counter = 0
+
+    def _create_enforced_app(self, license_status, monkeypatch, is_dev=True):
+        """Helper: create a FastAPI app with enforce() and controlled license status."""
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", is_dev)
+
+        app = FastAPI()
+
+        @app.get("/test")
+        def test_route():
+            return {"status": "ok"}
+
+        @app.get("/health")
+        def health_route():
+            return {"status": "healthy"}
+
+        license_info = _make_license_info(license_status)
+
+        with patch("core.licensing.enforcement.validate_license", return_value=license_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enf_mod.enforce(app)
+
+        return app
+
+    def test_maybe_revalidate_called_when_state_set(self, monkeypatch):
+        """Middleware calls maybe_revalidate() when license state is not None."""
+        app = self._create_enforced_app(LicenseStatus.VALID, monkeypatch)
+
+        with patch("core.licensing.enforcement.maybe_revalidate") as mock_reval:
+            client = TestClient(app)
+            client.get("/test")
+            mock_reval.assert_called_once()
+
+    def test_maybe_revalidate_not_called_when_state_none(self, monkeypatch):
+        """Middleware does NOT call maybe_revalidate() when license state is None."""
+        app = self._create_enforced_app(LicenseStatus.VALID, monkeypatch)
+
+        # Reset state to None AFTER enforce() registered middleware
+        license_manager._license_state = None
+
+        with patch("core.licensing.enforcement.maybe_revalidate") as mock_reval:
+            client = TestClient(app)
+            client.get("/test")
+            mock_reval.assert_not_called()
+
+    def test_middleware_rereads_status_after_revalidate(self, monkeypatch):
+        """Middleware re-reads get_license_status() after maybe_revalidate(),
+        so status changes from maybe_revalidate() are reflected in the same request."""
+        app = self._create_enforced_app(LicenseStatus.VALID, monkeypatch)
+
+        # When maybe_revalidate() fires, degrade state from VALID to GRACE
+        def degrade_to_grace():
+            grace_info = _make_license_info(LicenseStatus.GRACE)
+            set_license_state(grace_info)
+
+        with patch("core.licensing.enforcement.maybe_revalidate", side_effect=degrade_to_grace):
+            client = TestClient(app)
+            response = client.get("/test")
+
+        # The response should reflect GRACE (X-License-Warning header)
+        # because middleware re-reads status after maybe_revalidate()
+        assert response.status_code == 200
+        assert "X-License-Warning" in response.headers
+
+    def test_valid_to_grace_degradation_adds_warning_header(self, monkeypatch):
+        """If maybe_revalidate() degrades VALID->GRACE, the same request gets X-License-Warning."""
+        app = self._create_enforced_app(LicenseStatus.VALID, monkeypatch)
+
+        def degrade_to_grace():
+            grace_info = _make_license_info(LicenseStatus.GRACE)
+            set_license_state(grace_info)
+
+        with patch("core.licensing.enforcement.maybe_revalidate", side_effect=degrade_to_grace):
+            client = TestClient(app)
+            response = client.get("/test")
+
+        assert response.status_code == 200
+        assert response.headers.get("X-License-Warning") == "License in grace period"
+
+    def test_grace_to_invalid_degradation_returns_503(self, monkeypatch):
+        """If maybe_revalidate() degrades GRACE->INVALID, the same request gets 503."""
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", False)
+
+        app = FastAPI()
+
+        @app.get("/test")
+        def test_route():
+            return {"status": "ok"}
+
+        grace_info = _make_license_info(LicenseStatus.GRACE)
+
+        with patch("core.licensing.enforcement.validate_license", return_value=grace_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enf_mod.enforce(app)
+
+        def degrade_to_invalid():
+            invalid_info = _make_license_info(LicenseStatus.INVALID)
+            set_license_state(invalid_info)
+
+        with patch("core.licensing.enforcement.maybe_revalidate", side_effect=degrade_to_invalid):
+            client = TestClient(app)
+            response = client.get("/test")
+
+        assert response.status_code == 503
+        assert response.json()["license_status"] == "invalid"
+
+    def test_system_exit_from_revalidate_propagates(self, monkeypatch):
+        """SystemExit raised by maybe_revalidate() propagates through middleware (not caught)."""
+        app = self._create_enforced_app(LicenseStatus.VALID, monkeypatch)
+
+        with patch("core.licensing.enforcement.maybe_revalidate", side_effect=SystemExit("integrity failure")):
+            client = TestClient(app, raise_server_exceptions=False)
+            with pytest.raises(SystemExit):
+                client.get("/test")
+
+    def test_existing_valid_passthrough_unchanged(self, monkeypatch):
+        """Existing behavior: VALID license passes through with 200 (no regression)."""
+        app = self._create_enforced_app(LicenseStatus.VALID, monkeypatch)
+
+        # Use real maybe_revalidate (no mock) -- should be a no-op in dev mode
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+        assert "X-License-Warning" not in response.headers
+
+    def test_health_endpoint_still_bypasses_after_revalidate(self, monkeypatch):
+        """Health endpoint bypass works correctly even with maybe_revalidate() in the path."""
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", False)
+
+        app = FastAPI()
+
+        @app.get("/health")
+        def health_route():
+            return {"status": "healthy"}
+
+        grace_info = _make_license_info(LicenseStatus.GRACE)
+
+        with patch("core.licensing.enforcement.validate_license", return_value=grace_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enf_mod.enforce(app)
+
+        with patch("core.licensing.enforcement.maybe_revalidate") as mock_reval:
+            client = TestClient(app)
+            response = client.get("/health")
+            # maybe_revalidate() should still be called (counter increments on all requests)
+            mock_reval.assert_called_once()
+
+        assert response.status_code == 200
+        assert response.headers.get("X-License-Status") == "grace"
