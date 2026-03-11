@@ -789,3 +789,157 @@ class TestRenewalFileHandling:
 
         # Should log warnings about the failures (not crash)
         # The warning is about failing to write, not about the renewal itself
+
+
+# =============================================================================
+# X-License-Expires-In header tests (Phase 9 Plan 02)
+# =============================================================================
+
+
+class TestExpiresInHeader:
+    """Tests for X-License-Expires-In response header on all middleware paths.
+
+    The header shows how many days until license expiry (positive for valid,
+    negative for expired). It is omitted when no license state is set (dev mode).
+    Days are recalculated from expires_at at response time for accuracy.
+    """
+
+    def _create_enforced_app_with_info(self, license_info, monkeypatch, is_dev=False):
+        """Helper: create a FastAPI app with enforce() and a specific LicenseInfo."""
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", is_dev)
+
+        app = FastAPI()
+
+        @app.get("/test")
+        def test_route():
+            return {"status": "ok"}
+
+        @app.get("/health")
+        def health_route():
+            return {"status": "healthy"}
+
+        with patch("core.licensing.enforcement.validate_license", return_value=license_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enf_mod.enforce(app)
+
+        return app
+
+    def test_valid_license_includes_expires_header(self, monkeypatch):
+        """VALID license response includes X-License-Expires-In with positive days like '365d'."""
+        info = LicenseInfo(
+            customer_id="test",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=365),
+            status=LicenseStatus.VALID,
+            days_remaining=365,
+            message="Valid",
+        )
+        app = self._create_enforced_app_with_info(info, monkeypatch)
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+        header = response.headers.get("X-License-Expires-In")
+        assert header is not None, "X-License-Expires-In header missing"
+        # Should be like "364d" or "365d"
+        assert header.endswith("d")
+        days_val = int(header[:-1])
+        assert days_val > 300
+
+    def test_grace_license_includes_negative_expires_header(self, monkeypatch):
+        """GRACE license response includes X-License-Expires-In with negative days like '-3d'."""
+        info = LicenseInfo(
+            customer_id="test",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) - timedelta(days=3),
+            status=LicenseStatus.GRACE,
+            days_remaining=-3,
+            message="Grace",
+        )
+        app = self._create_enforced_app_with_info(info, monkeypatch)
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+        header = response.headers.get("X-License-Expires-In")
+        assert header is not None, "X-License-Expires-In header missing"
+        assert header.endswith("d")
+        days_val = int(header[:-1])
+        assert days_val < 0
+
+    def test_invalid_503_includes_expires_header(self, monkeypatch):
+        """INVALID 503 response includes X-License-Expires-In with negative days."""
+        info = LicenseInfo(
+            customer_id="test",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) - timedelta(days=15),
+            status=LicenseStatus.INVALID,
+            days_remaining=-15,
+            message="Invalid",
+        )
+        app = self._create_enforced_app_with_info(info, monkeypatch, is_dev=False)
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 503
+        header = response.headers.get("X-License-Expires-In")
+        assert header is not None, "X-License-Expires-In header missing on 503"
+        assert header.endswith("d")
+        days_val = int(header[:-1])
+        assert days_val < -10
+
+    def test_health_includes_expires_header(self, monkeypatch):
+        """/health response includes X-License-Expires-In header."""
+        info = LicenseInfo(
+            customer_id="test",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=45),
+            status=LicenseStatus.VALID,
+            days_remaining=45,
+            message="Valid",
+        )
+        app = self._create_enforced_app_with_info(info, monkeypatch)
+        client = TestClient(app)
+        response = client.get("/health")
+        assert response.status_code == 200
+        header = response.headers.get("X-License-Expires-In")
+        assert header is not None, "X-License-Expires-In header missing on /health"
+        assert header.endswith("d")
+
+    def test_dev_mode_no_expires_header(self, monkeypatch):
+        """Dev mode (state is None) does NOT include X-License-Expires-In header."""
+        info = LicenseInfo(
+            customer_id="dev",
+            fingerprint="",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=999),
+            status=LicenseStatus.VALID,
+            days_remaining=999,
+            message="Dev mode",
+        )
+        app = self._create_enforced_app_with_info(info, monkeypatch, is_dev=True)
+
+        # Reset state to None AFTER enforce() registered middleware
+        license_manager._license_state = None
+
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+        assert "X-License-Expires-In" not in response.headers
+
+    def test_expires_header_recalculates_from_expires_at(self, monkeypatch):
+        """Header recalculates days from expires_at, not stale days_remaining."""
+        # Set days_remaining to 999 (stale) but expires_at to 10 days from now
+        info = LicenseInfo(
+            customer_id="test",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=10),
+            status=LicenseStatus.VALID,
+            days_remaining=999,  # Stale value -- should NOT appear in header
+            message="Valid",
+        )
+        app = self._create_enforced_app_with_info(info, monkeypatch)
+        client = TestClient(app)
+        response = client.get("/test")
+        header = response.headers.get("X-License-Expires-In")
+        assert header is not None
+        days_val = int(header[:-1])
+        # Should be ~10, NOT 999 (the stale days_remaining)
+        assert 8 <= days_val <= 11, f"Expected ~10d, got {days_val}d (stale days_remaining leaked?)"
