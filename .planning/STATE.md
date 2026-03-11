@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
-status: in-progress
-stopped_at: Phase 10 plan 01 complete
-last_updated: "2026-03-11T11:19:05.000Z"
-last_activity: 2026-03-11 -- Phase 10 plan 01 complete (security pipeline E2E tests)
+status: completed
+stopped_at: Completed 10-02-PLAN.md (v2.1 documentation rewrite)
+last_updated: "2026-03-11T11:20:57Z"
+last_activity: 2026-03-11 -- Phase 10 plan 02 complete (v2.1 documentation rewrite)
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
-  percent: 83
+  percent: 100
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 10 -- End-to-End Validation
-Plan: 1 of 2 complete
-Status: In Progress
-Last activity: 2026-03-11 -- Phase 10 plan 01 complete (security pipeline E2E tests)
+Plan: 2 of 2 complete
+Status: Phase Complete
+Last activity: 2026-03-11 -- Phase 10 plan 02 complete (v2.1 documentation rewrite)
 
-Progress: [██████████] 92% (12/13 plans across 6 phases)
+Progress: [██████████] 100% (13/13 plans across 6 phases)
 
 ## Performance Metrics
 
@@ -94,6 +94,10 @@ Progress: [██████████] 92% (12/13 plans across 6 phases)
 - Phase 10-01: Separate e2e-security CI job (different Docker lifecycle than regular e2e)
 - Phase 10-01: Dynamic license key generation in beforeAll via generate_license.py (machine-independent)
 
+- Phase 10-02: LICENSING.md written from scratch using codebase as source of truth (not edited from old content)
+- Phase 10-02: Kept dev+customer split audience for LICENSING.md (both audiences benefit from shared document)
+- Phase 10-02: Added What's New in v2.1 section to MIGRATION.md for feature overview alongside breaking changes
+
 See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase details per milestone.
 
 ### Pending Todos
@@ -134,9 +138,10 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 | 09-01 | License renewal mechanism | 5min | 2 | 7 |
 | 09-02 | Expiry header + health license | 4min | 2 | 3 |
 | 10-01 | Security pipeline E2E tests | 3min | 2 | 5 |
+| 10-02 | v2.1 documentation rewrite | 5min | 2 | 5 |
 
 ## Session Continuity
 
-Last session: 2026-03-11T11:19:05.000Z
-Stopped at: Completed 10-01-PLAN.md (security pipeline E2E tests)
-Resume file: .planning/milestones/v2.1-phases/10-end-to-end-validation/10-02-PLAN.md
+Last session: 2026-03-11T11:20:57Z
+Stopped at: Completed 10-02-PLAN.md (v2.1 documentation rewrite) -- v2.1 milestone complete
+Resume file: N/A (milestone complete)
