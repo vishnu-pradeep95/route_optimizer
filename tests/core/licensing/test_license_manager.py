@@ -20,6 +20,7 @@ from unittest.mock import MagicMock, call, mock_open, patch
 
 import pytest
 
+import core.licensing.license_manager as license_manager
 from core.licensing.license_manager import (
     GRACE_PERIOD_DAYS,
     LicenseInfo,
@@ -28,7 +29,9 @@ from core.licensing.license_manager import (
     _read_machine_id,
     decode_license_key,
     encode_license_key,
+    get_license_status,
     get_machine_fingerprint,
+    set_license_state,
     validate_license,
 )
 
@@ -661,3 +664,128 @@ class TestHMACSeedRotation:
         # Verify the current HMAC key differs from the old one
         from core.licensing.license_manager import _HMAC_KEY
         assert old_key != _HMAC_KEY, "HMAC key must differ from old compromised key"
+
+
+# =============================================================================
+# State transition guard tests (Phase 8 additions)
+# =============================================================================
+
+
+def _make_info(status: LicenseStatus) -> LicenseInfo:
+    """Helper to create a LicenseInfo with a given status."""
+    return LicenseInfo(
+        customer_id="guard-test",
+        fingerprint="a1b2c3d4e5f6a7b8",
+        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+        status=status,
+        days_remaining=30,
+        message=f"Status: {status.value}",
+    )
+
+
+class TestStateGuard:
+    """Tests for one-way state transition guard in set_license_state().
+
+    The guard prevents accidental state *upgrades* (e.g. INVALID->VALID)
+    without a restart. Degradations (VALID->GRACE->INVALID) are allowed.
+    Same-severity transitions are allowed. First-time set (from None) is allowed.
+    """
+
+    @pytest.fixture(autouse=True)
+    def reset_license_state(self):
+        """Reset module-level license state before and after each test."""
+        license_manager._license_state = None
+        yield
+        license_manager._license_state = None
+
+    def test_first_time_set_from_none_succeeds(self):
+        """set_license_state(VALID) when _license_state is None succeeds (first-time set)."""
+        info = _make_info(LicenseStatus.VALID)
+        set_license_state(info)
+        assert get_license_status() == LicenseStatus.VALID
+
+    def test_degradation_valid_to_grace_succeeds(self):
+        """set_license_state(GRACE) when current is VALID succeeds (degradation)."""
+        set_license_state(_make_info(LicenseStatus.VALID))
+        assert get_license_status() == LicenseStatus.VALID
+
+        set_license_state(_make_info(LicenseStatus.GRACE))
+        assert get_license_status() == LicenseStatus.GRACE
+
+    def test_degradation_grace_to_invalid_succeeds(self):
+        """set_license_state(INVALID) when current is GRACE succeeds (degradation)."""
+        set_license_state(_make_info(LicenseStatus.GRACE))
+        assert get_license_status() == LicenseStatus.GRACE
+
+        set_license_state(_make_info(LicenseStatus.INVALID))
+        assert get_license_status() == LicenseStatus.INVALID
+
+    def test_upgrade_invalid_to_valid_rejected(self):
+        """set_license_state(VALID) when current is INVALID is rejected (upgrade blocked)."""
+        set_license_state(_make_info(LicenseStatus.INVALID))
+        assert get_license_status() == LicenseStatus.INVALID
+
+        set_license_state(_make_info(LicenseStatus.VALID))
+        # State should NOT have changed -- upgrade rejected
+        assert get_license_status() == LicenseStatus.INVALID
+
+    def test_upgrade_grace_to_valid_rejected(self):
+        """set_license_state(VALID) when current is GRACE is rejected (upgrade blocked)."""
+        set_license_state(_make_info(LicenseStatus.GRACE))
+        assert get_license_status() == LicenseStatus.GRACE
+
+        set_license_state(_make_info(LicenseStatus.VALID))
+        # State should NOT have changed -- upgrade rejected
+        assert get_license_status() == LicenseStatus.GRACE
+
+    def test_upgrade_invalid_to_grace_rejected(self):
+        """set_license_state(GRACE) when current is INVALID is rejected (upgrade blocked)."""
+        set_license_state(_make_info(LicenseStatus.INVALID))
+        assert get_license_status() == LicenseStatus.INVALID
+
+        set_license_state(_make_info(LicenseStatus.GRACE))
+        # State should NOT have changed -- upgrade rejected
+        assert get_license_status() == LicenseStatus.INVALID
+
+    def test_same_severity_invalid_to_invalid_succeeds(self):
+        """set_license_state(INVALID) when current is INVALID succeeds (same severity allowed)."""
+        info1 = _make_info(LicenseStatus.INVALID)
+        set_license_state(info1)
+
+        info2 = LicenseInfo(
+            customer_id="guard-test-2",
+            fingerprint="a1b2c3d4e5f6a7b8",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+            status=LicenseStatus.INVALID,
+            days_remaining=-30,
+            message="Updated invalid",
+        )
+        set_license_state(info2)
+        assert get_license_status() == LicenseStatus.INVALID
+        assert license_manager._license_state.customer_id == "guard-test-2"
+
+    def test_degradation_logs_warning(self, caplog):
+        """State transition logs warning on degradation."""
+        import logging
+
+        set_license_state(_make_info(LicenseStatus.VALID))
+
+        with caplog.at_level(logging.WARNING, logger="core.licensing.license_manager"):
+            set_license_state(_make_info(LicenseStatus.GRACE))
+
+        assert any("degraded" in msg.lower() for msg in caplog.messages), (
+            f"Expected 'degraded' in log messages, got: {caplog.messages}"
+        )
+
+    def test_rejected_upgrade_logs_warning(self, caplog):
+        """State transition logs warning on rejected upgrade."""
+        import logging
+
+        set_license_state(_make_info(LicenseStatus.INVALID))
+
+        with caplog.at_level(logging.WARNING, logger="core.licensing.license_manager"):
+            set_license_state(_make_info(LicenseStatus.VALID))
+
+        assert any("rejected" in msg.lower() for msg in caplog.messages), (
+            f"Expected 'rejected' in log messages, got: {caplog.messages}"
+        )
