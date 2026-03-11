@@ -55,6 +55,7 @@ from core.geocoding.cache import CachedGeocoder
 from core.geocoding.duplicate_detector import detect_duplicate_locations
 from core.geocoding.google_adapter import GoogleGeocoder
 from core.licensing.enforcement import enforce
+from core.licensing.license_manager import get_license_info, get_machine_fingerprint
 from core.models.location import Location
 from core.models.order import Order
 from core.optimizer.vroom_adapter import VroomAdapter
@@ -709,16 +710,26 @@ async def health_check():
     uptime = (datetime.now(timezone.utc) - started_at).total_seconds()
 
     status_code = 200 if overall == "healthy" else 503
-    return JSONResponse(
-        status_code=status_code,
-        content={
-            "status": overall,
-            "service": "kerala-lpg-optimizer",
-            "version": app.version,
-            "uptime_seconds": round(uptime, 1),
-            "services": services,
-        },
-    )
+    content = {
+        "status": overall,
+        "service": "kerala-lpg-optimizer",
+        "version": app.version,
+        "uptime_seconds": round(uptime, 1),
+        "services": services,
+    }
+
+    # License diagnostics (omit entirely in dev mode / no license configured)
+    info = get_license_info()
+    if info is not None:
+        current_fp = get_machine_fingerprint()[:16]
+        content["license"] = {
+            "status": info.status.value,
+            "expires_at": info.expires_at.strftime("%Y-%m-%d"),
+            "days_remaining": (info.expires_at - datetime.now(timezone.utc)).days,
+            "fingerprint_match": current_fp == info.fingerprint[:16],
+        }
+
+    return JSONResponse(status_code=status_code, content=content)
 
 
 @app.get("/api/config", response_model=AppConfig)
