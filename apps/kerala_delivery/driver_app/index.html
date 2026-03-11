@@ -209,6 +209,25 @@
             border-left: 3px solid var(--color-accent);
             line-height: 1.4;
         }
+        .hero-address-raw {
+            font-family: var(--font-data, 'Courier New', monospace);
+            font-size: 13px;
+            color: var(--color-text-secondary, #9ca3af);
+            opacity: 0.7;
+            line-height: 1.3;
+            margin-bottom: 8px;
+            word-break: break-word;
+            letter-spacing: 0.02em;
+        }
+        .compact-address-raw {
+            font-family: var(--font-data, 'Courier New', monospace);
+            font-size: 11px;
+            color: var(--color-text-secondary, #9ca3af);
+            opacity: 0.6;
+            line-height: 1.2;
+            margin-top: 2px;
+            word-break: break-word;
+        }
         .hero-actions {
             display: flex;
             flex-direction: column;
@@ -1364,13 +1383,14 @@ function renderHeroCard(stop) {
     <div class="hero-card" id="stop-${escapeHtml(stop.order_id)}">
         <div class="hero-label">NEXT DELIVERY &middot; Stop ${stop.sequence} of ${total}</div>
         <div class="hero-address">${escapeHtml(stop.address) || 'Address pending'}</div>
+        ${stop.address_raw ? `<div class="hero-address-raw">${escapeHtml(stop.address_raw)}</div>` : ''}
         <div class="hero-meta">
             ${stop.quantity} cyl &middot; ${stop.weight_kg} kg${distInfo ? ` &middot; ${distInfo}` : ''}
         </div>
         ${refInfo}
         ${stop.notes ? `<div class="hero-notes">${escapeHtml(stop.notes)}</div>` : ''}
         <div class="hero-actions">
-            <button class="btn btn-navigate" onclick="navigateTo(${stop.latitude}, ${stop.longitude})">
+            <button class="btn btn-navigate" onclick="navigateTo(${stop.latitude}, ${stop.longitude}, decodeURIComponent('${encodeURIComponent(stop.address || '')}'))">
                 &#x2316; Navigate
             </button>
             <div class="btn-row">
@@ -1396,6 +1416,7 @@ function renderCompactCard(stop) {
         </div>
         <div class="stop-info">
             <div class="stop-address">${escapeHtml(stop.address) || 'Address pending'}</div>
+            ${stop.address_raw ? `<div class="compact-address-raw">${escapeHtml(stop.address_raw)}</div>` : ''}
             <div class="stop-meta">
                 ${stop.quantity} cyl &middot; ${stop.weight_kg} kg
                 ${stop.distance_from_prev_km > 0 ? ` &middot; ${stop.distance_from_prev_km} km` : ''}
@@ -1509,10 +1530,22 @@ function showTab(tab) {
 // ============================================================
 // Navigation — open Google Maps directions
 // ============================================================
-function navigateTo(lat, lon) {
+function navigateTo(lat, lon, address) {
     // Opens Google Maps navigation in a new tab/app
     // This works on Android and iOS, launching the Maps app if installed
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`, '_blank');
+    // Coordinates are primary (precise routing). Address text is fallback only.
+    let url;
+    if (lat && lon && lat !== 0 && lon !== 0) {
+        // Coordinates for precise routing (primary)
+        url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`;
+    } else if (address) {
+        // Fallback: use address text if coordinates unavailable
+        url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}&travelmode=driving`;
+    } else {
+        // No navigation possible
+        return;
+    }
+    window.open(url, '_blank');
 }
 
 // ============================================================
