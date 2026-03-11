@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
 status: executing
-stopped_at: Completed 11-02-PLAN.md
-last_updated: "2026-03-11T11:12:22Z"
-last_activity: 2026-03-11 -- Completed Plan 11-02 (address_display bug fix + address_original)
+stopped_at: Completed 11-03-PLAN.md (Phase 11 complete)
+last_updated: "2026-03-11T11:17:55Z"
+last_activity: 2026-03-11 -- Completed Plan 11-03 (dual-address display + coordinate navigation)
 progress:
   total_phases: 11
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 67
+  completed_plans: 3
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ## Current Position
 
-Phase: 11 (1 of 5 in v2.2) -- Foundation Fixes
-Plan: 03 of 3
-Status: Executing
-Last activity: 2026-03-11 -- Completed Plan 11-02 (address_display bug fix + address_original)
+Phase: 11 (1 of 5 in v2.2) -- Foundation Fixes (COMPLETE)
+Plan: 3 of 3 (all complete)
+Status: Phase Complete
+Last activity: 2026-03-11 -- Completed Plan 11-03 (dual-address display + coordinate navigation)
 
-Progress: [||||||....] 67%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Progress: [||||||....] 67%
 | v2.2 Address Preprocessing | 5 (11-15) | TBD | 2026-03-10 -> ... |
 | Phase 11 P01 | 11min | 3 tasks | 2 files |
 | Phase 11 P02 | 10min | 2 tasks | 14 files |
+| Phase 11 P03 | 2min | 2 tasks | 1 file |
 
 ## Accumulated Context
 
@@ -68,6 +69,9 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 - Phase 11-02: address_display sourced from order.address_raw (not location.address_text) at both bug sites
 - Phase 11-02: API field "address_raw" maps to Python model "address_original" to avoid naming confusion
 - Phase 11-02: Non-CDCMS uploads backfill address_original = address_raw (no nulls)
+- Phase 11-03: Used encodeURIComponent/decodeURIComponent for safe address passing in onclick attributes
+- Phase 11-03: Coordinates are primary navigation destination; address text used only as fallback when coords missing/zero
+- Phase 11-03: Raw CDCMS text uses monospace font at reduced opacity to visually distinguish from cleaned address
 
 ### Pending Todos
 
@@ -81,6 +85,6 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 
 ## Session Continuity
 
-Last session: 2026-03-11T11:12:22Z
-Stopped at: Completed 11-02-PLAN.md
+Last session: 2026-03-11T11:17:55Z
+Stopped at: Completed 11-03-PLAN.md (Phase 11 complete)
 Resume file: None
