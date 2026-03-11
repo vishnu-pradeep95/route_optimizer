@@ -643,3 +643,149 @@ class TestRuntimeRevalidation:
 
         assert response.status_code == 200
         assert response.headers.get("X-License-Status") == "grace"
+
+
+# =============================================================================
+# Renewal enforcement tests (Phase 9 additions)
+# =============================================================================
+
+
+class TestRenewalEnforcement:
+    """Tests for renewal.key processing in enforce().
+
+    enforce() checks for renewal.key before calling validate_license().
+    If renewal.key exists and is valid, it becomes the primary license.
+    If invalid, falls through to normal license.key validation.
+    """
+
+    def test_enforce_loads_renewal_key_when_present(self, monkeypatch):
+        """enforce() loads renewal.key when present and valid, sets state from renewal info."""
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", False)
+
+        app = FastAPI()
+        renewal_info = _make_license_info(LicenseStatus.VALID, customer_id="renewed-customer")
+        normal_info = _make_license_info(LicenseStatus.VALID, customer_id="original-customer")
+
+        with patch.object(enf_mod, "_try_load_renewal_key", return_value=(renewal_info, "LPG-RENEWAL-KEY")), \
+             patch.object(enf_mod, "_handle_post_renewal") as mock_handle, \
+             patch("core.licensing.enforcement.validate_license", return_value=normal_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enf_mod.enforce(app)
+
+        # State should reflect the renewal, not the original license
+        assert license_manager._license_state.customer_id == "renewed-customer"
+        mock_handle.assert_called_once_with("LPG-RENEWAL-KEY")
+
+    def test_enforce_ignores_missing_renewal_key(self, monkeypatch):
+        """enforce() proceeds with normal validate_license() when no renewal.key exists."""
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", False)
+
+        app = FastAPI()
+        normal_info = _make_license_info(LicenseStatus.VALID, customer_id="normal-customer")
+
+        with patch.object(enf_mod, "_try_load_renewal_key", return_value=(None, None)), \
+             patch("core.licensing.enforcement.validate_license", return_value=normal_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enf_mod.enforce(app)
+
+        # State should reflect the normal license
+        assert license_manager._license_state.customer_id == "normal-customer"
+
+    def test_enforce_fallback_on_invalid_renewal_key(self, monkeypatch):
+        """enforce() falls through to normal validation when renewal.key is invalid."""
+        import core.licensing.enforcement as enf_mod
+        monkeypatch.setattr(enf_mod, "_is_dev_mode", False)
+
+        app = FastAPI()
+        normal_info = _make_license_info(LicenseStatus.VALID, customer_id="fallback-customer")
+
+        # _try_load_renewal_key returns (None, None) for invalid keys
+        with patch.object(enf_mod, "_try_load_renewal_key", return_value=(None, None)), \
+             patch("core.licensing.enforcement.validate_license", return_value=normal_info), \
+             patch("core.licensing.enforcement.verify_integrity", return_value=(True, [])):
+            enf_mod.enforce(app)
+
+        assert license_manager._license_state.customer_id == "fallback-customer"
+
+
+class TestTryLoadRenewalKey:
+    """Tests for _try_load_renewal_key() helper function."""
+
+    def test_returns_valid_renewal_info(self, monkeypatch):
+        """_try_load_renewal_key() returns (LicenseInfo, key) for a valid renewal.key."""
+        import core.licensing.enforcement as enf_mod
+
+        renewal_info = _make_license_info(LicenseStatus.VALID, customer_id="renewal-test")
+
+        with patch("builtins.open", MagicMock(return_value=MagicMock(
+            __enter__=MagicMock(return_value=MagicMock(read=MagicMock(return_value="LPG-VALID-KEY\n"))),
+            __exit__=MagicMock(return_value=False),
+        ))), \
+             patch("core.licensing.enforcement.validate_license", return_value=renewal_info):
+            info, key_content = enf_mod._try_load_renewal_key()
+
+        assert info is not None
+        assert info.customer_id == "renewal-test"
+        assert key_content == "LPG-VALID-KEY"
+
+    def test_returns_none_when_no_file(self):
+        """_try_load_renewal_key() returns (None, None) when no renewal.key file exists."""
+        import core.licensing.enforcement as enf_mod
+
+        with patch("builtins.open", side_effect=FileNotFoundError()):
+            info, key_content = enf_mod._try_load_renewal_key()
+
+        assert info is None
+        assert key_content is None
+
+    def test_returns_none_for_invalid_renewal_key(self, monkeypatch):
+        """_try_load_renewal_key() returns (None, None) when renewal.key content is invalid."""
+        import core.licensing.enforcement as enf_mod
+
+        invalid_info = _make_license_info(LicenseStatus.INVALID, customer_id="bad-renewal")
+
+        with patch("builtins.open", MagicMock(return_value=MagicMock(
+            __enter__=MagicMock(return_value=MagicMock(read=MagicMock(return_value="LPG-BAD-KEY\n"))),
+            __exit__=MagicMock(return_value=False),
+        ))), \
+             patch("core.licensing.enforcement.validate_license", return_value=invalid_info):
+            info, key_content = enf_mod._try_load_renewal_key()
+
+        assert info is None
+        assert key_content is None
+
+
+class TestRenewalFileHandling:
+    """Tests for _handle_post_renewal() -- file replacement after successful renewal."""
+
+    def test_post_renewal_replaces_license_key(self, tmp_path):
+        """_handle_post_renewal() writes key content to license.key and deletes renewal.key."""
+        import core.licensing.enforcement as enf_mod
+
+        license_file = tmp_path / "license.key"
+        renewal_file = tmp_path / "renewal.key"
+        license_file.write_text("OLD-KEY")
+        renewal_file.write_text("NEW-KEY")
+
+        with patch.object(enf_mod, "_LICENSE_KEY_PATHS", [str(license_file)]), \
+             patch.object(enf_mod, "_RENEWAL_KEY_PATHS", [str(renewal_file)]):
+            enf_mod._handle_post_renewal("NEW-RENEWAL-KEY-CONTENT")
+
+        assert license_file.read_text() == "NEW-RENEWAL-KEY-CONTENT"
+        assert not renewal_file.exists()
+
+    def test_post_renewal_handles_readonly_gracefully(self, tmp_path, caplog):
+        """_handle_post_renewal() handles OSError on write gracefully (warning, no crash)."""
+        import logging
+        import core.licensing.enforcement as enf_mod
+
+        with patch.object(enf_mod, "_LICENSE_KEY_PATHS", ["/nonexistent/path/license.key"]), \
+             patch.object(enf_mod, "_RENEWAL_KEY_PATHS", ["/nonexistent/path/renewal.key"]), \
+             caplog.at_level(logging.WARNING, logger="core.licensing.enforcement"):
+            # Should not raise -- best-effort file handling
+            enf_mod._handle_post_renewal("SOME-KEY-CONTENT")
+
+        # Should log warnings about the failures (not crash)
+        # The warning is about failing to write, not about the renewal itself
