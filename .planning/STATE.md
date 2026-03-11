@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
 status: completed
-stopped_at: Phase 8 context gathered
-last_updated: "2026-03-11T01:31:09.556Z"
-last_activity: 2026-03-10 -- Phase 7 complete (enforcement module)
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-03-11T01:56:52Z"
+last_activity: 2026-03-11 -- Plan 08-02 complete (middleware revalidation wiring)
 progress:
   total_phases: 6
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 58
+  completed_phases: 4
+  total_plans: 12
+  completed_plans: 9
+  percent: 75
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ## Current Position
 
-Phase: 8 -- Runtime Protection
-Plan: 1 of 2 complete
-Status: In progress
-Last activity: 2026-03-11 -- Plan 08-01 complete (re-validation + state guard)
+Phase: 8 -- Runtime Protection (COMPLETE)
+Plan: 2 of 2 complete
+Status: Phase complete
+Last activity: 2026-03-11 -- Plan 08-02 complete (middleware revalidation wiring)
 
-Progress: [██████░░░░] 62% (8/12 plans across 6 phases)
+Progress: [████████░░] 75% (9/12 plans across 6 phases)
 
 ## Performance Metrics
 
@@ -77,6 +77,10 @@ Progress: [██████░░░░] 62% (8/12 plans across 6 phases)
 - Phase 8-01: Dev mode skip uses same `not _INTEGRITY_MANIFEST` pattern as verify_integrity() and enforce()
 - Phase 8-01: dataclasses.replace() preserves customer_id/fingerprint/expires_at during state transitions
 
+- Phase 8-02: maybe_revalidate() not wrapped in try/except -- SystemExit must propagate for graceful shutdown
+- Phase 8-02: maybe_revalidate() called for ALL requests including /health -- counter increments consistently
+- Phase 8-02: Status re-read placed immediately after maybe_revalidate() before any branching logic
+
 See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase details per milestone.
 
 ### Pending Todos
@@ -113,9 +117,10 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 | 07-01 | Enforcement foundation | 4min | 2 | 5 |
 | 07-02 | Enforcement wiring & manifest | 3min | 2 | 2 |
 | 08-01 | Re-validation + state guard | 4min | 2 | 3 |
+| 08-02 | Middleware revalidation wiring | 3min | 1 | 2 |
 
 ## Session Continuity
 
-Last session: 2026-03-11T01:51:05Z
-Stopped at: Completed 08-01-PLAN.md
-Resume file: .planning/milestones/v2.1-phases/08-api-dead-code-hygiene/08-02-PLAN.md
+Last session: 2026-03-11T01:56:52Z
+Stopped at: Completed 08-02-PLAN.md (Phase 8 complete)
+Resume file: Next phase
