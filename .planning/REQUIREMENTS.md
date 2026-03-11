@@ -9,7 +9,7 @@ Requirements for v2.1 Licensing & Distribution Security. Each maps to roadmap ph
 
 ### Enforcement Hardening
 
-- [ ] **ENF-01**: Dev-mode code stripped from distributed builds (no ENVIRONMENT=development bypass exists in tarball)
+- [x] **ENF-01**: Dev-mode code stripped from distributed builds (no ENVIRONMENT=development bypass exists in tarball)
 - [x] **ENF-02**: Licensing module compiled to native .so via Cython (replaces decompilable .pyc)
 - [x] **ENF-03**: Enforcement logic lives in compiled module with single `enforce(app)` entry point (main.py has no inline enforcement)
 - [x] **ENF-04**: HMAC derivation seed rotated (old .pyc seed is compromised)
@@ -17,7 +17,7 @@ Requirements for v2.1 Licensing & Distribution Security. Each maps to roadmap ph
 ### Fingerprinting
 
 - [x] **FPR-01**: Machine fingerprint uses /etc/machine-id + /proc/cpuinfo CPU model (replaces container_id + MAC)
-- [ ] **FPR-02**: Docker Compose mounts /etc/machine-id read-only into API container
+- [x] **FPR-02**: Docker Compose mounts /etc/machine-id read-only into API container
 - [x] **FPR-03**: get_machine_id.py updated to collect new fingerprint signals
 
 ### Runtime Protection
@@ -72,12 +72,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENF-01 | Phase 6, Phase 11 | Pending |
+| ENF-01 | Phase 6, Phase 11 | Complete |
 | ENF-02 | Phase 6 | Complete |
 | ENF-03 | Phase 7 | Complete |
 | ENF-04 | Phase 6 | Complete |
 | FPR-01 | Phase 5 | Complete |
-| FPR-02 | Phase 5, Phase 11 | Pending |
+| FPR-02 | Phase 5, Phase 11 | Complete |
 | FPR-03 | Phase 5 | Complete |
 | RTP-01 | Phase 7 | Complete |
 | RTP-02 | Phase 8 | Complete |
@@ -86,7 +86,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LIC-02 | Phase 9 | Complete |
 | LIC-03 | Phase 9 | Complete |
 | BLD-01 | Phase 6 | Complete |
-| BLD-02 | Phase 6, Phase 11 | Pending |
+| BLD-02 | Phase 6, Phase 11 | Complete |
 | BLD-03 | Phase 6 | Complete |
 | DOC-01 | Phase 10 | Complete |
 | DOC-02 | Phase 10 | Complete |
@@ -99,4 +99,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-10*
-*Last updated: 2026-03-11 after gap closure phase creation*
+*Last updated: 2026-03-11 after re-audit (Phase 11 gaps verified closed)*
