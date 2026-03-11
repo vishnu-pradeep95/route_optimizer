@@ -176,12 +176,11 @@ Plans:
   2. `docs/LICENSING.md` documents the new fingerprint formula, renewal workflow, integrity checking, and periodic re-validation
   3. `docs/SETUP.md` and `docs/ERROR-MAP.md` are updated with all new error messages and configuration changes from v2.1
   4. A customer migration document exists with step-by-step instructions for transitioning from the old fingerprint/HMAC to the new one (covering the breaking change)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 10-01: TBD
-- [ ] 10-02: TBD
-- [ ] 10-03: TBD
+- [ ] 10-01-PLAN.md — E2E security pipeline tests: REVALIDATION_INTERVAL env var, Docker Compose services, Playwright security-pipeline.spec.ts, CI job
+- [ ] 10-02-PLAN.md — Documentation rewrite: LICENSING.md from scratch, ERROR-MAP.md + SETUP.md + MIGRATION.md updates
 
 ## Progress
 
@@ -224,7 +223,7 @@ Phases execute in numeric order: 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 7. Enforcement Module | v2.1 | 0/2 | Not started | - |
 | 8. Runtime Protection | v2.1 | 0/2 | Not started | - |
 | 9. License Management | v2.1 | 0/2 | Not started | - |
-| 10. End-to-End Validation | v2.1 | 0/? | Not started | - |
+| 10. End-to-End Validation | v2.1 | 0/2 | Not started | - |
 
 ---
 *Full phase details archived in `.planning/milestones/`*
