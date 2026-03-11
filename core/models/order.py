@@ -58,6 +58,11 @@ class Order(BaseModel):
     address_raw: str = Field(
         ..., description="Original address text from source system (CDCMS etc.)"
     )
+    address_original: str | None = Field(
+        default=None,
+        description="Completely unprocessed address text from source system (CDCMS ConsumerAddress). "
+                    "None for pre-v2.2 orders where original text was not preserved."
+    )
     customer_ref: str = Field(
         ..., description="Pseudonymized customer reference (NOT real name)"
     )

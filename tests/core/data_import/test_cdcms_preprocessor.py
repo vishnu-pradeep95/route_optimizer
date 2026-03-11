@@ -110,7 +110,7 @@ class TestPreprocessCdcms:
         """CDCMS exports are tab-separated — preprocessor must handle this."""
         df = preprocess_cdcms(cdcms_tsv_file, area_suffix="")
         assert len(df) == 5
-        assert list(df.columns) == ["order_id", "address", "quantity", "area_name", "delivery_man"]
+        assert list(df.columns) == ["order_id", "address", "quantity", "area_name", "delivery_man", "address_original"]
 
     def test_order_ids_preserved(self, cdcms_tsv_file: Path):
         """OrderNo values should appear as order_id without modification."""
@@ -157,7 +157,7 @@ class TestPreprocessCdcms:
         """Filtering with no matches returns empty DataFrame with correct columns."""
         df = preprocess_cdcms(cdcms_tsv_file, filter_area="NONEXISTENT")
         assert len(df) == 0
-        assert list(df.columns) == ["order_id", "address", "quantity", "area_name", "delivery_man"]
+        assert list(df.columns) == ["order_id", "address", "quantity", "area_name", "delivery_man", "address_original"]
 
     def test_file_not_found_raises(self):
         """Missing file should raise FileNotFoundError."""

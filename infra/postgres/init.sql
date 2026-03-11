@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS orders (
     customer_ref        VARCHAR(50),                    -- pseudonymized customer ID
     address_raw         TEXT,                           -- raw address text from CSV
     address_display     VARCHAR(255),                   -- cleaned address for driver
+    address_original    TEXT,                           -- completely unprocessed CDCMS text
     location            geometry(Point, 4326),          -- PostGIS point (lon, lat)
     weight_kg           REAL NOT NULL,
     quantity            INTEGER NOT NULL DEFAULT 1,
@@ -142,6 +143,7 @@ CREATE TABLE IF NOT EXISTS route_stops (
     sequence                    INTEGER NOT NULL,           -- 1-based stop order
     location                    geometry(Point, 4326),
     address_display             VARCHAR(255),
+    address_original            TEXT,
     distance_from_prev_km       REAL DEFAULT 0.0,
     duration_from_prev_minutes  REAL DEFAULT 0.0,
     weight_kg                   REAL DEFAULT 0.0,

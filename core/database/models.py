@@ -184,6 +184,7 @@ class OrderDB(Base):
     customer_ref: Mapped[str | None] = mapped_column(String(50))
     address_raw: Mapped[str | None] = mapped_column(Text)
     address_display: Mapped[str | None] = mapped_column(String(255))
+    address_original: Mapped[str | None] = mapped_column(Text)
     # PostGIS point — nullable because some orders may not be geocoded yet
     location = mapped_column(Geometry("POINT", srid=4326), nullable=True)
     weight_kg: Mapped[float] = mapped_column(Float, nullable=False)
@@ -283,6 +284,7 @@ class RouteStopDB(Base):
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     location = mapped_column(Geometry("POINT", srid=4326), nullable=True)
     address_display: Mapped[str | None] = mapped_column(String(255))
+    address_original: Mapped[str | None] = mapped_column(Text)
     distance_from_prev_km: Mapped[float] = mapped_column(Float, default=0.0)
     duration_from_prev_minutes: Mapped[float] = mapped_column(Float, default=0.0)
     weight_kg: Mapped[float] = mapped_column(Float, default=0.0)

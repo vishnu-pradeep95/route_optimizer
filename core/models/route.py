@@ -45,6 +45,10 @@ class RouteStop(BaseModel):
     order_id: str
     location: Location
     address_display: str = ""
+    address_original: str | None = Field(
+        default=None,
+        description="Unprocessed address from source system for driver reference"
+    )
     sequence: int = Field(..., ge=1)
     estimated_arrival: datetime | None = None
     estimated_departure: datetime | None = None

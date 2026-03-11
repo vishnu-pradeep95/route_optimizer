@@ -242,7 +242,7 @@ def preprocess_cdcms(
     if df.empty:
         logger.warning("No orders remain after filtering — check your filters.")
         return pd.DataFrame(
-            columns=["order_id", "address", "quantity", "area_name", "delivery_man"]
+            columns=["order_id", "address", "quantity", "area_name", "delivery_man", "address_original"]
         )
 
     # Step 6: Extract and rename columns to match CsvImporter expectations
@@ -261,6 +261,9 @@ def preprocess_cdcms(
             # and filtering, but not consumed by CsvImporter directly.
             "area_name": df[CDCMS_COL_AREA].str.strip().str.title(),
             "delivery_man": df[CDCMS_COL_DELIVERY_MAN].str.strip(),
+            # Completely unprocessed CDCMS ConsumerAddress text, only stripped.
+            # Preserved so the API can expose both cleaned and raw address forms.
+            "address_original": df[CDCMS_COL_ADDRESS].str.strip(),
         }
     )
 

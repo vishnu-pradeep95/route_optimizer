@@ -275,7 +275,8 @@ class VroomAdapter:
                     RouteStop(
                         order_id=order.order_id,
                         location=order.location,
-                        address_display=order.location.address_text or order.address_raw,
+                        address_display=order.address_raw,
+                        address_original=order.address_original,
                         sequence=sequence,
                         distance_from_prev_km=leg_distance_m / 1000.0,
                         duration_from_prev_minutes=(

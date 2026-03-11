@@ -262,6 +262,7 @@ class TestRoutesEndpoints:
         mock_stop.order.order_id = "ORD-001"
         mock_stop.location = from_shape(Point(75.5700, 11.5950), srid=4326)
         mock_stop.address_display = "Vatakara Bus Stand"
+        mock_stop.address_original = None
         mock_stop.sequence = 1
         mock_stop.distance_from_prev_km = 2.5
         mock_stop.duration_from_prev_minutes = 5.0
@@ -2431,6 +2432,7 @@ class TestGoogleMapsRouteEndpoint:
             mock_stop.order.order_id = f"ORD-{i:03d}"
             mock_stop.location = from_shape(Point(75.58 + i * 0.01, 11.62 + i * 0.01), srid=4326)
             mock_stop.address_display = f"Stop {i + 1}"
+            mock_stop.address_original = None
             mock_stop.sequence = i + 1
             mock_stop.distance_from_prev_km = 1.0
             mock_stop.duration_from_prev_minutes = 3.0
@@ -2515,6 +2517,7 @@ class TestQrSheetEndpoint:
             mock_stop.order.order_id = f"ORD-{i:03d}"
             mock_stop.location = from_shape(Point(75.58 + i * 0.01, 11.62 + i * 0.01), srid=4326)
             mock_stop.address_display = f"Stop {i + 1}"
+            mock_stop.address_original = None
             mock_stop.sequence = i + 1
             mock_stop.distance_from_prev_km = 1.0
             mock_stop.duration_from_prev_minutes = 3.0
@@ -2584,6 +2587,7 @@ class TestQrSheetEndpoint:
         mock_stop.order.order_id = "ORD-XSS"
         mock_stop.location = from_shape(Point(75.58, 11.62), srid=4326)
         mock_stop.address_display = "Test Stop"
+        mock_stop.address_original = None
         mock_stop.sequence = 1
         mock_stop.distance_from_prev_km = 1.0
         mock_stop.duration_from_prev_minutes = 3.0

@@ -339,6 +339,12 @@ class CsvImporter:
         # --- Notes ---
         notes = self._get_field(row, self.mapping.notes, default="")
 
+        # --- Address original: unprocessed source text (CDCMS ConsumerAddress) ---
+        # For CDCMS uploads, this comes from the preprocessor's address_original column.
+        # For standard CSV uploads, this column won't exist and defaults to empty string -> None.
+        address_original_raw = self._get_field(row, "address_original", default="")
+        address_original = address_original_raw if address_original_raw else None
+
         # --- Location: only if lat/lon columns exist and have values ---
         location = self._resolve_location(row)
 
@@ -350,6 +356,7 @@ class CsvImporter:
             order_id=order_id,
             location=location,
             address_raw=address_raw,
+            address_original=address_original,
             customer_ref=customer_ref,
             weight_kg=weight_kg,
             quantity=quantity,

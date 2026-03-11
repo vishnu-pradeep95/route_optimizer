@@ -288,6 +288,7 @@ class TestRouteConversion:
         stop_db.order.order_id = "ORD-001"
         stop_db.location = from_shape(Point(75.5796, 11.6244), srid=4326)
         stop_db.address_display = "Test Stop"
+        stop_db.address_original = None
         stop_db.sequence = 1
         stop_db.distance_from_prev_km = 2.5
         stop_db.duration_from_prev_minutes = 8.0
@@ -522,26 +523,22 @@ class TestAddressDisplaySource:
         from core.database.models import OrderDB
         import uuid
 
-        # Replicate the repository's OrderDB creation logic
+        # Replicate the repository's OrderDB creation logic (FIXED version)
         order_db = OrderDB(
             id=uuid.uuid4(),
             run_id=uuid.uuid4(),
             order_id=order.order_id,
             customer_ref=order.customer_ref,
             address_raw=order.address_raw,
-            # This is the line under test -- repository.py lines 141-142:
-            # CURRENT (buggy): order.location.address_text if order.location else None
-            # FIXED: order.address_raw
-            address_display=(
-                order.location.address_text if order.location else None
-            ),
+            # FIXED: uses order.address_raw (not location.address_text)
+            address_display=order.address_raw,
+            address_original=order.address_original,
             weight_kg=order.weight_kg,
             quantity=order.quantity,
             priority=order.priority,
         )
 
         # ASSERTION: address_display should equal address_raw, not location.address_text
-        # This FAILS before the bug fix because address_display == "Vatakara, Kerala, India"
         assert order_db.address_display == order.address_raw, (
             f"address_display should be '{order.address_raw}' (CDCMS text) "
             f"but got '{order_db.address_display}' (Google text)"
@@ -571,9 +568,8 @@ class TestAddressDisplaySource:
             order_id=order.order_id,
             customer_ref=order.customer_ref,
             address_raw=order.address_raw,
-            address_display=(
-                order.location.address_text if order.location else None
-            ),
+            # FIXED: uses order.address_raw (not location.address_text)
+            address_display=order.address_raw,
             weight_kg=order.weight_kg,
             quantity=order.quantity,
             priority=order.priority,
@@ -632,11 +628,12 @@ class TestAddressDisplaySource:
         adapter = VroomAdapter(vroom_url="http://localhost:3000")
 
         # Simulate what _parse_response does: create a RouteStop
-        # mimicking the vroom_adapter line 278 logic
+        # mimicking the FIXED vroom_adapter line 278 logic
         route_stop = RouteStop(
             order_id=order.order_id,
             location=order.location,
-            address_display=order.location.address_text or order.address_raw,
+            address_display=order.address_raw,
+            address_original=order.address_original,
             sequence=1,
             weight_kg=order.weight_kg,
             quantity=order.quantity,

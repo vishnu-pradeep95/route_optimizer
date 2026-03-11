@@ -952,6 +952,16 @@ async def upload_and_optimize(
             import_result = importer.import_orders(tmp_path)
             orders = import_result.orders
 
+        # Backfill address_original for orders where it wasn't set.
+        # CDCMS uploads: address_original is set by CsvImporter from the preprocessed CSV's
+        #   address_original column (populated by preprocess_cdcms from raw ConsumerAddress).
+        # Standard CSV uploads: the CSV has no address_original column, so CsvImporter
+        #   leaves it as None. For these, the raw and cleaned text are identical, so
+        #   we set address_original = address_raw.
+        for order in orders:
+            if order.address_original is None:
+                order.address_original = order.address_raw
+
         # Step 1a: Convert ImportResult errors/warnings to ImportFailure lists.
         # These track validation-stage failures (bad CSV data caught before geocoding).
         # Geocoding failures are collected separately in step 2 below.
@@ -1390,6 +1400,7 @@ async def list_routes(include_stops: bool = False, session: AsyncSession = Sessi
                             "sequence": stop.sequence,
                             "order_id": stop.order_id,
                             "address": stop.address_display,
+                            "address_raw": stop.address_original,
                             "latitude": stop.location.latitude,
                             "longitude": stop.location.longitude,
                             "weight_kg": stop.weight_kg,
@@ -1470,6 +1481,7 @@ async def get_driver_route(vehicle_id: str, session: AsyncSession = SessionDep):
                 "sequence": stop.sequence,
                 "order_id": stop.order_id,
                 "address": stop.address_display,
+                "address_raw": stop.address_original,
                 "latitude": stop.location.latitude,
                 "longitude": stop.location.longitude,
                 "weight_kg": stop.weight_kg,
