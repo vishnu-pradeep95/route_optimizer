@@ -580,3 +580,133 @@ class TestColumnMapping:
         assert mapping.order_id == "order_id"
         assert mapping.address == "address"
         assert mapping.quantity == "quantity"
+
+
+# =============================================================================
+# ADDR-05: Dictionary-powered word splitting in full pipeline
+# =============================================================================
+
+
+class TestDictionarySplitting:
+    """Tests for ADDR-05: dictionary-powered word splitting in the full pipeline.
+
+    These tests verify that clean_cdcms_address() correctly splits
+    concatenated place names when the dictionary file is present.
+    The dictionary splitter runs as Step 5.5, before the trailing
+    letter split (Step 6), so it gets first crack at full concatenated
+    tokens.
+    """
+
+    def test_dictionary_split_muttungal_po_balavadi(self):
+        """MUTTUNGALPOBALAVADI should split into three parts via dictionary."""
+        result = clean_cdcms_address("MUTTUNGALPOBALAVADI", area_suffix="")
+        # After dictionary split: MUTTUNGAL PO BALAVADI
+        # After Step 7 PO expansion: MUTTUNGAL P.O. BALAVADI
+        # After title case: Muttungal P.O. Balavadi
+        assert "Muttungal" in result
+        assert "P.O." in result
+        assert "Balavadi" in result
+
+    def test_dictionary_split_preserves_house_number(self):
+        """House numbers before concatenated text should be preserved."""
+        result = clean_cdcms_address("8/542SREESHYLAMMUTTUNGAL-POBALAVADI", area_suffix="")
+        assert result.startswith("8/542")
+        assert "Muttungal" in result
+
+    def test_dictionary_split_rayarangoth_vatakara(self):
+        """Two adjacent place names should be split."""
+        result = clean_cdcms_address("RAYARANGOTHVATAKARA", area_suffix="")
+        assert "Rayarangoth" in result
+        assert "Vatakara" in result
+
+    def test_no_dictionary_file_graceful(self, monkeypatch):
+        """Pipeline works without dictionary file (splitter disabled)."""
+        # Reset the lazy loader so it re-checks for the file
+        import core.data_import.cdcms_preprocessor as mod
+        monkeypatch.setattr(mod, '_splitter_loaded', False)
+        monkeypatch.setattr(mod, '_splitter', None)
+        # Patch Path.exists to return False for dictionary path
+        original_exists = Path.exists
+
+        def mock_exists(self):
+            if 'place_names_vatakara' in str(self):
+                return False
+            return original_exists(self)
+        monkeypatch.setattr(Path, 'exists', mock_exists)
+        # Should still work, just without dictionary splitting
+        result = clean_cdcms_address("MUTTUNGALPOBALAVADI", area_suffix="")
+        assert result  # Non-empty result
+        # Reset splitter state for other tests
+        monkeypatch.setattr(mod, '_splitter_loaded', False)
+        monkeypatch.setattr(mod, '_splitter', None)
+
+    def test_already_spaced_address_unchanged(self):
+        """Addresses with proper spacing should not be mangled by dictionary split."""
+        result = clean_cdcms_address("VALLIKKADU SARAMBI PALLIVATAKARA", area_suffix="")
+        assert "Vallikkadu" in result
+        assert "Sarambi" in result
+        assert "Pallivatakara" in result
+
+    def test_dictionary_split_chorode_east(self):
+        """Compound place name CHORODE EAST should be recognized in concatenated text."""
+        result = clean_cdcms_address("CHORODEEASTPO WEST", area_suffix="")
+        assert "Chorode East" in result
+        assert "P.O." in result
+
+
+# =============================================================================
+# ADDR-04: Dictionary coverage validation
+# =============================================================================
+
+
+class TestDictionaryCoverage:
+    """Tests for ADDR-04: dictionary coverage of CDCMS area names.
+
+    The 80% coverage threshold is a hard gate before Phase 13.
+    """
+
+    def test_dictionary_covers_cdcms_areas(self):
+        """Dictionary must cover >= 80% of distinct area names in sample data."""
+        dict_path = Path("data/place_names_vatakara.json")
+        if not dict_path.exists():
+            pytest.skip("Dictionary file not found")
+
+        sample_path = Path("data/sample_cdcms_export.csv")
+        if not sample_path.exists():
+            pytest.skip("Sample CDCMS export not found")
+
+        import json
+        from rapidfuzz import fuzz
+
+        dictionary = json.loads(dict_path.read_text())
+        entries = dictionary["entries"]
+        dict_names = set()
+        for entry in entries:
+            dict_names.add(entry["name"].upper())
+            for alias in entry.get("aliases", []):
+                dict_names.add(alias.upper())
+
+        # Extract distinct area names from sample CDCMS data
+        df = pd.read_csv(sample_path, sep="\t", dtype=str)
+        area_names = set(df["AreaName"].str.strip().str.upper().unique())
+
+        covered = 0
+        for area in area_names:
+            # Exact match
+            if area in dict_names:
+                covered += 1
+                continue
+            # Fuzzy match at 85% threshold
+            matched = False
+            for dict_name in dict_names:
+                if len(dict_name) >= 4 and fuzz.ratio(area, dict_name) >= 85:
+                    matched = True
+                    break
+            if matched:
+                covered += 1
+
+        coverage = covered / len(area_names) * 100 if area_names else 0
+        assert coverage >= 80, (
+            f"Dictionary coverage is {coverage:.0f}% ({covered}/{len(area_names)} areas). "
+            f"Must be >= 80%. Missing: {area_names - dict_names}"
+        )
