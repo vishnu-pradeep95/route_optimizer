@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
 status: executing
-stopped_at: Completed 13-01-PLAN.md
-last_updated: "2026-03-12T02:17:50.793Z"
-last_activity: 2026-03-12 -- Completed Plan 13-01 (GeocodeValidator with fallback chain)
+stopped_at: Completed 13-02-PLAN.md
+last_updated: "2026-03-12T02:23:46Z"
+last_activity: 2026-03-12 -- Completed Plan 13-02 (Model & cache integration)
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
-  percent: 67
+  completed_plans: 5
+  percent: 80
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 13 (3 of 5 in v2.2) -- Geocode Validation and Fallback Chain
-Plan: 1 of 3
+Plan: 2 of 3
 Status: In Progress
-Last activity: 2026-03-12 -- Completed Plan 13-01 (GeocodeValidator with fallback chain)
+Last activity: 2026-03-12 -- Completed Plan 13-02 (Model & cache integration)
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progress: [███████░░░] 67%
 | Phase 12 P02 | 5min | 2 tasks | 2 files |
 | Phase 12 P03 | 3min | 2 tasks | 2 files |
 | Phase 13 P01 | 3min | 3 tasks | 2 files |
+| Phase 13 P02 | 4min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,9 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 - Phase 12-03: Dictionary splitter runs as Step 5.5 (before trailing letter split), not Step 6.5 -- prevents Step 6 from damaging known place names before dictionary lookup
 - Phase 13-01: Flat 1.0 confidence for all direct in-zone hits (4-tier system, not 7-tier with Google granularity)
 - Phase 13-01: Circuit breaker does not un-trip on success (stateless per batch, resets on new GeocodeValidator instance)
+- Phase 13-02: GeocodingResult.method is plain string (not enum) to avoid import coupling between interfaces and validator
+- Phase 13-02: Validation runs on both cache hits and API calls (user locked decision: always re-validate)
+- Phase 13-02: REQUEST_DENIED tracking only on upstream API calls (not cache hits)
 
 ### Pending Todos
 
@@ -97,6 +101,6 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 
 ## Session Continuity
 
-Last session: 2026-03-12T02:17:50.791Z
-Stopped at: Completed 13-01-PLAN.md
+Last session: 2026-03-12T02:23:46Z
+Stopped at: Completed 13-02-PLAN.md
 Resume file: None
