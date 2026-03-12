@@ -61,6 +61,8 @@ from core.models.location import Location
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from core.geocoding.validator import GeocodeValidator
+
 logger = logging.getLogger(__name__)
 
 
@@ -97,6 +99,7 @@ class CachedGeocoder:
         upstream: Geocoder,
         session: "AsyncSession",
         default_source: str = "google",
+        validator: "GeocodeValidator | None" = None,
     ):
         """Initialize the cached geocoder.
 
@@ -109,25 +112,41 @@ class CachedGeocoder:
             default_source: Source label for new cache entries (e.g., 'google',
                 'latlong_ai'). This tracks which provider geocoded each address,
                 useful for debugging and confidence calibration.
+            validator: Optional GeocodeValidator for zone checking and fallback
+                chain. When provided, every geocode result (cache hit or API
+                call) is validated against the delivery zone. When None,
+                geocode() behaves exactly as before (backward compatible).
         """
         self._upstream = upstream
         self._session = session
         self._source = default_source
+        self._validator = validator
 
         # Track cache stats for this instance's lifetime.
         # Useful for logging after batch operations:
         # "Geocoded 50 addresses: 38 cache hits, 12 API calls"
-        self.stats = {"hits": 0, "misses": 0, "errors": 0}
+        self.stats: dict[str, int] = {
+            "hits": 0,
+            "misses": 0,
+            "errors": 0,
+            "validation_direct": 0,
+            "validation_area_retry": 0,
+            "validation_centroid": 0,
+            "validation_depot": 0,
+        }
 
-    async def geocode(self, address: str) -> GeocodingResult:
+    async def geocode(
+        self, address: str, *, area_name: str | None = None
+    ) -> GeocodingResult:
         """Geocode an address, checking PostGIS cache first.
 
         Flow:
-        1. Normalize address → lookup in geocode_cache table
+        1. Normalize address -> lookup in geocode_cache table
         2. Cache HIT: return Location (hit_count incremented by repo)
         3. Cache MISS: call upstream.geocode()
         4. If upstream succeeds: save to PostGIS cache
-        5. Return result
+        5. If validator provided: validate result against delivery zone
+        6. Return result
 
         The cache lookup is O(1) via the idx_geocode_cache_address index
         (btree on address_norm). The upstream call costs 1 API request
@@ -135,13 +154,21 @@ class CachedGeocoder:
 
         Args:
             address: Free-text address string (e.g., "Near SBI, MG Road, Kochi").
+            area_name: Optional CDCMS area name for geocode validation fallback
+                chain. Only used when a validator is configured. Ignored when
+                validator is None (backward compatible).
 
         Returns:
             GeocodingResult with location (if found) and confidence score.
+            When a validator is configured, confidence and method reflect
+            the validation outcome (direct/area_retry/centroid/depot).
         """
         # Import here to avoid circular imports at module level.
         # repository.py imports from models.py which imports from this package.
         from core.database import repository as repo
+
+        result: GeocodingResult | None = None
+        from_cache = False
 
         # --- Step 1: Check PostGIS cache ---
         try:
@@ -151,14 +178,15 @@ class CachedGeocoder:
             if cached_location is not None:
                 self.stats["hits"] += 1
                 logger.debug("Cache HIT for address: %s", address[:50])
-                return GeocodingResult(
+                result = GeocodingResult(
                     location=cached_location,
                     confidence=cached_location.geocode_confidence or 0.8,
                     formatted_address=cached_location.address_text or address,
                 )
+                from_cache = True
         except Exception as e:
             # Cache lookup failed (DB down, connection error, etc.)
-            # Fall through to upstream — the cache is an optimization,
+            # Fall through to upstream -- the cache is an optimization,
             # not a requirement. Better to pay for an API call than
             # fail the geocoding entirely.
             logger.warning(
@@ -167,45 +195,106 @@ class CachedGeocoder:
                 e,
             )
 
-        # --- Step 2: Cache MISS → call upstream provider ---
-        self.stats["misses"] += 1
-        logger.debug("Cache MISS for address: %s", address[:50])
+        # --- Step 2: Cache MISS -> call upstream provider ---
+        if result is None:
+            self.stats["misses"] += 1
+            logger.debug("Cache MISS for address: %s", address[:50])
 
-        try:
-            result = self._upstream.geocode(address)
-        except Exception as e:
-            self.stats["errors"] += 1
-            logger.error("Upstream geocoding failed for '%s': %s", address[:50], e)
-            return GeocodingResult(
-                location=None,
-                confidence=0.0,
-                raw_response={"error": str(e)},
-            )
-
-        # --- Step 3: Save successful result to cache ---
-        if result.success and result.location:
             try:
-                await repo.save_geocode_cache(
-                    session=self._session,
-                    address_raw=address,
-                    location=result.location,
-                    source=self._source,
-                    confidence=result.confidence,
-                )
-                logger.debug(
-                    "Cached geocode result for '%s' (confidence: %.2f)",
-                    address[:50],
-                    result.confidence,
-                )
+                result = self._upstream.geocode(address)
             except Exception as e:
-                # Cache save failed — log but don't fail the geocoding.
-                # The result is still valid; we'll just miss the cache
-                # next time and re-geocode.
-                logger.warning(
-                    "Failed to cache geocode for '%s': %s", address[:50], e
+                self.stats["errors"] += 1
+                logger.error(
+                    "Upstream geocoding failed for '%s': %s", address[:50], e
                 )
+                return GeocodingResult(
+                    location=None,
+                    confidence=0.0,
+                    raw_response={"error": str(e)},
+                )
+
+            # --- Step 3: Track REQUEST_DENIED / success for circuit breaker ---
+            if self._validator is not None:
+                raw_status = result.raw_response.get("status", "")
+                if raw_status == "REQUEST_DENIED":
+                    self._validator.record_api_denial()
+                elif result.success:
+                    self._validator.record_api_success()
+
+            # --- Step 4: Save successful result to cache ---
+            if result.success and result.location:
+                try:
+                    await repo.save_geocode_cache(
+                        session=self._session,
+                        address_raw=address,
+                        location=result.location,
+                        source=self._source,
+                        confidence=result.confidence,
+                    )
+                    logger.debug(
+                        "Cached geocode result for '%s' (confidence: %.2f)",
+                        address[:50],
+                        result.confidence,
+                    )
+                except Exception as e:
+                    # Cache save failed -- log but don't fail the geocoding.
+                    # The result is still valid; we'll just miss the cache
+                    # next time and re-geocode.
+                    logger.warning(
+                        "Failed to cache geocode for '%s': %s",
+                        address[:50],
+                        e,
+                    )
+
+        # --- Step 5: Validate against delivery zone (if validator configured) ---
+        if self._validator is not None and result.success and result.location:
+            result = self._apply_validation(result, area_name)
 
         return result
+
+    def _apply_validation(
+        self, result: GeocodingResult, area_name: str | None
+    ) -> GeocodingResult:
+        """Validate a geocode result against the delivery zone via the validator.
+
+        Runs the full fallback chain: zone check -> area retry -> centroid -> depot.
+        Returns a new GeocodingResult with validated coordinates, confidence,
+        and method reflecting which fallback level was used.
+
+        Args:
+            result: The geocode result to validate (must have a location).
+            area_name: CDCMS area name for area-name retry (None for standard CSV).
+
+        Returns:
+            New GeocodingResult with validated coordinates and method.
+        """
+        assert self._validator is not None
+        assert result.location is not None
+
+        validation = self._validator.validate(
+            lat=result.location.latitude,
+            lon=result.location.longitude,
+            area_name=area_name,
+            geocoder=self._upstream,
+        )
+
+        # Track validation stats
+        stat_key = f"validation_{validation.method}"
+        if stat_key in self.stats:
+            self.stats[stat_key] += 1
+
+        # If validation changed the coordinates or method, build a new result
+        return GeocodingResult(
+            location=Location(
+                latitude=validation.latitude,
+                longitude=validation.longitude,
+                address_text=result.location.address_text,
+            ),
+            confidence=validation.confidence,
+            formatted_address=result.formatted_address,
+            raw_response=result.raw_response,
+            method=validation.method,
+        )
 
     async def geocode_batch(self, addresses: list[str]) -> list[GeocodingResult]:
         """Geocode multiple addresses with cache-first strategy.
