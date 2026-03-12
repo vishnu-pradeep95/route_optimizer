@@ -208,9 +208,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 12-01-PLAN.md -- Build place name dictionary from OSM Overpass + India Post APIs + manual seeds
-- [ ] 12-02-PLAN.md -- TDD: AddressSplitter class with fuzzy matching for transliteration variants
-- [ ] 12-03-PLAN.md -- Wire splitter into clean_cdcms_address() pipeline and validate coverage gate
+- [x] 12-01-PLAN.md -- Build place name dictionary from OSM Overpass + India Post APIs + manual seeds
+- [x] 12-02-PLAN.md -- TDD: AddressSplitter class with fuzzy matching for transliteration variants
+- [x] 12-03-PLAN.md -- Wire splitter into clean_cdcms_address() pipeline and validate coverage gate
 
 ### Phase 13: Geocode Validation and Fallback Chain
 **Goal**: Every geocoded delivery address is validated against the 30km delivery zone, with automatic fallback to area-level coordinates when Google returns an out-of-zone result
@@ -222,11 +222,12 @@ Plans:
   3. A stop that geocodes correctly within the 30km zone on the first try receives a confidence score of 1.0
   4. Three consecutive Google API `REQUEST_DENIED` responses activate a circuit breaker that stops retries for the remainder of the batch
   5. The CachedGeocoder accepts the validator as an optional parameter and works identically to before when no validator is provided (backward compatible)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 13-01: TBD
-- [ ] 13-02: TBD
+- [ ] 13-01-PLAN.md -- TDD: GeocodeValidator class with zone check, fallback chain, and circuit breaker
+- [ ] 13-02-PLAN.md -- GeocodingResult method field, OrderDB migration, CachedGeocoder validator integration
+- [ ] 13-03-PLAN.md -- Wire validator into upload pipeline with area_name mapping and confidence propagation
 
 ### Phase 14: API Confidence Fields and Driver PWA Badge
 **Goal**: Drivers can see at a glance which delivery stops have approximate locations, so they know when to expect navigation imprecision
@@ -276,7 +277,7 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15
 | 9. Config Consolidation | v1.2 | 1/1 | Complete | 2026-03-04 |
 | 10. Driver PWA Hardening | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 11. Dashboard Cleanup | v1.2 | 2/2 | Complete | 2026-03-04 |
-| 12. Data Wiring & Validation | 3/3 | Complete    | 2026-03-12 | 2026-03-04 |
+| 12. Data Wiring & Validation | v1.2 | 3/3 | Complete | 2026-03-04 |
 | 13. Bootstrap Installation | v1.3 | 1/1 | Complete | 2026-03-05 |
 | 14. Daily Startup | v1.3 | 2/2 | Complete | 2026-03-05 |
 | 15. CSV Documentation | v1.3 | 1/1 | Complete | 2026-03-05 |
@@ -300,8 +301,8 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15
 | 9. License Management | v2.1 | 0/? | Not started | - |
 | 10. End-to-End Validation | v2.1 | 0/? | Not started | - |
 | 11. Foundation Fixes | v2.2 | 3/3 | Complete | 2026-03-11 |
-| 12. Place Name Dictionary and Address Splitter | v2.2 | 0/3 | Planned | - |
-| 13. Geocode Validation and Fallback Chain | v2.2 | 0/? | Not started | - |
+| 12. Place Name Dictionary and Address Splitter | v2.2 | 3/3 | Complete | 2026-03-12 |
+| 13. Geocode Validation and Fallback Chain | v2.2 | 0/3 | Planned | - |
 | 14. API Confidence Fields and Driver PWA Badge | v2.2 | 0/? | Not started | - |
 | 15. Integration Testing and Accuracy Metrics | v2.2 | 0/? | Not started | - |
 
