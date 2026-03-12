@@ -93,7 +93,7 @@
 
 </details>
 
-### 🚧 v2.2 Address Preprocessing Pipeline (In Progress)
+### v2.2 Address Preprocessing Pipeline (In Progress)
 
 **Milestone Goal:** Fix wrong route locations caused by concatenated CDCMS addresses and unvalidated geocoding results -- every address must geocode within the delivery zone or be flagged as approximate.
 
@@ -191,9 +191,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 11-01-PLAN.md -- TDD: Word splitting regex and abbreviation step reorder in clean_cdcms_address()
-- [ ] 11-02-PLAN.md -- Backend data flow fix: address_original column, address_display bug fix, API response update
-- [ ] 11-03-PLAN.md -- Driver PWA dual-address display and coordinate-based navigation
+- [x] 11-01-PLAN.md -- TDD: Word splitting regex and abbreviation step reorder in clean_cdcms_address()
+- [x] 11-02-PLAN.md -- Backend data flow fix: address_original column, address_display bug fix, API response update
+- [x] 11-03-PLAN.md -- Driver PWA dual-address display and coordinate-based navigation
 
 ### Phase 12: Place Name Dictionary and Address Splitter
 **Goal**: A domain-specific Kerala place name dictionary powers intelligent word splitting of concatenated CDCMS text, correctly separating addresses like `MUTTUNGALPOBALAVADI` into `MUTTUNGAL P.O. BALAVADI`
@@ -205,12 +205,12 @@ Plans:
   3. Running the build script (`scripts/build_place_dictionary.py`) regenerates the dictionary from OSM Overpass and India Post APIs
   4. Concatenated address text containing known place names is split at place name boundaries (e.g., `MUTTUNGALPOBALAVADI` -> `MUTTUNGAL P.O. BALAVADI`)
   5. Fuzzy matching handles transliteration variants (e.g., `VATAKARA` / `VADAKARA`) without false positives on short names (length-dependent thresholds prevent `EDAPPAL` matching `EDAPALLI`)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 12-01: TBD
-- [ ] 12-02: TBD
-- [ ] 12-03: TBD
+- [ ] 12-01-PLAN.md -- Build place name dictionary from OSM Overpass + India Post APIs + manual seeds
+- [ ] 12-02-PLAN.md -- TDD: AddressSplitter class with fuzzy matching for transliteration variants
+- [ ] 12-03-PLAN.md -- Wire splitter into clean_cdcms_address() pipeline and validate coverage gate
 
 ### Phase 13: Geocode Validation and Fallback Chain
 **Goal**: Every geocoded delivery address is validated against the 30km delivery zone, with automatic fallback to area-level coordinates when Google returns an out-of-zone result
@@ -275,7 +275,7 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15
 | 8. API Dead Code & Hygiene | v1.2 | 2/2 | Complete | 2026-03-03 |
 | 9. Config Consolidation | v1.2 | 1/1 | Complete | 2026-03-04 |
 | 10. Driver PWA Hardening | v1.2 | 2/2 | Complete | 2026-03-04 |
-| 11. Dashboard Cleanup | 3/3 | Complete    | 2026-03-11 | 2026-03-04 |
+| 11. Dashboard Cleanup | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 12. Data Wiring & Validation | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 13. Bootstrap Installation | v1.3 | 1/1 | Complete | 2026-03-05 |
 | 14. Daily Startup | v1.3 | 2/2 | Complete | 2026-03-05 |
@@ -299,8 +299,8 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15
 | 8. Runtime Protection | v2.1 | 0/? | Not started | - |
 | 9. License Management | v2.1 | 0/? | Not started | - |
 | 10. End-to-End Validation | v2.1 | 0/? | Not started | - |
-| 11. Foundation Fixes | v2.2 | 0/3 | Planned | - |
-| 12. Place Name Dictionary and Address Splitter | v2.2 | 0/? | Not started | - |
+| 11. Foundation Fixes | v2.2 | 3/3 | Complete | 2026-03-11 |
+| 12. Place Name Dictionary and Address Splitter | v2.2 | 0/3 | Planned | - |
 | 13. Geocode Validation and Fallback Chain | v2.2 | 0/? | Not started | - |
 | 14. API Confidence Fields and Driver PWA Badge | v2.2 | 0/? | Not started | - |
 | 15. Integration Testing and Accuracy Metrics | v2.2 | 0/? | Not started | - |
