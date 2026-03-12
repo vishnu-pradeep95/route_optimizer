@@ -431,6 +431,7 @@
 
         /* Sequence number badge */
         .stop-number {
+            position: relative;
             width: 44px;
             min-width: 44px;
             display: flex;
@@ -459,6 +460,22 @@
         .compact-card.failed .stop-number-inner {
             border-color: var(--color-danger);
             color: var(--color-danger);
+        }
+
+        /* Phase 14: Approximate location indicators */
+        .approx-dot {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--color-accent);
+            border: 1.5px solid var(--color-surface);
+            z-index: 1;
+        }
+        .approx-badge {
+            margin: 6px 0 2px 0;
         }
 
         /* Stop content */
@@ -1384,6 +1401,7 @@ function renderHeroCard(stop) {
         <div class="hero-label">NEXT DELIVERY &middot; Stop ${stop.sequence} of ${total}</div>
         <div class="hero-address">${escapeHtml(stop.address) || 'Address pending'}</div>
         ${stop.address_raw ? `<div class="hero-address-raw">${escapeHtml(stop.address_raw)}</div>` : ''}
+        ${stop.location_approximate ? '<div class="approx-badge tw:badge tw:badge-warning tw:badge-sm">&#9888; Approx. location</div>' : ''}
         <div class="hero-meta">
             ${stop.quantity} cyl &middot; ${stop.weight_kg} kg${distInfo ? ` &middot; ${distInfo}` : ''}
         </div>
@@ -1413,6 +1431,7 @@ function renderCompactCard(stop) {
     <div class="compact-card ${statusClass}" id="stop-${escapeHtml(stop.order_id)}">
         <div class="stop-number">
             <div class="stop-number-inner">${stop.sequence}</div>
+            ${stop.location_approximate ? '<div class="approx-dot"></div>' : ''}
         </div>
         <div class="stop-info">
             <div class="stop-address">${escapeHtml(stop.address) || 'Address pending'}</div>
@@ -1473,13 +1492,18 @@ function showRouteOnMap() {
         const color = stop.status === 'delivered' ? '#00C853'
             : stop.status === 'failed' ? '#FF3B30' : '#FF9410';
         const textColor = stop.status === 'pending' ? '#000' : '#fff';
+        const isApprox = stop.location_approximate;
+        // Approximate delivered/failed stops get orange dashed border to signal imprecise pin
+        const border = isApprox && stop.status !== 'pending'
+            ? '2.5px dashed #FF9410'
+            : '2px solid rgba(255,255,255,0.9)';
 
         const icon = L.divIcon({
             className: '',
             html: `<div style="background:${color};color:${textColor};width:34px;height:34px;
                 border-radius:50%;display:flex;align-items:center;justify-content:center;
                 font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;
-                border:2px solid rgba(255,255,255,0.9);box-shadow:0 3px 8px rgba(0,0,0,0.5)">
+                border:${border};box-shadow:0 3px 8px rgba(0,0,0,0.5)">
                 ${stop.sequence}</div>`,
             iconSize: [34, 34],
             iconAnchor: [17, 17],
