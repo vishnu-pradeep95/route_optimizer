@@ -83,6 +83,38 @@ _PROTECTED_WORDS = frozenset({
 # defaulting to a single trailing letter.
 _MEANINGFUL_SUFFIXES = frozenset({"PO", "NR", "KB", "NKB"})
 
+# ---------------------------------------------------------------------------
+# Lazy-loaded dictionary splitter (ADDR-05)
+# ---------------------------------------------------------------------------
+
+_splitter: "AddressSplitter | None" = None
+_splitter_loaded: bool = False
+
+
+def _get_splitter() -> "AddressSplitter | None":
+    """Return the cached AddressSplitter instance, loading on first call.
+
+    The dictionary is loaded once on first call and cached for the process
+    lifetime.  This avoids loading the JSON file on module import (which
+    would slow down imports for code paths that never call
+    clean_cdcms_address).  The ``_splitter_loaded`` flag ensures we only
+    attempt loading once, even if the file is missing.
+    """
+    global _splitter, _splitter_loaded
+    if not _splitter_loaded:
+        _splitter_loaded = True
+        dict_path = Path(__file__).parent.parent.parent / "data" / "place_names_vatakara.json"
+        if dict_path.exists():
+            from core.data_import.address_splitter import AddressSplitter
+            _splitter = AddressSplitter(dict_path)
+            logger.info("Loaded place name dictionary from %s", dict_path)
+        else:
+            logger.debug(
+                "Place name dictionary not found at %s — dictionary splitting disabled",
+                dict_path,
+            )
+    return _splitter
+
 
 def _split_word_if_concatenated(token: str) -> str:
     """Split trailing 1-3 uppercase letters from a long ALL-CAPS word.
@@ -285,17 +317,18 @@ def clean_cdcms_address(raw_address: str, *, area_suffix: str = "") -> str:
 
     CDCMS addresses are messy — fields concatenated without separators,
     phone numbers mixed in, inconsistent punctuation. This function
-    applies a 12-step cleaning pipeline to make the address more
+    applies a 13-step cleaning pipeline to make the address more
     geocoder-friendly.
 
-    Pipeline overview (12 steps):
+    Pipeline overview (13 steps):
         1. Remove embedded phone numbers
         2. Remove CDCMS-specific artifacts (PH:, leading apostrophes)
         3. Normalize backticks/quotes
         4. Expand abbreviations — first pass (inline NR., inline PO., (H))
         5. Add spaces before uppercase words stuck to digits
+        5.5. Dictionary-powered word splitting (ADDR-05)
         6. Split trailing letters from concatenated ALL-CAPS words (ADDR-02)
-        7. Expand abbreviations — second pass (standalone PO, NR after Step 6)
+        7. Expand abbreviations — second pass (standalone PO, NR after Steps 5.5/6)
         8. Collapse multiple spaces
         9. Remove dangling punctuation
         10. Title case
@@ -388,18 +421,34 @@ def clean_cdcms_address(raw_address: str, *, area_suffix: str = "") -> str:
     # "MUTTUNGAL-POBALAVADI" → leave hyphens alone, handle PO separately
     addr = re.sub(r"(\d)([A-Z])", r"\1 \2", addr)
 
+    # Step 5.5: Dictionary-powered word splitting (ADDR-05)
+    # Uses the place name dictionary to find known place names in concatenated
+    # text and insert spaces at their boundaries.  Runs BEFORE Step 6
+    # (trailing letter split) so the dictionary gets first crack at the full
+    # concatenated tokens — e.g., "MUTTUNGALPOBALAVADI" is correctly split
+    # into "MUTTUNGAL PO BALAVADI" before Step 6 would incorrectly split
+    # the trailing "I".  Must also run BEFORE Step 7 (abbreviation expansion)
+    # so that PO/NR gaps created by the splitter are picked up by the
+    # standalone \bPO\b and \bNR\b patterns.
+    splitter = _get_splitter()
+    if splitter is not None:
+        addr = splitter.split(addr)
+
     # Step 6: Split trailing letters from concatenated ALL-CAPS words.
     # "ANANDAMANDIRAMK" → "ANANDAMANDIRAM K", "CHORODEEASTPO" → "CHORODEEAST PO"
     # See _split_word_if_concatenated() docstring for the 3-priority heuristic
     # and _PROTECTED_WORDS / _MEANINGFUL_SUFFIXES for the word lists.
+    # Runs AFTER dictionary splitting (Step 5.5) to handle initials and
+    # abbreviations that are NOT in the place name dictionary.
     words = addr.split()
     words = [_split_word_if_concatenated(w) for w in words]
     addr = " ".join(words)
 
     # Step 7: Second-pass abbreviation expansion (standalone patterns).
-    # Now that Step 6 word splitting has created boundaries, standalone \bPO\b
-    # and \bNR\b patterns will match words that were previously concatenated.
-    # Example: "CHORODEEAST PO WEST" — PO is a standalone word after Step 6.
+    # Now that Steps 5.5 and 6 have created word boundaries, standalone
+    # \bPO\b and \bNR\b patterns will match words that were previously
+    # concatenated.
+    # Example: "CHORODEEAST PO WEST" — PO is a standalone word after splitting.
     addr = re.sub(r"\bPO\b\.?\s*", "P.O. ", addr, flags=re.IGNORECASE)
     addr = re.sub(r"\bNR\b[.;:]?\s*", "Near ", addr, flags=re.IGNORECASE)
 
