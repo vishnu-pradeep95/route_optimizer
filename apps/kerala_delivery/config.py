@@ -32,6 +32,13 @@ DEPOT_LOCATION = Location(
 FREE_DELIVERY_RADIUS_KM = 5.0
 
 # =============================================================================
+# GEOCODE VALIDATION
+# =============================================================================
+# Radius from depot within which a geocode result is considered valid.
+# Addresses geocoding outside this radius trigger the fallback chain.
+GEOCODE_ZONE_RADIUS_KM = 30
+
+# =============================================================================
 # FLEET CONFIGURATION
 # =============================================================================
 # Number of delivery vehicles (three-wheelers)

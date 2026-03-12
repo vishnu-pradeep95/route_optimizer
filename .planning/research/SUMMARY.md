@@ -1,186 +1,234 @@
 # Project Research Summary
 
-**Project:** Kerala LPG Delivery Route Optimizer -- v2.1 Licensing & Distribution Security
-**Domain:** Software licensing enforcement, code protection, and integrity checking for a Python/FastAPI/Docker application deployed on WSL2
+**Project:** Kerala LPG Delivery Route Optimizer — v2.2 Address Preprocessing Pipeline
+**Domain:** Dictionary-powered address splitting, geocode validation, and location confidence UI
 **Researched:** 2026-03-10
 **Confidence:** HIGH
 
 ## Executive Summary
 
-v2.1 is a security-hardening milestone that closes six identified loopholes in an already-working licensing system. The existing system (v2.0) provides HMAC-SHA256 license keys with machine fingerprinting, but uses `.pyc` bytecode (trivially decompilable), startup-only validation (no mid-runtime checks), an exploitable dev-mode bypass, and an unstable fingerprint that relies on Docker container IDs and WSL2 MAC addresses -- both of which change on routine operations. The goal is to move from "Tier 1" (license key at startup) to "Tier 2" (compiled enforcement with integrity checks) without changing the existing offline, single-customer deployment model.
+This is a targeted bug-fix milestone (v2.2) on an existing production system. The core problem is two interacting bugs: CDCMS exports concatenate Malayalam place names without separators (e.g., `MUTTUNGALPOBALAVADI`), causing Google to geocode delivery addresses to locations 40+ km away, while a secondary bug in `vroom_adapter.py` displays Google's `formatted_address` instead of the original cleaned address — so drivers see wrong locations AND wrong text. The fix requires building a domain-specific preprocessing layer tuned for CDCMS Kerala address patterns, not a general-purpose Indian address NLP solution.
 
-The recommended approach is Cython 3.2.4 compilation of the licensing module to native `.so` shared libraries, combined with SHA256 file integrity manifests embedded in the compiled binary, stronger machine fingerprinting using `/etc/machine-id` and `/proc/cpuinfo`, periodic request-count-based re-validation, dev-mode code stripping from distribution builds, and a license renewal mechanism. The entire stack addition is one build-time dependency (Cython) with zero new runtime dependencies on the customer machine. All technologies are stdlib-based or build-time-only. This is a well-scoped, dependency-light enhancement.
+The recommended approach is a two-stage fix. Stage one is fast and independent: a one-line display-text fix and an improved regex. Stage two is the core improvement: a static dictionary of ~285 place names within 30km of the Vatakara depot (built from OSM Overpass + India Post APIs, committed to the repo), used by a new `AddressSplitter` class to detect word boundaries in concatenated text. A new `GeocodeValidator` then applies a 30km haversine zone check to every geocode result, with a three-tier fallback chain (area-name retry -> area centroid -> flag as approximate). The pipeline ends by surfacing confidence data through the API to the Driver PWA as an "Approx. location" badge. The entire implementation requires exactly one new runtime dependency: RapidFuzz 3.14.3 (MIT, ~4MB wheel, no compiler needed in Docker).
 
-The primary risks are: (1) Cython `.so` files are platform-and-version-locked -- building on the wrong Python version or architecture produces silent import failures, so compilation must happen inside the target Docker container; (2) WSL2 MAC addresses change on every reboot, so MAC must be dropped entirely from the fingerprint (not just supplemented); (3) the fingerprint formula change is a **breaking change** that invalidates all existing customer licenses, requiring a coordinated migration; and (4) dev-mode code stripping with naive `sed` can produce syntactically broken Python that takes down the customer's API -- AST-based validation or marker-based removal with syntax checks is mandatory.
+The primary risks are cache poisoning from preprocessing changes (old cache entries persist with wrong keys — desired behavior, but must be monitored), fuzzy matching false positives on short Kerala place names (mitigated by length-dependent thresholds), and an invalid Google API key causing every address to fall back to centroid-only mode with a wall of orange badges that erodes driver trust. The validator must include a circuit breaker for API failures. NER-based address parsing (IndicBERT) is explicitly deferred to a conditional future path, triggered only if post-deployment metrics show >10% validation failures.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The existing Python 3.12 / FastAPI / Docker Compose stack is locked and unchanged. v2.1 adds exactly one build-time dependency: **Cython 3.2.4**. No new runtime dependencies are introduced on the customer machine. All other changes use Python stdlib (`hashlib`, `hmac`, `struct`) and Linux system files (`/etc/machine-id`, `/proc/cpuinfo`). See `.planning/research/STACK.md` for full details.
+The existing Python 3.12 / FastAPI / React / TypeScript stack requires no changes to support this feature. One new runtime dependency is needed: RapidFuzz 3.14.3 for fuzzy string matching in the dictionary splitter. All other components — haversine distance (10 lines of stdlib `math`), dictionary storage (static JSON, <50KB), and UI indicators (existing DaisyUI `tw:badge-warning`) — use what is already in the project. The dictionary build script uses `requests` (already in `requirements.txt`) to call the OSM Overpass API and the India Post PostalPinCode API at build time only; the runtime never makes these calls.
+
+See `.planning/research/STACK.md` for full dependency analysis including the optional NER path (Approach B), which would add ~600MB to the Docker image and is explicitly deferred.
 
 **Core technologies:**
-- **Cython 3.2.4** (build-time only): Compiles `core/licensing/*.py` to native `.so` shared libraries. Replaces `.pyc` (decompilable in seconds) with real machine code (requires disassembly). Supports pure Python mode -- no `.pyx` rewrite of existing code needed. Zero customer-side dependencies.
-- **`hashlib.file_digest()`** (stdlib, Python 3.11+): SHA256 hashing of protected files for the integrity manifest. Already available in our Python 3.12 runtime.
-- **`/etc/machine-id`** (Linux system file): Stable 128-bit machine identifier that survives reboots and container recreation. Bind-mounted read-only into Docker. Replaces the unstable Docker container ID.
-- **`/proc/cpuinfo` model name** (Linux procfs): Hardware-intrinsic CPU identifier. Accessible inside Docker containers without special mounting. Cannot change without swapping physical CPU.
-
-**Critical version requirement:** The `.so` files are tagged `cpython-312-x86_64-linux-gnu`. Build and runtime must use the same Python minor version (3.12) and architecture (x86_64). Pin both in the Dockerfile and build script.
+- **RapidFuzz 3.14.3**: Fuzzy matching in `AddressSplitter` — C++ core (10-100x faster than fuzzywuzzy), MIT license, pre-built wheel for `python:3.12-slim`, no Dockerfile changes needed
+- **Python stdlib `math`**: Haversine zone validation in `GeocodeValidator` — 10 lines, no external dependency, accuracy within 0.5% at 30km
+- **OSM Overpass API** (build-time only): Extract ~285 place name nodes within 30km of depot — free, no auth, ODbL licensed
+- **India Post PostalPinCode API** (build-time only): Extract post office names for PIN codes 673101-673110 — free, 1000 req/hr, structured JSON
+- **Existing DaisyUI `tw:badge-warning tw:badge-sm`**: "Approx. location" badge in Driver PWA — zero new CSS, no build step
 
 ### Expected Features
 
-See `.planning/research/FEATURES.md` for full details including dependency graph and expected behavior specifications.
+All eight features listed below are required together. Shipping a subset leaves drivers going to wrong locations and the core bug unfixed.
 
-**Must have (table stakes -- close the six identified loopholes):**
-- **Dev-mode stripping** -- Remove `ENVIRONMENT=development` bypass from distributed builds. Currently the easiest exploit: one env var disables all enforcement.
-- **Cython compilation to `.so`** -- Replace decompilable `.pyc` with native machine code. Prerequisite for three other features.
-- **Enforcement logic in compiled module** -- Move middleware from plain-text `main.py` into the compiled `.so`. Expose a single `enforce(app)` entry point.
-- **Stronger machine fingerprinting** -- Replace Docker container ID and MAC address with `/etc/machine-id` + CPU model + hostname. Stable across container recreation and reboots.
-- **SHA256 file integrity manifest** -- Embed hashes of protected files (main.py) in the compiled binary. Detect tampering at startup and periodically.
-- **Periodic re-validation** -- Re-check license + integrity every Nth request (N=500). Catches mid-runtime expiry or file modifications.
-- **License renewal mechanism** -- `--renew` flag on `generate_license.py` to extend expiry without requiring new fingerprint exchange.
+See `.planning/research/FEATURES.md` for full details, dependency graph, and competitor analysis.
 
-**Should have (differentiators -- professional polish):**
-- Compilation with `-O2` and `embedsignature=False` optimization flags
-- Build-time `.so` import validation
-- Expiry warning in API response headers (`X-License-Expires-In`)
-- License status in `/health` endpoint body for monitoring
-- Renewal notification logging (WARNING at 30 days, ERROR in grace period)
+**Must have (table stakes — v2.2 launch):**
+- **address_display source fix** — one-line change (`vroom_adapter.py:278`); eliminates display inconsistency independently of all other work; must ship first as a safety net
+- **Improved regex word splitting** — adds `([a-z])([A-Z])` split to existing `(\d)([A-Z])` pattern; handles common concatenation patterns with ~20 lines; independent and safe
+- **Place name dictionary build** — `scripts/build_place_dictionary.py` fetches OSM + India Post data, commits `data/place_names_vatakara.json`; gates dictionary-powered splitting
+- **Dictionary-powered word splitting** — `AddressSplitter` class (~150 lines); longest-match-first scan, 85%+ fuzzy threshold, graceful passthrough for unknown text
+- **Geocode zone validation** — `GeocodeValidator` with 30km haversine check; standard practice in logistics geocoding (Route4Me, LogiNext, Geocodio all do this)
+- **Fallback chain (area retry -> centroid -> flag)** — integrated into `CachedGeocoder.geocode()`; ensures no order is silently dropped; confidence tiers: 1.0 (in-zone first try), 0.7x (area retry), 0.3 (centroid)
+- **API confidence fields** — `geocode_confidence` (float) and `location_approximate` (bool) added to stop JSON; additive, backward compatible; `Location` model already has the field
+- **Driver PWA "Approx. location" badge** — `tw:badge-warning` on hero card, orange dot on compact cards; informational only, Navigate button still works; existing `save_driver_verified()` self-heals over time
 
-**Defer (v2+):**
-- Fingerprint similarity scoring (fuzzy match on partial signal changes)
-- Call-home license verification (offline requirement is a hard constraint)
-- Hardware dongle support
-- Centralized license server (makes sense at 50+ customers, not 1)
+**Should have (add after one week of real-world validation):**
+- Dictionary gap reporting — log unmatched address tokens to identify coverage holes
+- Dictionary auto-refresh script — when new settlements appear
+- Accuracy metrics dashboard view — operator visibility into pipeline performance
+
+**Defer (v3+, conditional on metrics):**
+- Approach B NER model (IndicBERT) — only if metrics show >10% validation failures; may never be needed
+- Dashboard geocode quality report
+- Driver location pin correction (passive self-healing via `save_driver_verified()` already handles this)
+
+**Reject (anti-features):**
+- NER as default path (adds 600MB Docker image, 50ms/address, unnecessary for a 30km zone)
+- Multiple geocoding providers (coordinate inconsistency outweighs coverage benefit)
+- Fuzzy full-address matching (false positives for "VALLIKKADU EAST" vs "VALLIKKADU WEST")
+- Real-time address autocomplete (CDCMS is a CSV upload workflow, not manual entry)
 
 ### Architecture Approach
 
-See `.planning/research/ARCHITECTURE.md` for full component diagrams, data flow changes, and code-level specifications.
+The pipeline is an extended preprocessing chain inserted between the existing CDCMS importer and the existing GoogleGeocoder / CachedGeocoder / PostGIS stack. Two new modules (`address_splitter.py`, `validator.py`) integrate via injection: the splitter is called inside `clean_cdcms_address()` as a new Stage 3 (after regex splitting, before abbreviation expansion); the validator is injected into `CachedGeocoder` as an optional constructor parameter (backward compatible, defaults to no-op). The dictionary JSON file (`data/place_names_vatakara.json`) is the single shared data source for both the splitter (word boundary detection) and the validator (area centroid fallback coordinates). All integration points are additive — no existing API fields are removed, no DB schema migrations are needed, and all four modified files preserve existing behavior when new components are absent.
 
-The architecture introduces two new compiled modules (`enforcement.py`, `integrity.py`) alongside the existing `license_manager.py`, all compiled to `.so` files via Cython. The key architectural shift is moving enforcement state (license info, request counter) from `app.state` (editable Python object) into module-level variables inside the compiled binary (inaccessible without reverse engineering). `main.py` reduces from ~50 lines of inline licensing logic to a single `enforce(app)` call. The build pipeline gains three new ordered steps: dev-mode stripping, manifest generation, and Cython compilation (order is critical -- manifest must be generated AFTER stripping but BEFORE compilation).
+See `.planning/research/ARCHITECTURE.md` for full data flow diagrams, component interfaces, the step-reorder rationale, and the complete dependency graph with build order.
 
 **Major components:**
-1. **`core/licensing/enforcement.py` (NEW, compiled to .so)** -- Single entry point for all enforcement. Registers middleware, performs startup validation, orchestrates periodic re-validation and integrity checking. Holds internal state (counter, cached license status) in compiled binary.
-2. **`core/licensing/integrity.py` (NEW, compiled to .so)** -- SHA256 manifest verification. Checks protected files against build-time-embedded hashes. Separated from enforcement for testability.
-3. **`core/licensing/license_manager.py` (MODIFIED, compiled to .so)** -- Updated fingerprint function (machine-id + cpuinfo + MAC, dropped container_id). Added renewal function.
-4. **`scripts/build-dist.sh` (MODIFIED)** -- Rewritten build pipeline: rsync -> strip dev-mode -> generate manifest -> inject manifest -> Cython compile -> remove source -> validate -> tar.
+1. **`core/data_import/address_splitter.py`** (NEW) — dictionary-powered word splitting; lazy init, graceful `None` fallback if dictionary missing; RapidFuzz fuzzy match at 85%+ threshold with longest-match-first ordering
+2. **`core/geocoding/validator.py`** (NEW) — 30km haversine zone check; three-tier fallback chain (area geocode retry -> area centroid -> flag); injectable into CachedGeocoder; circuit-breaker for API key failures
+3. **`data/place_names_vatakara.json`** (NEW) — static dictionary (~285 entries); built once from OSM + India Post; committed to repo; loaded once per process lifetime; shared between splitter and validator
+4. **`scripts/build_place_dictionary.py`** (NEW) — one-time build script; not imported at runtime
+5. **`core/data_import/cdcms_preprocessor.py`** (MODIFIED) — adds lowercase->uppercase regex and dictionary splitter call between existing cleanup and abbreviation expansion stages
+6. **`core/optimizer/vroom_adapter.py`** (MODIFIED) — one-line fix: `address_display = order.address_raw` always
+7. **`core/geocoding/cache.py`** (MODIFIED) — optional `validator` and `area_name` parameters; backward compatible
+8. **`apps/kerala_delivery/api/main.py`** (MODIFIED) — adds confidence fields to stop JSON; constructs GeocodeValidator; builds `area_name_map` from preprocessed DataFrame
 
 ### Critical Pitfalls
 
-See `.planning/research/PITFALLS.md` for all seven critical pitfalls plus integration gotchas, technical debt patterns, and recovery strategies.
+See `.planning/research/PITFALLS.md` for all seven critical pitfalls, integration gotchas, technical debt patterns, and the full "Looks Done But Isn't" checklist.
 
-1. **Cython `.so` platform lock** -- The `.so` is pinned to `cpython-312-x86_64-linux-gnu`. Building on wrong Python version or architecture produces silent `ModuleNotFoundError`. **Avoid by:** compiling inside the target Docker container, adding version assertion in build script, testing import inside Docker.
+1. **Cache poisoning from preprocessing changes** — when `clean_cdcms_address()` produces different output, existing PostGIS cache entries become orphaned under old normalized keys. Do NOT change `normalize_address()`. Accept that the first upload after deployment will re-geocode affected addresses (desired — old cache had wrong coordinates). Monitor cache miss spike. Old entries for garbled addresses are harmless but never used again.
 
-2. **WSL2 MAC address instability** -- `uuid.getnode()` returns different values after every WSL2 reboot (microsoft/WSL#5352). This breaks fingerprints. **Avoid by:** dropping MAC address entirely from the fingerprint formula for WSL2 deployments, using `/etc/machine-id` as primary stable signal.
+2. **Fuzzy matching false positives on short Kerala place names** — at 85% threshold, `EDAPPAL` matches `EDAPALLI` (88% similarity, but different places 50km apart). Implement length-dependent thresholds: 95% for names under 6 characters, 90% for 6-8 characters, 85% for names over 8 characters. Prefer explicit `aliases` arrays in the dictionary over fuzzy matching for known transliteration variants.
 
-3. **Cython cannot compile async code safely** -- `async def` functions compiled with Cython fail `asyncio.iscoroutinefunction()` checks, causing silent runtime failures in FastAPI (FastAPI#1921). **Avoid by:** strict scope -- compile ONLY synchronous `core/licensing/` code. Add build-time `grep` check for `async def` in compilation targets.
+3. **Validator retry has no circuit breaker for invalid API key** — if the Google API key is invalid (`REQUEST_DENIED`), every address triggers a retry, producing a wall of "Approx. location" badges that destroys driver trust. Add a circuit breaker: 3 consecutive `REQUEST_DENIED` responses stop all retries for the batch and surface a single batch-level warning banner instead of per-stop badges.
 
-4. **Dev-mode stripping can produce broken Python** -- Naive `sed` removal of if/else blocks leaves syntactically invalid code. Customer's API goes down completely. **Avoid by:** marker-based removal (`# DIST-STRIP-BEGIN` / `# DIST-STRIP-END`) with mandatory `ast.parse()` validation of the stripped file.
+4. **Regex reordering breaks existing tests** — moving abbreviation expansion after word splitting changes how inline abbreviations (`NR.`, `PO.`) are detected in concatenated text. The existing 426 unit tests for `clean_cdcms_address()` establish the contract. Run the full test suite before and after any step reordering. If tests break, add the new regex as an additional step rather than reordering existing steps.
 
-5. **Integrity manifest blocks legitimate config edits** -- If `docker-compose.yml` is in the manifest, customer's password change breaks the license. **Avoid by:** excluding `docker-compose.yml` from the manifest. Only protect code files that contain enforcement logic (`main.py`).
+5. **Dictionary incompleteness from OSM/India Post gaps** — OSM has thin coverage for rural Kerala micro-localities. Bootstrap the dictionary from actual historical CDCMS data: `SELECT DISTINCT area_name FROM orders`. Validate coverage against real area names before Phase 3. Hard gate: must cover >80% of area names in sample data before proceeding.
+
+6. **address_display downstream truncation and ripple** — `address_raw` with area suffix can exceed 255 chars (the `address_display` DB column limit). Audit all `address_display` consumers (including `qr_helpers.py` and `scripts/import_orders.py`, which the design spec does not list). Verify `MAX(LENGTH(address_raw)) < 255` in production data or widen the column via Alembic migration.
 
 ## Implications for Roadmap
 
-Based on research, the suggested phase structure follows the dependency chain identified across all four research files. The critical path is: dev-mode stripping -> Cython pipeline -> enforcement module -> integrity manifest -> periodic re-validation. Fingerprinting and renewal are parallel tracks.
+The dependency graph is clear and the architecture research defines the exact build order. Five phases map naturally to the five logical work units.
 
-### Phase 1: Foundation -- Fingerprinting and Dev-Mode Markers
-**Rationale:** Fingerprinting is independent of Cython and changes the identity function used everywhere. Do it first so all subsequent phases use the new formula. Dev-mode markers are zero-risk annotations that prepare for Phase 2 stripping.
-**Delivers:** Updated `get_machine_fingerprint()` with machine-id + cpuinfo, Docker Compose machine-id bind mount, updated `get_machine_id.py`, DIST-STRIP markers added to `main.py`.
-**Addresses:** Stronger fingerprinting (table stakes), prep for dev-mode stripping.
-**Avoids:** WSL2 MAC instability pitfall (drop MAC or make it optional). Fingerprint migration pitfall (update both `license_manager.py` and `get_machine_id.py` simultaneously).
-**Key action:** Regenerate the customer's license key with the new fingerprint. This is a breaking change -- coordinate with customer.
+### Phase 1: Foundation Fixes
 
-### Phase 2: Build Pipeline -- Dev-Mode Stripping and Cython Compilation
-**Rationale:** These are the two highest-severity loopholes (#1 and #4). They share a common artifact: `build-dist.sh`. The stripped `main.py` must exist before Cython compiles, and the Cython pipeline must work before enforcement can move into the `.so`. Group them because they are both build-system changes with the same validation pattern.
-**Delivers:** Marker-based dev-mode stripping with AST validation, Cython compilation of `core/licensing/*.py` to `.so`, updated build-dist.sh with correct ordering, import validation inside Docker.
-**Addresses:** Dev-mode stripping (table stakes), Cython compilation (table stakes).
-**Avoids:** Platform lock pitfall (compile inside Docker), syntax error pitfall (AST validation), async compilation pitfall (build-time grep check), architecture mismatch pitfall (ELF header check).
-**Key action:** Rotate the HMAC derivation seed since the `.pyc` version is already in the wild and trivially decompilable.
+**Rationale:** The `address_display` fix and improved regex are independent of all other work and immediately beneficial. They can — and should — ship first as a safety net regardless of whether the dictionary infrastructure is ever built. They also establish the test baseline before any riskier pipeline changes.
 
-### Phase 3: Enforcement Refactor -- Move Middleware Into Compiled Module
-**Rationale:** Must come after Cython pipeline is working. This is the largest architectural change: creating `enforcement.py` and `integrity.py`, moving middleware from `main.py` into compiled code, reducing `main.py` to a single `enforce(app)` call. Test as plain Python first, then compile.
-**Delivers:** `core/licensing/enforcement.py` (new), `core/licensing/integrity.py` (new), refactored `main.py` with single enforcement call, internal license state (not on `app.state`).
-**Addresses:** Enforcement in compiled module (table stakes), file integrity manifest (table stakes).
-**Avoids:** Integrity manifest over-coverage pitfall (protect only `main.py`, not `docker-compose.yml`). Build order pitfall (manifest generated AFTER strip, BEFORE compile).
+**Delivers:** Correct address display text in the Driver PWA for all routes; improved word splitting for the most common CDCMS concatenation patterns (digit-to-uppercase and lowercase-to-uppercase transitions).
 
-### Phase 4: Periodic Re-Validation and Polish
-**Rationale:** Depends on enforcement module from Phase 3. Adds request counting and re-validation to the middleware. Also a good time for the differentiator features (optimization flags, expiry headers, health endpoint enhancement).
-**Delivers:** Request-count-based re-validation (every 500 requests), `run_in_executor` for async-safe re-validation, compilation optimization flags (`-O2`, `embedsignature=False`), expiry warning headers.
-**Addresses:** Periodic re-validation (table stakes), compilation optimization (differentiator), expiry warnings (differentiator).
-**Avoids:** Event loop blocking pitfall (use threadpool executor). Counter stored in compiled module (not `app.state`).
+**Addresses (from FEATURES.md):** `address_display source fix`, `Improved regex word splitting`
 
-### Phase 5: License Renewal and Migration
-**Rationale:** Independent of the compilation pipeline. Requires fingerprinting to be stable (Phase 1). Best done last because the renewal mechanism should work with the final fingerprint formula and compiled enforcement.
-**Delivers:** `--renew` flag on `generate_license.py`, renewal key workflow without new fingerprint exchange, automatic pickup on next periodic re-validation (no restart needed).
-**Addresses:** License renewal (table stakes).
-**Avoids:** Renewal-after-fingerprint-change pitfall (fingerprint is stable by this phase).
+**Avoids (from PITFALLS.md):** Downstream consumer breakage (requires full audit of `address_display` consumers including `qr_helpers.py` and `scripts/import_orders.py`; length check against DB column limit); regex reordering regressions (run full test suite before and after, add new regex as additional step rather than reorder if tests break)
 
-### Phase 6: End-to-End Validation and Customer Migration
-**Rationale:** All features are implemented. This phase is about building the distribution tarball, running full E2E license tests, validating the complete build pipeline, and coordinating the customer migration (new fingerprint, new license key, new tarball).
-**Delivers:** Complete distribution tarball with all v2.1 security features, E2E test coverage for integrity failure / re-validation / renewal scenarios, updated `docker-compose.license-test.yml`, customer migration documentation.
-**Addresses:** All "Looks Done But Isn't" checklist items from PITFALLS.md.
+**Research flag:** Standard patterns — no additional research needed. Implementation is clear with line-number precision from ARCHITECTURE.md.
+
+### Phase 2: Place Name Dictionary and Address Splitter
+
+**Rationale:** The dictionary is the shared data foundation for both the `AddressSplitter` (this phase) and the `GeocodeValidator` (Phase 3). It must exist and be validated for completeness before either consumer can work correctly. Dictionary completeness is a hard gate — if it covers less than 80% of real CDCMS area names, Phase 3's centroid fallback will silently fail for missing areas.
+
+**Delivers:** `data/place_names_vatakara.json` (~285 entries from OSM + India Post + historical CDCMS area names); `AddressSplitter` class with RapidFuzz fuzzy matching and length-dependent thresholds; splitter integrated into `clean_cdcms_address()` pipeline; unit tests for all splitter paths including short-name false-positive cases.
+
+**Uses (from STACK.md):** RapidFuzz 3.14.3 (NEW dependency — add to `requirements.txt` and verify Docker build), OSM Overpass API (build-time), India Post PostalPinCode API (build-time), existing `requests` library
+
+**Implements (from ARCHITECTURE.md):** `address_splitter.py` component, `build_place_dictionary.py` script, dictionary JSON schema
+
+**Avoids (from PITFALLS.md):** Dictionary incompleteness (bootstrap from `SELECT DISTINCT area_name FROM orders`, validate before proceeding to Phase 3); fuzzy matching false positives (length-dependent thresholds: 95%/90%/85%, explicit alias arrays, log and manually review all matches below 90%); RapidFuzz Docker build failure (rebuild image from scratch, verify `import rapidfuzz` inside container after adding to `requirements.txt`)
+
+**Research flag:** Moderate risk — dictionary coverage is the primary unknown and cannot be confirmed without running the build script against real CDCMS data. Treat the 80% coverage threshold as a hard gate before Phase 3.
+
+### Phase 3: Geocode Validation and Fallback Chain
+
+**Rationale:** Depends on the dictionary (Phase 2) for area centroid coordinates. The zone validator is the core correctness fix — the display fix (Phase 1) and splitting (Phase 2) reduce the frequency of wrong geocodes, but the validator catches any that still slip through and ensures every delivery gets a usable location within the zone.
+
+**Delivers:** `GeocodeValidator` class with haversine zone check and three-tier fallback chain; circuit breaker for API key failures (`REQUEST_DENIED`); validator injected into `CachedGeocoder` with optional parameters (backward compatible); `area_name_map` built from preprocessed DataFrame and passed through geocoding loop; unit tests for all validation paths and fallback tiers including the circuit-breaker path.
+
+**Uses (from STACK.md):** stdlib `math` for haversine (no new dependency), existing `CachedGeocoder`, upstream `GoogleGeocoder` (for area-name retry — must go through upstream, NOT through CachedGeocoder, to avoid recursive validation loop)
+
+**Implements (from ARCHITECTURE.md):** `validator.py` component; modified `cache.py` (`validator` + `area_name` optional params); modified `main.py` (`GeocodeValidator` construction, `area_name_map` side-channel pattern)
+
+**Avoids (from PITFALLS.md):** Validator retry infinite loop (retry must use upstream GoogleGeocoder directly, not CachedGeocoder); inconsistent confidence scores (use discrete levels: 1.0 in-zone, 0.7x area retry, 0.3 centroid — document semantics, avoid multiplying ambiguous intermediate values); API key failure wall-of-badges (circuit breaker after 3 consecutive `REQUEST_DENIED`); haversine implementation error (validate against known distances: depot to Kozhikode city ~37km, depot to Mahe ~12km)
+
+**Research flag:** Medium complexity — the `area_name` side-channel (building `area_name_map` from preprocessed DataFrame) needs careful testing to ensure CDCMS and non-CDCMS upload paths both work correctly.
+
+### Phase 4: API Confidence Fields and Driver PWA Badge
+
+**Rationale:** UI work depends on the pipeline being complete (Phase 3) so that confidence values are meaningful before being surfaced. Exposing `geocode_confidence` before zone validation would surface Google's raw confidence, not the delivery-zone-validated confidence — a wrong signal to the driver.
+
+**Delivers:** Two new fields (`geocode_confidence`, `location_approximate`) in the stop JSON for both route endpoints (`GET /api/routes/{vehicle_id}` and `GET /api/routes?include_stops=true`); "Approx. location" badge on hero card; orange dot on compact cards in the Driver PWA; E2E Playwright tests verifying badge appears/hides correctly and handles `null` confidence from pre-upgrade routes (old cached routes have no confidence data).
+
+**Implements (from ARCHITECTURE.md):** Modified `main.py` stop JSON dict comprehension (2 new fields, additive); modified `index.html` (badge HTML for hero card and compact cards, conditional on `location_approximate` boolean)
+
+**Avoids (from PITFALLS.md):** Null confidence crash (Driver PWA must handle `null` gracefully — pre-upgrade routes have NULL confidence in DB); badge color contrast on dark saffron-themed PWA (test on real phone in sunlight — consider `tw:badge-info` blue if amber `tw:badge-warning` blends into existing saffron buttons); all-approximate scenario (surface a batch-level warning banner when ALL stops are approximate, not just per-stop badges)
+
+**Research flag:** Standard patterns — DaisyUI badge rendering is well-documented. UX decision on badge color vs. existing saffron theme requires a subjective visual test on a real device.
+
+### Phase 5: Integration Testing and Accuracy Metrics
+
+**Rationale:** Tests the assembled pipeline end-to-end with real CDCMS sample data. This phase is verification, not implementation. It also establishes the go/no-go criteria for the conditional Approach B (NER model) upgrade path.
+
+**Delivers:** Full pipeline test with `sample_cdcms_export.csv`; verification that the "HDFC ERGO" and other known wrong-geocode bugs are fixed; measured accuracy metrics (% within 30km target >90%, % needing centroid fallback target <10%, dictionary coverage target >95% of area names); documented upgrade trigger criteria for NER (>10% validation failures or >5% centroid fallback rate).
+
+**Avoids (from PITFALLS.md):** Cache poisoning not caught in development (monitor cache miss count on first real upload post-deployment; verify no duplicate cache entries within 50m proximity); driver-verified entries orphaned by preprocessing changes (verify proximity-based lookup path still works after key changes); all 10 items in the "Looks Done But Isn't" checklist in PITFALLS.md
+
+**Research flag:** No additional research needed — this is measurement and validation work. The metrics targets are specified in FEATURES.md and the test methodology is clear.
 
 ### Phase Ordering Rationale
 
-- **Fingerprinting first** because it changes the identity function consumed by key generation and validation. Every subsequent phase operates on the new fingerprint formula.
-- **Build pipeline (strip + Cython) before enforcement refactor** because debugging plain Python is vastly easier than debugging compiled `.so`. Get the compilation working with existing code before introducing new modules.
-- **Enforcement refactor before re-validation** because re-validation is an extension of the enforcement middleware. The middleware must exist before it can count requests.
-- **Renewal last** because it is developer-side tooling that does not affect the security posture. It is a customer experience improvement, not a loophole fix.
-- **End-to-end validation as a final phase** because it exercises the complete pipeline. Partial E2E testing happens in each phase, but the full integration (build tarball -> deploy -> validate license -> test integrity -> test re-validation -> test renewal) must be done holistically.
+- Phase 1 before all others because the display fix and regex improvement are safe, independent, and provide immediate value with minimal risk. They also establish a clean test baseline before introducing more complex changes.
+- Phase 2 before Phase 3 because the dictionary is a shared dependency — the validator's centroid fallback requires dictionary coordinates, and building both components against a confirmed-complete dictionary avoids retrofitting coverage gaps after the validator is already integrated.
+- Phase 3 before Phase 4 because the `location_approximate` field is only meaningful after zone validation assigns validated confidence values. Without validation, all cache-miss results show Google's raw confidence (0.40-0.95), which does not reflect delivery-zone accuracy.
+- Phase 4 before Phase 5 because integration testing needs the complete assembled system, including the UI indicator that will reveal any remaining bugs in the confidence pipeline.
+- Phase 5 gates the conditional Approach B NER upgrade — measurable evidence required before investing in 600MB of dependencies.
 
 ### Research Flags
 
-Phases likely needing deeper research during planning:
-- **Phase 2 (Cython compilation):** The interaction between Cython, setuptools, and the Docker build environment has edge cases around `build_ext --inplace` directory handling, intermediate `.c` file cleanup, and `__init__.py` compilation. Warrants a `/gsd:research-phase` spike focused on the exact build commands and their output.
-- **Phase 3 (Enforcement refactor):** Moving middleware registration into a compiled module while keeping FastAPI's middleware decorator patterns working requires careful testing. The `enforce(app)` function signature and its interaction with FastAPI's startup lifecycle should be prototyped before committing to the architecture.
+Phases likely needing deeper validation during execution:
 
-Phases with standard patterns (skip research-phase):
-- **Phase 1 (Fingerprinting):** Well-documented. Reading `/etc/machine-id` and `/proc/cpuinfo` is straightforward file I/O. Docker bind mounts are a standard pattern.
-- **Phase 4 (Re-validation):** Standard request-counting middleware with `run_in_executor`. No novel patterns.
-- **Phase 5 (Renewal):** Standard HMAC key generation with a `--renew` flag. Reuses existing `encode_license_key()` / `decode_license_key()`.
+- **Phase 2:** Dictionary completeness is the single biggest uncertainty in this entire project. Cannot be confirmed without running `build_place_dictionary.py` and comparing against `SELECT DISTINCT area_name FROM orders`. Treat the 80% coverage threshold as a hard gate. Also: tune length-dependent fuzzy thresholds empirically against the full sample CDCMS addresses (not just the 4 examples in the design spec).
+- **Phase 3:** The `area_name` side-channel through the geocoding loop is the most complex integration point. Test thoroughly that non-CDCMS uploads pass empty `area_name` and degrade gracefully to zone-check-only without attempting the area-name retry.
+
+Phases with standard, well-understood patterns:
+
+- **Phase 1:** One-line fix plus additive regex. Full test suite provides immediate regression coverage. Clear implementation with exact line numbers.
+- **Phase 4:** DaisyUI badge rendering is documented. Additive API fields are backward compatible. Standard Driver PWA patterns already in the codebase.
+- **Phase 5:** Measurement and comparison against a fixed sample dataset. No novel patterns.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Only one new dependency (Cython 3.2.4). Version confirmed on PyPI. All other tools are stdlib or already in the project. Verified on target WSL2 system. |
-| Features | HIGH | Features scoped directly from six identified loopholes in CONTEXT.md. No ambiguity about what needs to be built. Dependency chain is clear. |
-| Architecture | HIGH | Existing codebase thoroughly analyzed with line-number precision. Component boundaries are clean. New modules follow existing patterns. |
-| Pitfalls | HIGH | Cython and WSL2 pitfalls verified against GitHub issue trackers and official docs. FastAPI async/Cython incompatibility confirmed via FastAPI#1921. Recovery strategies documented. |
+| Stack | HIGH | All dependencies verified against the actual `requirements.txt`, `Dockerfile`, and `docker-compose.yml`. RapidFuzz 3.14.3 confirmed on PyPI with pre-built wheels for `python:3.12-slim`. One MEDIUM note: PostalPinCode API docs verified via third-party source (official site was unresponsive during research). |
+| Features | HIGH | Feature set derived from an existing design spec with clearly defined bugs to fix and a working system to verify against. Competitor analysis (Route4Me, LogiNext, Geocodio, Veho) confirms zone validation + fallback chain is standard logistics practice. Anti-feature rejections grounded in concrete system constraints (40-50 orders/day, CSV upload workflow, 30km zone). |
+| Architecture | HIGH | Integration points traced through actual source code with line-number precision. Every file modification identified. Component interfaces defined in the design spec and verified against existing Pydantic models and API response structure. No speculative components — all proposed modules have clear analogues in the existing codebase. |
+| Pitfalls | HIGH | Critical pitfalls identified through direct source code analysis (cache key tracing, downstream consumer audit of `address_display`, RapidFuzz behavior on short strings verified against API docs). One area of MEDIUM: OSM/India Post coverage for rural Kerala micro-localities cannot be confirmed without running the build script. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **WSL2 MAC address behavior:** Research strongly recommends dropping MAC from the fingerprint entirely, but STACK.md still includes it as a signal. The PITFALLS.md research is more recent and specific -- **follow the pitfalls recommendation: drop MAC or make it the lowest-weight optional signal.** Validate by running `get_machine_id.py` before and after a WSL restart.
-- **Cython compilation inside Docker vs. on host:** STACK.md recommends `cythonize -i` on the developer machine. PITFALLS.md warns this produces architecture-mismatched `.so` if the host ever changes. **Recommendation: compile inside Docker from the start.** The extra build time (seconds) is trivial compared to the debugging cost of a silent import failure.
-- **HMAC seed rotation:** PITFALLS.md identifies that the current HMAC derivation seed is recoverable from the existing `.pyc` files. Rotating it means all existing license keys become invalid (in addition to the fingerprint change). This is acceptable since fingerprinting already forces re-keying, but it must be documented and coordinated. **Do both changes (fingerprint + seed) in the same customer migration.**
-- **`docker-compose.yml` in integrity manifest:** FEATURES.md includes it as a protected file. PITFALLS.md explicitly warns against it (customers must edit it for passwords, ports). **Follow the pitfalls recommendation: exclude `docker-compose.yml` from the manifest. Protect only `main.py`.**
-- **Re-validation interval (N):** FEATURES.md suggests N=250, ARCHITECTURE.md suggests N=500, PITFALLS.md warns against N=100. **Use N=500 as the starting value.** It can be tuned later since it is a compiled constant.
-- **Cython async limitation:** The enforcement middleware is `async def` and cannot be compiled by Cython (FastAPI#1921). The current ARCHITECTURE.md design places the middleware inside `enforcement.py` which is compiled. **Resolution: the middleware closure must be defined as a regular `def` or the async wrapper must remain in uncompiled `main.py` while calling synchronous compiled functions.** This needs resolution during Phase 3 design.
+- **Dictionary coverage for rural Kerala**: Cannot be confirmed without running `build_place_dictionary.py` and comparing against `SELECT DISTINCT area_name FROM orders`. This is the primary unknown. Address in Phase 2 by treating the 80% coverage threshold as a hard gate before proceeding to Phase 3.
+
+- **Fuzzy threshold calibration**: The 85% global threshold in the design spec is likely too aggressive for short place names. Length-dependent thresholds (95% / 90% / 85%) need empirical tuning against real CDCMS data. Address in Phase 2 integration testing with the full sample address set.
+
+- **Google Maps navigation URL parsing**: Changing `address_display` from Google's `formatted_address` to `order.address_raw` changes what Google Maps receives when the driver taps "Navigate." Whether verbose CDCMS addresses (e.g., "8/542 Sreeshylam, Anandamandiram, K.T. Bazar, Vatakara, Kozhikode, Kerala") parse correctly in Google Maps needs manual testing on a real device. Address in Phase 4 E2E testing.
+
+- **`scripts/import_orders.py:219-220`**: PITFALLS research flags this file as a potential missed consumer of `address_display` logic not listed in the design spec's "Unchanged Files" section. Needs explicit audit in Phase 1 before the display fix is considered complete.
+
+- **Invalid Google API key on day one**: The project is known to have an invalid API key. The circuit breaker design must be tested against `REQUEST_DENIED` responses from the very first upload post-deployment, not just against transient failures. The centroid fallback must provide serviceable (area-level) locations even when the API is completely unavailable.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [Cython 3.2.4 on PyPI](https://pypi.org/project/Cython/) -- version confirmation, pure Python mode support
-- [Cython Source Files and Compilation](https://cython.readthedocs.io/en/latest/src/userguide/source_files_and_compilation.html) -- Extension objects, build patterns, `.so` naming
-- [Cython Pure Python Mode](https://cython.readthedocs.io/en/latest/src/tutorial/pure.html) -- confirmation that `.py` compiles directly
-- [machine-id(5) manpage](https://man7.org/linux/man-pages/man5/machine-id.5.html) -- 32-char hex, persistence guarantees
-- [Python hashlib docs](https://docs.python.org/3/library/hashlib.html) -- `file_digest()` in 3.11+
-- [FastAPI Advanced Middleware](https://fastapi.tiangolo.com/advanced/middleware/) -- middleware registration patterns
-- [Docker Bind Mounts](https://docs.docker.com/engine/storage/bind-mounts/) -- read-only mount syntax
-- Local verification on target WSL2 system: `/etc/machine-id` populated, `/proc/cpuinfo` accessible, Docker bind mount tested
+
+- Project design spec: `docs/superpowers/specs/2026-03-10-address-preprocessing-design.md` — feature requirements, algorithm design, interface definitions, implementation plan
+- Project codebase architecture: `.planning/codebase/ARCHITECTURE.md`, `CONCERNS.md`, `INTEGRATIONS.md` — existing system architecture and known issues
+- Source files analyzed: `core/data_import/cdcms_preprocessor.py`, `core/geocoding/cache.py`, `core/geocoding/google_adapter.py`, `core/optimizer/vroom_adapter.py`, `core/database/models.py`, `core/models/location.py`, `apps/kerala_delivery/api/main.py`, `infra/Dockerfile`, `docker-compose.yml`, `requirements.txt`
+- [RapidFuzz PyPI](https://pypi.org/project/RapidFuzz/) — v3.14.3, MIT, Python 3.10+ pre-built wheels confirmed
+- [RapidFuzz fuzz module docs](https://rapidfuzz.github.io/RapidFuzz/Usage/fuzz.html) — `fuzz.ratio()` and `process.extractOne()` semantics and behavior on short strings
+- [OSM Overpass API wiki](https://wiki.openstreetmap.org/wiki/Overpass_API) — `around` spatial query syntax, 10K req/day rate limit
+- [Google Geocoding API Best Practices](https://developers.google.com/maps/documentation/geocoding/best-practices) — handling ambiguous results, `formatted_address` semantics
+- [Geocodio Accuracy Types](https://www.geocod.io/guides/accuracy-types-scores/) — confidence score tiers and fallback strategies in logistics geocoding
+- [Route4Me Geocoding Guide](https://support.route4me.com/geocoding-guide-address-verification/) — zone validation in delivery logistics as standard practice
+- [LogiNext Geocoding Intelligence](https://www.loginextsolutions.com/blog/geocoding-intelligence-that-reduces-exceptions-before-they-happen/) — confidence scores preventing delivery exceptions
 
 ### Secondary (MEDIUM confidence)
-- [WSL2 MAC address instability: microsoft/WSL#5352](https://github.com/microsoft/WSL/issues/5352) -- confirmed WSL2 MAC randomization
-- [Cython async issue: FastAPI#1921](https://github.com/fastapi/fastapi/issues/1921) -- async def incompatibility with Cython compilation
-- [Python uuid.getnode() instability: cpython#132710](https://github.com/python/cpython/issues/132710) -- MAC not guaranteed stable with libuuid
-- [Cython reverse engineering difficulty](https://groups.google.com/g/cython-users/c/Zd7HZ9UW_ew) -- community consensus that `.so` is significantly harder than `.pyc`
-- [Cisco: Securing Python with Cython](https://blogs.cisco.com/developer/securingpythoncodewithcython01) -- practical guide
-- [WSL2 machine-id persistence: microsoft/WSL#6347](https://github.com/microsoft/WSL/issues/6347) -- WSL2 machine-id edge cases
 
-### Tertiary (LOW confidence)
-- [NixOS-WSL /etc/machine-id persistence issue](https://github.com/nix-community/NixOS-WSL/issues/574) -- NixOS-specific, does not apply to standard Ubuntu WSL but worth monitoring
+- [PostalPinCode API](http://www.postalpincode.in/Api-Details) — endpoint and rate limits verified via third-party docs (official site unresponsive during research)
+- [Kestrel Insights Geofencing](https://www.kestrelinsights.com/blog/how-accurate-precise-geofencing-optimizes-last-mile-delivery) — zone-based validation in last-mile logistics
+- [Veho Self-Serve Geocode Corrections](https://www.shipveho.com/blog/improving-delivery-accuracy-with-self-serve-customer-geocode-corrections) — self-healing geocode patterns
+- [Radar Geocoding APIs Guide](https://radar.com/blog/geocoding-apis) — logistics geocoding caching and fallback
+
+### Tertiary (context / reference)
+
+- [GeoIndia Seq2Seq Geocoding EMNLP 2024](https://aclanthology.org/2024.emnlp-industry.29/) — Indian address geocoding challenges (informs why NER is deferred to Approach B)
+- [haversine package source](https://github.com/mapado/haversine/blob/main/haversine/haversine.py) — confirms stdlib `math` sufficiency for 30km zone check
+- [shiprocket-ai/open-indicbert-indian-address-ner](https://huggingface.co/shiprocket-ai/open-indicbert-indian-address-ner) — NER model specifications for Approach B reference only
 
 ---
 *Research completed: 2026-03-10*

@@ -1,752 +1,709 @@
-# Architecture Research: v2.1 Licensing & Distribution Security
+# Architecture Research: v2.2 Address Preprocessing Pipeline Integration
 
-**Domain:** Software licensing enforcement, code protection, integrity checking for a Python/Docker application
+**Domain:** Dictionary-powered address splitting and geocode validation for Kerala LPG delivery route optimizer
 **Researched:** 2026-03-10
-**Confidence:** HIGH (existing codebase thoroughly analyzed, Cython docs verified, integration points mapped)
+**Confidence:** HIGH (existing codebase thoroughly analyzed, design spec reviewed, all integration points traced through source code)
 
-## Existing System Overview
+## Existing System Data Flow (Before Changes)
 
 ```
-CURRENT LICENSING ARCHITECTURE
-==============================
+CURRENT ADDRESS PROCESSING PIPELINE
+=====================================
 
-Developer Machine                    Customer Machine (WSL2 + Docker)
-==================                   ================================
-
-scripts/generate_license.py          docker-compose.yml
-  |                                    |
-  | encode_license_key()               | api container (:8000)
-  |                                    |   |
-  v                                    |   v
-LPG-XXXX-XXXX key string              |  main.py lifespan (L162-203)
-  |                                    |   |-- validate_license()
-  | (sent to customer)                 |   |-- env == "development"? -> override to VALID  <-- LOOPHOLE #1
-  |                                    |   |-- app.state.license_info = result
-  v                                    |   |
-LICENSE_KEY env var                     |  main.py middleware (L381-427)          <-- LOOPHOLE #2
-  or license.key file                  |   |-- check app.state.license_info
-                                       |   |-- INVALID -> 503
-                                       |   |-- GRACE -> X-License-Warning header
-                                       |   |-- VALID -> pass through
-                                       |
-                                       |  core/licensing/license_manager.py      <-- LOOPHOLE #4 (.pyc only)
-                                       |   |-- get_machine_fingerprint()         <-- LOOPHOLE #3
-                                       |   |   |-- platform.node()
-                                       |   |   |-- uuid.getnode() (MAC)
-                                       |   |   |-- _get_docker_container_id()    <-- ephemeral, changes on recreate
-                                       |   |-- decode_license_key()
-                                       |   |-- validate_license()
-                                       |
-                                       |  Startup-only check                     <-- LOOPHOLE #5
-                                       |  No file integrity checking             <-- LOOPHOLE #6
-                                       |
-scripts/get_machine_id.py             scripts/get_machine_id.py (customer runs)
-  (standalone copy)                     |-- same fingerprint logic as license_manager.py
-
-BUILD PIPELINE:
-scripts/build-dist.sh
-  1. rsync project (exclude .git, tests, .planning, generate_license.py)
-  2. compileall -b core/licensing/  -> .pyc (legacy placement)
-  3. rm core/licensing/*.py (source removed)
-  4. PYTHONPATH test import validation
-  5. tar czf dist/kerala-delivery-vX.X.tar.gz
+User uploads CDCMS CSV
+  |
+  v
+apps/kerala_delivery/api/main.py :: upload_and_optimize()
+  |-- _is_cdcms_format() detects tab-separated CDCMS columns
+  |
+  v
+core/data_import/cdcms_preprocessor.py :: preprocess_cdcms()
+  |-- Reads raw CDCMS export (tab-separated, 19 columns)
+  |-- Filters by OrderStatus = "Allocated-Printed"
+  |-- Calls clean_cdcms_address() per row:
+  |     Step 1: Remove phone numbers (10-digit regex)
+  |     Step 2: Remove CDCMS artifacts (PH: annotations, backticks)
+  |     Step 3: Expand abbreviations (NR->Near, PO->P.O., (H)->House)
+  |     Step 4: Split digit->uppercase only: re.sub(r"(\d)([A-Z])", ...)
+  |     Step 5: Collapse whitespace
+  |     Step 6: Title case
+  |     Step 7: Append area suffix ", Vatakara, Kozhikode, Kerala"
+  |-- Returns DataFrame with columns: order_id, address, quantity, area_name, delivery_man
+  |
+  v
+core/data_import/csv_importer.py :: CsvImporter.import_orders()
+  |-- Reads preprocessed CSV
+  |-- Creates Order objects with address_raw = cleaned address
+  |-- Returns ImportResult (orders + errors + warnings + row_numbers)
+  |
+  v
+apps/kerala_delivery/api/main.py :: geocoding loop (lines 1074-1131)
+  |-- For each order without coordinates:
+  |     CachedGeocoder.geocode(order.address_raw)
+  |       |-- Check PostGIS cache (by normalized key)
+  |       |-- Cache HIT -> return Location
+  |       |-- Cache MISS -> GoogleGeocoder._call_api(address)
+  |       |     |-- Google returns formatted_address, location_type, lat/lon
+  |       |     |-- Confidence mapped: ROOFTOP=0.95, INTERPOLATED=0.80, CENTER=0.60, APPROX=0.40
+  |       |     |-- Location.address_text = Google's formatted_address     <-- BUG: wrong display text
+  |       |-- Save to PostGIS cache
+  |       |-- order.location = result.location
+  |
+  v
+core/optimizer/vroom_adapter.py :: VroomAdapter.optimize()
+  |-- _build_request(): converts Orders to VROOM JSON jobs
+  |-- _parse_response(): converts VROOM solution to RouteAssignment
+  |     Line 278: address_display = order.location.address_text or order.address_raw
+  |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+  |                                 On cache MISS: Google's formatted_address (possibly wrong)
+  |                                 On cache HIT: original address from cache
+  |
+  v
+core/database/repository.py :: save_optimization_run()
+  |-- Saves OptimizationRunDB, OrderDB (with geocode_confidence), RouteDB, RouteStopDB
+  |-- OrderDB.address_display = order.location.address_text (Google's text)
+  |-- RouteStopDB.address_display = stop.address_display (from vroom_adapter)
+  |
+  v
+API Response: GET /api/routes/{vehicle_id}
+  |-- route_db_to_pydantic() converts DB to Pydantic
+  |-- Returns stops with address, lat, lon, etc.
+  |-- NO geocode_confidence in response currently
+  |
+  v
+Driver PWA: index.html
+  |-- Renders stop address from API response
+  |-- Navigate button opens Google Maps with lat/lon
+  |-- NO "approximate location" indicator currently
 ```
+
+### Two Interacting Bugs Identified
+
+**Bug 1 -- Insufficient word splitting:**
+`clean_cdcms_address()` only splits `digit->uppercase` transitions (`8/542SREESHYLAM` -> `8/542 SREESHYLAM`). CDCMS also concatenates `letter->letter` with no separator: `ANANDAMANDIRAMK.T.BAZAR`, `MUTTUNGAL-POBALAVADI`. These garbled strings produce wrong geocoding results.
+
+**Bug 2 -- `formatted_address` overwrites display text:**
+On cache MISS, `Location.address_text` = Google's `formatted_address` (could be "HDFC ERGO Insurance Agent, Palayam, Kozhikode" -- 40km away). This wrong text flows through `vroom_adapter.py:278` into `address_display`, then to the API response, then to the driver's navigation link.
 
 ---
 
-## Target Architecture (v2.1)
+## Target Architecture (After Changes)
 
 ```
-TARGET LICENSING ARCHITECTURE
-==============================
+TARGET ADDRESS PROCESSING PIPELINE
+=====================================
 
-Developer Machine                     Customer Machine (WSL2 + Docker)
-==================                    ================================
-
-scripts/generate_license.py           docker-compose.yml
-  |-- encode_license_key()              |-- NEW: /etc/machine-id bind-mount (read-only)
-  |-- NEW: --renew flag                 |
-  v                                     | api container (:8000)
-LPG-XXXX-XXXX key string               |   |
-                                        |   v
-                                        |  main.py (STRIPPED: no dev-mode block)
-                                        |   |-- from core.licensing.enforcement import enforce
-                                        |   |-- enforce(app)  <-- single call, everything else compiled
-                                        |   |
-                                        |  core/licensing/enforcement.so  (Cython-compiled)
-                                        |   |-- enforce(app):
-                                        |   |   |-- startup_validate()
-                                        |   |   |-- register_middleware(app)
-                                        |   |   |-- check_file_integrity()
-                                        |   |
-                                        |   |-- _INTEGRITY_MANIFEST = { ... }  (embedded SHA256 hashes)
-                                        |   |-- _REQUEST_COUNTER (internal state)
-                                        |   |-- _REVALIDATION_INTERVAL = 500
-                                        |   |
-                                        |   |-- middleware:
-                                        |   |   |-- increment _REQUEST_COUNTER
-                                        |   |   |-- if counter % N == 0: re-validate + re-check integrity
-                                        |   |   |-- INVALID -> 503
-                                        |   |   |-- GRACE -> X-License-Warning
-                                        |   |
-                                        |  core/licensing/license_manager.so  (Cython-compiled)
-                                        |   |-- get_machine_fingerprint()  (STRENGTHENED)
-                                        |   |   |-- platform.node()
-                                        |   |   |-- uuid.getnode() (MAC)
-                                        |   |   |-- /etc/machine-id (bind-mounted)
-                                        |   |   |-- /proc/cpuinfo model name
-                                        |   |   |-- NO container_id (dropped -- too ephemeral)
-                                        |   |
-                                        |   |-- validate_license()
-                                        |   |-- decode_license_key()
-                                        |   |-- encode_license_key()  <-- still here for renewal
-                                        |   |
-                                        |  core/licensing/__init__.so  (Cython-compiled)
-
-BUILD PIPELINE (updated):
-scripts/build-dist.sh
-  1. rsync project (same exclusions + e2e/, docker-compose.license-test.yml)
-  2. NEW: Strip dev-mode block from main.py (sed/awk removal)
-  3. NEW: Generate SHA256 manifest of protected files
-  4. NEW: Inject manifest into enforcement.py source
-  5. NEW: Cython compile core/licensing/*.py -> .so (replaces compileall)
-  6. rm core/licensing/*.py, core/licensing/*.c (source + intermediate removed)
-  7. PYTHONPATH test import validation (.so loading)
-  8. tar czf dist/kerala-delivery-vX.X.tar.gz
+User uploads CDCMS CSV
+  |
+  v
+api/main.py :: upload_and_optimize()
+  |
+  v
+cdcms_preprocessor.py :: preprocess_cdcms()
+  |-- clean_cdcms_address() MODIFIED:
+  |     Stage 1: Remove phone numbers, artifacts, backticks (existing)
+  |     Stage 2: Word splitting IMPROVED:
+  |       (a) Digit->uppercase (existing)
+  |       (b) Lowercase->uppercase (NEW regex)                         <-- FIX #1
+  |     Stage 3: Dictionary-powered splitting (NEW)                    <-- CORE ADDITION
+  |       |-- AddressSplitter.split(text) called between cleanup and title case
+  |       |-- Loads place_names_vatakara.json (static, ~285 entries)
+  |       |-- Scans for known place names (longest match first)
+  |       |-- Splits at place name boundaries
+  |       |-- Detects PO/NR between place names
+  |       |-- Falls back gracefully if dictionary missing (None check)
+  |     Stage 4: Expand abbreviations (existing, reordered to AFTER splitting)
+  |     Stage 5: Title case + suffix (existing)
+  |
+  v
+csv_importer.py :: CsvImporter.import_orders()  -- UNCHANGED
+  |
+  v
+api/main.py :: geocoding loop MODIFIED:
+  |-- CachedGeocoder.geocode(address, area_name=area_name)            <-- area_name passed
+  |     |-- Check PostGIS cache (unchanged)
+  |     |-- Cache MISS -> GoogleGeocoder._call_api(address)
+  |     |     |-- result.location.address_text still = Google's formatted_address
+  |     |
+  |     |-- NEW: GeocodeValidator.validate(location, area_name)       <-- FIX #3
+  |     |     |-- Haversine distance from depot (11.6244, 75.5796)
+  |     |     |-- Within 30km? -> accept as-is
+  |     |     |-- Outside 30km? -> Fallback chain:
+  |     |     |     1. Retry: geocode("{area_name}, Vatakara, Kozhikode, Kerala")
+  |     |     |        -> validate again -> if within 30km, use (confidence * 0.7)
+  |     |     |     2. Dictionary centroid: get_area_centroid(area_name)
+  |     |     |        -> use centroid coordinates (confidence = 0.3)
+  |     |     |     3. Last resort: use original result, flag as unvalidated
+  |     |
+  |     |-- Save to PostGIS cache (unchanged)
+  |
+  v
+vroom_adapter.py :: VroomAdapter.optimize()
+  |-- _parse_response():
+  |     Line 278: address_display = order.address_raw                  <-- FIX #2
+  |                                 ^^^^^^^^^^^^^^^^
+  |                                 ALWAYS use cleaned original, never Google's text
+  |
+  v
+repository.py :: save_optimization_run()  -- UNCHANGED
+  |-- OrderDB.geocode_confidence already saved (existing field)
+  |
+  v
+API Response: GET /api/routes/{vehicle_id}  MODIFIED:
+  |-- NEW fields in stop JSON:
+  |     "geocode_confidence": stop.location.geocode_confidence,
+  |     "location_approximate": (confidence is not None and confidence < 0.5)
+  |
+  v
+Driver PWA: index.html  MODIFIED:
+  |-- Hero card: "Approx. location" badge (DaisyUI warning badge)
+  |-- Compact cards: orange dot indicator for approximate stops
+  |-- Informational only -- Navigate button still works
+  |-- Driver-verified GPS on delivery corrects the cache for next time
 ```
 
 ---
 
 ## New Components
 
-### 1. `core/licensing/enforcement.py` (NEW file, compiled to .so)
+### 1. `core/data_import/address_splitter.py` (NEW)
 
-**Responsibility:** Single entry point for all license enforcement. Absorbs the middleware logic currently in main.py and adds periodic re-validation + integrity checking.
+**Responsibility:** Split concatenated CDCMS address text using a static place name dictionary. Pure function, no I/O beyond initial dictionary load.
 
-**Why a new file instead of adding to license_manager.py:**
-- `license_manager.py` has a clean single responsibility: key encoding/decoding/validation
-- Enforcement (middleware registration, request counting, integrity checking) is a separate concern
-- Splitting allows `generate_license.py` to import only `license_manager` without pulling in FastAPI dependencies
-- Keeps the Cython compilation units focused
+**Why a separate module (not inline in cdcms_preprocessor.py):**
+- Separation of concerns: preprocessor handles CDCMS format quirks, splitter handles word boundary detection
+- Testability: dictionary splitting logic is independently testable with unit tests
+- Reusability: if another data source has concatenated text, the splitter works with any text
+- The dictionary dependency is injected via the constructor, keeping the splitter loosely coupled
 
-**Public API:**
+**Component Boundary:**
+
+| Aspect | Detail |
+|--------|--------|
+| Input | Raw uppercase text from CDCMS address field (after phone/artifact removal, before title case) |
+| Output | Same text with spaces inserted at detected place name boundaries |
+| Dependencies | `rapidfuzz` (fuzzy matching, MIT, ~200KB), `json` (stdlib) |
+| Data source | `data/place_names_vatakara.json` (static, committed to repo) |
+| Initialization | Lazy -- loaded on first call to `split()`. If dictionary file missing, returns `None` and preprocessor falls back to regex-only |
+| Thread safety | Read-only after init. Dictionary is loaded once, immutable after construction |
+
+**Interface:**
+
 ```python
-def enforce(app: FastAPI) -> None:
-    """Register license enforcement on the app.
+class AddressSplitter:
+    def __init__(self, dictionary_path: str | Path):
+        """Load place name dictionary from JSON file.
+        Sorts entries by name length descending (longest match first).
+        """
 
-    Called once from main.py. Does:
-    1. Validate license at startup
-    2. Check file integrity against embedded manifest
-    3. Register middleware for ongoing enforcement + periodic re-validation
-    """
+    def split(self, text: str) -> str:
+        """Split concatenated words at known place name boundaries.
+        Unknown text passes through unchanged.
+        """
+
+    def find_place(self, text: str) -> PlaceMatch | None:
+        """Find the best matching place name in the given text.
+        Uses rapidfuzz.fuzz.ratio() with threshold 85%.
+        Returns PlaceMatch(name, position, confidence) or None.
+        """
 ```
 
-**Internal state (inside compiled .so, not on app.state):**
+**Integration point in cdcms_preprocessor.py:**
+
 ```python
-_request_counter: int = 0
-_license_info: LicenseInfo = None
-_REVALIDATION_INTERVAL: int = 500  # re-validate every Nth request
-_INTEGRITY_MANIFEST: dict[str, str] = {}  # populated at build time
+# Module-level lazy initialization
+_splitter: AddressSplitter | None = None
+_splitter_loaded: bool = False
+
+def _get_splitter() -> AddressSplitter | None:
+    global _splitter, _splitter_loaded
+    if not _splitter_loaded:
+        dict_path = Path(__file__).parent.parent.parent / "data" / "place_names_vatakara.json"
+        if dict_path.exists():
+            _splitter = AddressSplitter(dict_path)
+        _splitter_loaded = True
+    return _splitter
+
+# Inside clean_cdcms_address(), between Step 2 (word splitting) and Step 4 (abbreviation expansion):
+splitter = _get_splitter()
+if splitter is not None:
+    addr = splitter.split(addr)
 ```
 
-**Why move state off app.state:**
-Currently `app.state.license_info` is trivially patchable -- anyone can set it to VALID from a Python shell or by editing main.py. Moving the license state inside the compiled .so makes it inaccessible from outside the module (no `app.state.license_info = fake_valid`). The middleware closure captures the module-level variable directly.
+### 2. `core/geocoding/validator.py` (NEW)
 
-### 2. `core/licensing/integrity.py` (NEW file, compiled to .so)
+**Responsibility:** Validate geocoding results against the delivery zone boundary. Implements the fallback chain (area retry -> centroid fallback) for out-of-zone results.
 
-**Responsibility:** SHA256 file hashing and manifest verification.
+**Why a separate module (not inline in cache.py):**
+- Separation of concerns: CachedGeocoder handles cache-then-API flow, validator handles spatial validation
+- Testability: zone checking and fallback logic are independently testable with known coordinates
+- Reusability: any geocoding source (not just Google) benefits from zone validation
+- The haversine function is useful elsewhere (duplicate_detector.py already has one -- this could share it)
 
-**Why separate from enforcement.py:**
-- Testability: integrity checking can be unit-tested independently
-- The manifest constant will be injected by build-dist.sh before Cython compilation
-- Clean separation: enforcement orchestrates, integrity checks files
+**Component Boundary:**
 
-**Public API:**
+| Aspect | Detail |
+|--------|--------|
+| Input | A `Location` (lat/lon from geocoding result) + optional `area_name` from CDCMS |
+| Output | `ValidationResult` with is_valid flag, distance_from_depot_km, confidence_adjustment, reason |
+| Dependencies | `math` (stdlib for haversine), `json` (stdlib for dictionary load) |
+| Data source | `data/place_names_vatakara.json` (same dictionary as AddressSplitter) |
+| Configuration | `depot: Location`, `max_radius_km: float = 30.0` (injected via constructor) |
+
+**Interface:**
+
 ```python
-def check_integrity(base_path: str = "/app") -> tuple[bool, list[str]]:
-    """Verify protected files against embedded SHA256 manifest.
+@dataclass
+class ValidationResult:
+    is_valid: bool
+    distance_from_depot_km: float
+    confidence_adjustment: float  # 1.0 = no change, 0.7 = area retry, 0.3 = centroid
+    reason: str  # "within_zone", "outside_zone", "area_fallback", "centroid_fallback"
 
-    Returns:
-        (all_ok, list_of_failures)
-        Failures are strings like "main.py: expected abc123, got def456"
-    """
+class GeocodeValidator:
+    def __init__(self, depot: Location, max_radius_km: float = 30.0,
+                 dictionary_path: str | Path | None = None):
+        """Initialize with depot location and delivery zone radius."""
+
+    def validate(self, location: Location, area_name: str = "") -> ValidationResult:
+        """Check if a geocoded location falls within the delivery zone."""
+
+    def get_area_centroid(self, area_name: str) -> Location | None:
+        """Look up centroid coordinates for a CDCMS area name.
+        Uses fuzzy matching against dictionary.
+        """
 ```
 
-**Protected files (embedded in manifest):**
-- `apps/kerala_delivery/api/main.py` -- the entrypoint that calls enforce()
-- `docker-compose.yml` -- prevents adding ENVIRONMENT=development
-- Any other critical files identified during implementation
+**Integration point in cache.py -- CachedGeocoder:**
 
-### 3. Updated `core/licensing/license_manager.py` (MODIFIED, compiled to .so)
+The validator integrates into `CachedGeocoder.geocode()` after the upstream provider returns a result but before saving to cache. This requires adding `area_name` as a parameter:
 
-**Changes:**
-- `get_machine_fingerprint()`: Add `/etc/machine-id` and `/proc/cpuinfo` signals, drop container_id
-- Add `renew_license()` function for license renewal without new fingerprint
+```python
+class CachedGeocoder:
+    def __init__(self, upstream, session, default_source="google",
+                 validator=None, area_suffix=""):           # NEW params
+        self._validator = validator
+        self._area_suffix = area_suffix
 
-### 4. Updated `scripts/get_machine_id.py` (MODIFIED, shipped to customer)
+    async def geocode(self, address: str, area_name: str = "") -> GeocodingResult:
+        # ... existing cache check ...
 
-**Changes:**
-- Add `/etc/machine-id` reading
-- Add `/proc/cpuinfo` model name extraction
-- Drop `_get_docker_container_id()` function
-- Note: This file is NOT compiled -- customer runs it as plain Python
+        result = self._upstream.geocode(address)
 
-### 5. Updated `scripts/generate_license.py` (MODIFIED, stays on developer machine)
+        # NEW: Validate result if validator configured
+        if result.success and result.location and self._validator:
+            validation = self._validator.validate(result.location, area_name)
+            if not validation.is_valid:
+                # Execute fallback chain
+                result = await self._try_fallbacks(result, area_name, validation)
 
-**Changes:**
-- Add `--renew` flag that takes an existing key and extends expiry without requiring a new fingerprint
+        # ... existing cache save ...
+```
 
-### 6. Updated `scripts/build-dist.sh` (MODIFIED)
+**Fallback chain detail:**
 
-**Changes:**
-- Replace `compileall` with Cython compilation
-- Add dev-mode stripping step
-- Add manifest generation and injection
-- Update import validation for .so files
+```
+geocode(address) -> location outside 30km?
+  |
+  |-- Retry #1: geocode("{area_name}, Vatakara, Kozhikode, Kerala")
+  |     |-- Within 30km? -> use this result (confidence * 0.7)
+  |     |-- Still outside? -> continue to #2
+  |
+  |-- Retry #2: get_area_centroid(area_name) from dictionary
+  |     |-- Found in dictionary? -> use centroid (confidence = 0.3)
+  |     |-- Not found? -> continue to #3
+  |
+  |-- Fallback #3: use original result, unmodified
+  |     |-- Log warning "geocode outside delivery zone"
+  |     |-- Original confidence preserved (driver still gets a location)
+```
 
-### 7. Updated `docker-compose.yml` (MODIFIED)
+### 3. `data/place_names_vatakara.json` (NEW)
 
-**Changes:**
-- Add `/etc/machine-id` read-only bind mount to api service
+**Responsibility:** Static dictionary of ~285 place names within 30km of the Vatakara depot. Contains names, aliases, types, coordinates, and sources.
 
-### 8. Updated `infra/Dockerfile` (MODIFIED)
+**Built by:** `scripts/build_place_dictionary.py` (one-time script)
+**Data sources:** OSM Overpass API (hamlets, villages, neighbourhoods) + PostalPinCode API (post office names)
+**Committed to repo:** Yes -- no runtime API calls needed
 
-**Changes:**
-- Builder stage: Add Cython + python3-dev as build dependencies
-- Note: Cython compilation happens in build-dist.sh (on developer machine), NOT in the Docker build. The Dockerfile change is only needed if we want to support building inside Docker for CI/testing.
+**Schema (from design spec):**
+
+```json
+{
+  "metadata": {
+    "generated_at": "2026-03-10T12:00:00Z",
+    "depot": {"latitude": 11.6244, "longitude": 75.5796},
+    "radius_km": 30,
+    "sources": ["osm_overpass", "india_post_pincode"],
+    "total_entries": 285
+  },
+  "places": [
+    {
+      "name": "VALLIKKADU",
+      "name_ml": "...",
+      "aliases": ["VALLIKADU", "VALLIKKAD"],
+      "type": "hamlet",
+      "latitude": 11.6312,
+      "longitude": 75.5845,
+      "source": "osm"
+    }
+  ],
+  "post_offices": [
+    {
+      "name": "MUTTUNGAL",
+      "pincode": "673104",
+      "latitude": 11.6201,
+      "longitude": 75.5867,
+      "source": "india_post"
+    }
+  ]
+}
+```
+
+**Consumed by:**
+- `AddressSplitter` -- for word boundary detection (place name matching)
+- `GeocodeValidator` -- for area centroid fallback coordinates
+
+### 4. `scripts/build_place_dictionary.py` (NEW)
+
+**Responsibility:** One-time (or periodic) script that fetches place names from public APIs and merges them into the static JSON dictionary.
+
+**Not imported at runtime.** Only used by developers to refresh the dictionary.
 
 ---
 
-## Component Boundaries
+## Modified Components
 
-### New Components
+### 1. `core/data_import/cdcms_preprocessor.py` (MODIFIED)
 
-| Component | Responsibility | Communicates With | Status |
-|-----------|---------------|-------------------|--------|
-| `core/licensing/enforcement.py` | Middleware registration, periodic re-validation, integrity orchestration | `license_manager`, `integrity`, FastAPI app | **NEW** |
-| `core/licensing/integrity.py` | SHA256 manifest verification | Filesystem (protected files) | **NEW** |
+**Changes:**
+1. Add `lowercase->uppercase` word split regex alongside existing `digit->uppercase` split
+2. Reorder cleaning steps: word splitting BEFORE abbreviation expansion (so `NR`, `PO` patterns are detected after words are separated)
+3. Integrate `AddressSplitter` with lazy initialization and graceful fallback
 
-### Modified Components
+**Line-level changes:**
 
-| Component | What Changes | Why |
-|-----------|--------------|-----|
-| `core/licensing/license_manager.py` | Stronger fingerprint (machine-id, cpuinfo, drop container_id), renewal function | Loopholes #3, renewal feature |
-| `core/licensing/__init__.py` | Re-export enforcement.enforce for clean import | Single import path |
-| `scripts/build-dist.sh` | Cython compilation, dev-mode stripping, manifest generation | Loopholes #1, #2, #4, #6 |
-| `scripts/get_machine_id.py` | New fingerprint signals, drop container_id | Must match license_manager changes |
-| `scripts/generate_license.py` | Add --renew flag | License renewal feature |
-| `scripts/verify-dist.sh` | Validate .so loading instead of .pyc | Must match build changes |
-| `docker-compose.yml` | Add /etc/machine-id bind mount to api service | Fingerprint needs host machine-id |
-| `docker-compose.license-test.yml` | Add /etc/machine-id bind mount, add test scenarios | Must match production setup |
-| `infra/Dockerfile` | Add Cython + python3-dev to builder stage (if needed for CI) | Cython build support |
-| `apps/kerala_delivery/api/main.py` | Replace inline middleware + dev-mode block with single enforce(app) call | Loopholes #1, #2 |
-| `e2e/license.spec.ts` | Add tests for integrity failure, periodic re-validation, renewal | Test coverage for new features |
-| `tests/core/licensing/test_license_manager.py` | Add tests for new fingerprint signals, renewal | Unit test coverage |
+| Location | Current | New |
+|----------|---------|-----|
+| Line 269 | `re.sub(r"(\d)([A-Z])", r"\1 \2", addr)` | Add: `re.sub(r"([a-z])([A-Z])", r"\1 \2", addr)` |
+| After line 269 | (nothing) | Call `_get_splitter().split(addr)` if splitter available |
+| Step ordering | Steps: phone -> artifacts -> abbreviations -> digit-split -> whitespace -> title case | Steps: phone -> artifacts -> digit-split -> letter-split -> dictionary-split -> abbreviations -> whitespace -> title case |
 
-### Untouched Components
+**Impact on existing tests:** `tests/core/data_import/test_cdcms_preprocessor.py` may need updates for step reordering. Some expected outputs may change because abbreviation expansion now happens after splitting. All changes improve output quality.
+
+### 2. `core/optimizer/vroom_adapter.py` (MODIFIED)
+
+**Change:** One line fix at line 278.
+
+```python
+# BEFORE:
+address_display=order.location.address_text or order.address_raw,
+
+# AFTER:
+address_display=order.address_raw,
+```
+
+**Rationale:** `order.address_raw` is the cleaned CDCMS address that the driver recognizes. `order.location.address_text` is Google's `formatted_address` which may reference a completely different place (e.g., "HDFC ERGO Insurance Agent, Palayam, Kozhikode"). The driver should always see the address from the CSV.
+
+**Impact:** `address_display` in all `RouteStop` objects will now use the original cleaned address instead of Google's interpretation. This is the correct behavior for all cases (cache hit and cache miss alike).
+
+### 3. `core/geocoding/cache.py` (MODIFIED)
+
+**Changes:**
+1. Accept optional `validator: GeocodeValidator` and `area_suffix: str` in constructor
+2. Accept optional `area_name: str` parameter in `geocode()` method
+3. Add fallback chain logic after upstream returns a result
+4. Add `_try_fallbacks()` private method for area retry and centroid fallback
+
+**Backward compatibility:** All new parameters are optional with defaults. Existing callers (tests, scripts) that construct `CachedGeocoder` without a validator will work unchanged -- validation is simply skipped.
+
+**The critical integration question -- where does `area_name` come from?**
+
+In the API's `upload_and_optimize()` geocoding loop, the CDCMS preprocessor preserves `area_name` in the DataFrame and it flows into the import result. However, `Order` does not have an `area_name` field -- the field is on the DataFrame, not on the Order object.
+
+**Solution:** Pass `area_name` through a side channel. The `preprocess_cdcms()` output DataFrame has an `area_name` column. The API code already has access to `preprocessed_df`. Build a mapping `order_id -> area_name` before the geocoding loop:
+
+```python
+# In upload_and_optimize(), after orders are imported:
+area_name_map: dict[str, str] = {}
+if is_cdcms and not preprocessed_df.empty:
+    for _, row in preprocessed_df.iterrows():
+        area_name_map[str(row["order_id"])] = str(row.get("area_name", ""))
+
+# In geocoding loop:
+for order in orders:
+    if not order.is_geocoded:
+        area_name = area_name_map.get(order.order_id, "")
+        result = await cached_geocoder.geocode(order.address_raw, area_name=area_name)
+```
+
+### 4. `apps/kerala_delivery/api/main.py` (MODIFIED)
+
+**Changes:**
+1. Add `geocode_confidence` and `location_approximate` fields to stop JSON in `GET /api/routes/{vehicle_id}` (line ~1470) and batch mode in `GET /api/routes?include_stops=true` (line ~1388)
+2. Construct `GeocodeValidator` and pass it to `CachedGeocoder` in the geocoding section
+3. Build `area_name_map` from preprocessed DataFrame
+4. Pass `area_name` to `cached_geocoder.geocode()` calls
+
+**Stop JSON additions (two endpoints):**
+
+```python
+{
+    "sequence": stop.sequence,
+    "order_id": stop.order_id,
+    "address": stop.address_display,
+    "latitude": stop.location.latitude,
+    "longitude": stop.location.longitude,
+    "geocode_confidence": stop.location.geocode_confidence,      # NEW
+    "location_approximate": (                                     # NEW
+        stop.location.geocode_confidence is not None
+        and stop.location.geocode_confidence < 0.5
+    ),
+    # ... existing fields ...
+}
+```
+
+**Geocoder construction change:**
+
+```python
+# BEFORE:
+cached_geocoder = CachedGeocoder(upstream=geocoder, session=session) if geocoder else None
+
+# AFTER:
+from core.geocoding.validator import GeocodeValidator
+validator = GeocodeValidator(
+    depot=config.DEPOT_LOCATION,
+    max_radius_km=30.0,
+    dictionary_path=Path(__file__).parent.parent.parent.parent / "data" / "place_names_vatakara.json",
+)
+cached_geocoder = CachedGeocoder(
+    upstream=geocoder,
+    session=session,
+    validator=validator,
+    area_suffix=config.CDCMS_AREA_SUFFIX,
+) if geocoder else None
+```
+
+### 5. `apps/kerala_delivery/driver_app/index.html` (MODIFIED)
+
+**Changes:** Add visual indicators for approximate locations.
+
+**Hero card (next pending stop):**
+```html
+<!-- After address display, inside hero card -->
+<div class="tw:badge tw:badge-warning tw:badge-sm tw:gap-1"
+     style="display: ${stop.location_approximate ? 'inline-flex' : 'none'}">
+  <span>~</span> Approx. location
+</div>
+```
+
+**Compact card (remaining stops):**
+```html
+<!-- Orange dot next to address text -->
+<span class="tw:text-warning" title="Approximate location"
+      style="display: ${stop.location_approximate ? 'inline' : 'none'}">
+  &#9679;
+</span>
+```
+
+**Driver behavior:** Informational only. Navigate button still works with the approximate coordinates. Google Maps opens at the area center, and the driver calls the customer for exact directions. When driver marks "Done" and confirms GPS, `save_driver_verified()` caches the correct location for next time.
+
+---
+
+## Unchanged Components
 
 | Component | Why No Change |
 |-----------|--------------|
-| `apps/kerala_delivery/dashboard/` | Dashboard is not part of licensing |
-| `apps/kerala_delivery/driver_app/` | Driver PWA is not part of licensing |
-| `core/database/` | Database layer unchanged |
-| `core/geocoding/` | Geocoding unrelated |
-| `core/optimizer/` | Optimizer unrelated |
-| PostgreSQL, OSRM, VROOM services | Infrastructure unchanged (except machine-id mount on api) |
+| `core/geocoding/normalize.py` | Cache key normalization is orthogonal. Dictionary splitting happens before cache lookup. |
+| `core/geocoding/google_adapter.py` | Pure API caller. No changes needed -- it still sends addresses and returns results. |
+| `core/geocoding/interfaces.py` | Geocoder/AsyncGeocoder protocols unchanged. Validation is external to the protocol. |
+| `core/geocoding/duplicate_detector.py` | Already has `haversine_meters()`. The validator could share it, but circular imports are a concern. Better to have a standalone haversine in validator.py (10 lines, no dependency). |
+| `core/models/location.py` | Already has `geocode_confidence` field. No schema change needed. |
+| `core/models/order.py` | `address_raw` already preserved. No field additions needed. |
+| `core/models/route.py` | `RouteStop.location` already carries confidence via `Location.geocode_confidence`. |
+| `core/database/models.py` | `OrderDB.geocode_confidence` already exists. `RouteStopDB.location` already stores PostGIS point. No migration needed. |
+| `core/database/repository.py` | `save_optimization_run()` already persists `geocode_confidence`. `route_db_to_pydantic()` already passes confidence through. |
+| `core/data_import/csv_importer.py` | Generic importer. CDCMS-specific changes stay in preprocessor. |
+| `apps/kerala_delivery/config.py` | `DEPOT_LOCATION`, `CDCMS_AREA_SUFFIX` already exist. No new config constants needed. |
 
 ---
 
-## Data Flow Changes
+## Data Flow Changes (Detailed)
 
-### Current: Startup-only validation
-
-```
-Container start
-  -> main.py lifespan
-    -> validate_license()
-    -> if dev mode: override to VALID    <-- stripped in v2.1
-    -> app.state.license_info = result   <-- moved into enforcement.so
-  -> middleware reads app.state          <-- replaced by closure in enforcement.so
-  -> (runs forever, never re-checks)    <-- fixed by periodic re-validation
-```
-
-### Target: Continuous enforcement with integrity checking
+### Change 1: Address Cleaning Pipeline Reorder
 
 ```
-Container start
-  -> main.py lifespan
-    -> enforce(app)                      <-- single call
-      -> validate_license()              <-- inside enforcement.so
-      -> check_integrity("/app")         <-- verify main.py, docker-compose.yml
-      -> register middleware             <-- closure captures module-level state
-  -> middleware (inside enforcement.so)
-    -> every request: check cached license status
-    -> every 500th request:
-      -> validate_license()              <-- re-validate (expiry, fingerprint)
-      -> check_integrity("/app")         <-- re-verify file hashes
-      -> update cached status
-    -> INVALID: return 503
-    -> GRACE: add X-License-Warning header
-    -> VALID: pass through
+BEFORE:                               AFTER:
+Step 1: Phone removal                 Step 1: Phone removal
+Step 2: Artifact removal              Step 2: Artifact removal
+Step 3: Abbreviation expansion        Step 3: Digit->uppercase split (existing)
+Step 4: Digit->uppercase split        Step 4: Lowercase->uppercase split (NEW)
+Step 5: Whitespace collapse           Step 5: Dictionary-powered split (NEW)
+Step 6: Title case                    Step 6: Abbreviation expansion (MOVED)
+Step 7: Title case artifacts fix      Step 7: Whitespace collapse
+Step 8: Area suffix                   Step 8: Title case
+                                      Step 9: Title case artifacts fix
+                                      Step 10: Area suffix
 ```
 
-### Fingerprint Data Flow Change
+**Why reorder?** Abbreviation expansion converts `NR.` to `Near`, `PO.` to `P.O.`. If this happens before splitting, the split patterns can not detect `NR` or `PO` in concatenated text. Example: `KUNIYILNR.EK GOPALAN` -- expanding `NR.` first gives `KUNIYILNear EK GOPALAN` (wrong). Splitting first detects `KUNIYIL` as a place name, then the remainder `NR.EK GOPALAN` gets expanded to `Near EK GOPALAN` (correct).
+
+### Change 2: Geocoding Flow Adds Validation Layer
 
 ```
-CURRENT:  hostname | MAC | container_id  -> SHA256
-TARGET:   hostname | MAC | /etc/machine-id | cpuinfo_model  -> SHA256
+BEFORE:
+  address -> cache check -> miss -> Google API -> save to cache -> return
 
-WSL2-specific:
-  /etc/machine-id is the WSL instance's machine-id (persistent across reboots)
-  /proc/cpuinfo model name is the host CPU (consistent across container recreates)
-  container_id DROPPED (changes on every docker compose down/up)
+AFTER:
+  address -> cache check -> miss -> Google API
+    -> VALIDATE (within 30km?)
+    -> YES: save to cache -> return
+    -> NO: retry with area name -> validate again
+        -> YES: save to cache (confidence * 0.7) -> return
+        -> NO: centroid fallback (confidence = 0.3) -> save to cache -> return
 ```
 
-### Build Pipeline Data Flow Change
+**Cache interaction:** The validation result (including adjusted confidence) is what gets saved to the PostGIS cache. Future cache hits for the same address will return the validated (possibly fallback) location, not the original wrong one. This means the fallback chain runs at most once per address.
+
+### Change 3: API Response Adds Confidence Fields
 
 ```
-CURRENT:
-  rsync -> compileall (pyc) -> rm .py -> tar
-
-TARGET:
-  rsync
-    -> strip dev-mode from main.py (sed removes lines 184-203)
-    -> sha256sum protected files -> generate manifest dict
-    -> inject manifest into enforcement.py source
-    -> cythonize core/licensing/*.py -> .so files
-    -> rm core/licensing/*.py core/licensing/*.c
-    -> validate .so import
-    -> tar
-```
-
-### License Renewal Data Flow
-
-```
-CURRENT:
-  Customer sends fingerprint -> developer generates new key -> customer replaces key
-
-TARGET (renewal):
-  Customer's license approaching expiry
-    -> developer runs: generate_license.py --renew --key <existing_key> --months 12
-    -> generates new key with same fingerprint, new expiry
-    -> customer replaces LICENSE_KEY or license.key file
-    -> next periodic re-validation picks up new key automatically (no restart)
-```
-
----
-
-## Cython Compilation Architecture
-
-### Why Cython Compiles Existing .py Files Directly
-
-Cython supports "pure Python mode" -- it can compile regular `.py` files to `.so` without renaming to `.pyx`. The existing `license_manager.py` uses only stdlib imports (`hashlib`, `hmac`, `struct`, `base64`, `os`, `platform`, `uuid`) and standard Python constructs (`dataclass`, `Enum`). These all compile cleanly with Cython 3.x on Python 3.12.
-
-### Build-time Setup
-
-```python
-# scripts/cython_build.py (NEW, used by build-dist.sh)
-from setuptools import setup, Extension
-from Cython.Build import cythonize
-
-extensions = [
-    Extension("core.licensing.license_manager",
-              ["core/licensing/license_manager.py"]),
-    Extension("core.licensing.enforcement",
-              ["core/licensing/enforcement.py"]),
-    Extension("core.licensing.integrity",
-              ["core/licensing/integrity.py"]),
-    Extension("core.licensing.__init__",
-              ["core/licensing/__init__.py"]),
-]
-
-setup(
-    ext_modules=cythonize(extensions, compiler_directives={
-        "language_level": "3",
-    }),
-)
-```
-
-**Build command (inside build-dist.sh):**
-```bash
-cd "$STAGE"
-PYTHONPATH="$STAGE" python3 scripts/cython_build.py build_ext --inplace
-rm -f core/licensing/*.py core/licensing/*.c  # Remove source + C intermediate
-rm -rf build/  # Remove setuptools build artifacts
-```
-
-### Output Files
-
-```
-core/licensing/
-  __init__.cpython-312-x86_64-linux-gnu.so
-  license_manager.cpython-312-x86_64-linux-gnu.so
-  enforcement.cpython-312-x86_64-linux-gnu.so
-  integrity.cpython-312-x86_64-linux-gnu.so
-```
-
-### Cython Build Dependencies
-
-**Build-time only (developer machine):**
-- `cython>=3.0` (pip install, NOT in requirements.txt)
-- `python3-dev` (system package, provides Python.h headers)
-- `gcc` (C compiler)
-
-**Runtime (customer machine):**
-- None -- .so files are self-contained native code
-- Must match Python version (3.12) and platform (x86_64 Linux)
-
-### Platform Lock-in Consideration
-
-Cython .so files are platform-specific. The current deployment target is WSL2 on x86_64, which matches the developer's build machine. If deployment targets change (ARM, different Python version), the build must be done on a matching platform. This is acceptable for the current single-customer deployment model.
-
----
-
-## File Integrity Manifest Architecture
-
-### Manifest Generation (build-time)
-
-```bash
-# Inside build-dist.sh, AFTER stripping dev-mode, BEFORE Cython compilation:
-
-MANIFEST=$(python3 -c "
-import hashlib, json, os
-files = {
-    'apps/kerala_delivery/api/main.py': None,
-    'docker-compose.yml': None,
+BEFORE (GET /api/routes/{vehicle_id}):
+{
+  "stops": [
+    {"sequence": 1, "address": "...", "latitude": ..., "longitude": ..., ...}
+  ]
 }
-for path in files:
-    full = os.path.join('$STAGE', path)
-    with open(full, 'rb') as f:
-        files[path] = hashlib.sha256(f.read()).hexdigest()
-print(json.dumps(files))
-")
 
-# Inject into enforcement.py before Cython compilation
-sed -i "s|_INTEGRITY_MANIFEST = {}|_INTEGRITY_MANIFEST = $MANIFEST|" \
-    "$STAGE/core/licensing/enforcement.py"
+AFTER:
+{
+  "stops": [
+    {
+      "sequence": 1,
+      "address": "...",
+      "latitude": ...,
+      "longitude": ...,
+      "geocode_confidence": 0.95,          // NEW
+      "location_approximate": false,        // NEW
+      ...
+    }
+  ]
+}
 ```
 
-### Manifest Verification (runtime)
+**Backward compatibility:** New fields are additive. Existing consumers that don't read `geocode_confidence` or `location_approximate` are unaffected. The driver PWA will be updated to display badges, but older cached versions of the PWA will simply ignore the new fields.
 
-```python
-# Inside enforcement.so (compiled)
-def check_integrity(base_path: str = "/app") -> tuple[bool, list[str]]:
-    failures = []
-    for rel_path, expected_hash in _INTEGRITY_MANIFEST.items():
-        full_path = os.path.join(base_path, rel_path)
-        try:
-            with open(full_path, "rb") as f:
-                actual = hashlib.sha256(f.read()).hexdigest()
-            if actual != expected_hash:
-                failures.append(f"{rel_path}: modified")
-        except FileNotFoundError:
-            failures.append(f"{rel_path}: missing")
-    return (len(failures) == 0, failures)
+### Change 4: Display Text Source Change
+
+```
+BEFORE:
+  RouteStop.address_display = order.location.address_text    (Google's formatted_address)
+                                 OR order.address_raw         (fallback)
+
+AFTER:
+  RouteStop.address_display = order.address_raw               (ALWAYS cleaned original)
 ```
 
-### What the Manifest Protects
-
-| File | Why Protected | What Tampering Catches |
-|------|--------------|----------------------|
-| `apps/kerala_delivery/api/main.py` | Contains the `enforce(app)` call | Removing or bypassing the enforce() call |
-| `docker-compose.yml` | Contains ENVIRONMENT variable | Adding ENVIRONMENT=development (irrelevant after dev-mode strip, but defense-in-depth) |
+**This affects all routes, not just new ones.** Existing cached geocode results still have `address_text = formatted_address`, but the vroom adapter now ignores that field. The display always comes from the CSV source.
 
 ---
 
-## Dev-Mode Stripping Architecture
+## Dependency Graph (Build Order)
 
-### What Gets Stripped
-
-In `main.py` lines 184-203, the current code has:
-
-```python
-else:
-    # INVALID -- but only enforce in production. In dev, just warn.
-    if env == "production":
-        logger.error(...)
-    else:
-        logger.info("License not configured (dev mode)...")
-        # In dev mode, override to VALID so the middleware doesn't block
-        license_info = LicenseInfo(
-            customer_id="dev-mode",
-            fingerprint="",
-            expires_at=...,
-            status=LicenseStatus.VALID,
-            days_remaining=999,
-            message="Development mode -- no license required",
-        )
-        app.state.license_info = license_info
 ```
-
-### Stripping Strategy
-
-**Option A: Marker-based removal (recommended)**
-
-Add comment markers in the source:
-
-```python
-    # DIST-STRIP-BEGIN
-    else:
-        logger.info("License not configured (dev mode)...")
-        license_info = LicenseInfo(...)
-        app.state.license_info = license_info
-    # DIST-STRIP-END
+Phase 1: Foundation Fixes (no dependencies)
+  |-- 1.1: Fix address_display source (vroom_adapter.py:278) -- ONE LINE
+  |-- 1.2: Add lowercase->uppercase regex (cdcms_preprocessor.py)
+  |-- 1.3: Reorder cleaning steps (cdcms_preprocessor.py)
+  |-- 1.4-1.5: Update/add tests
+  |
+Phase 2: Place Name Dictionary (no runtime dependencies on Phase 1)
+  |-- 2.1: Write build_place_dictionary.py
+  |-- 2.2: Run script, generate place_names_vatakara.json
+  |-- 2.3: Build AddressSplitter class
+  |-- 2.4: Add fuzzy matching with RapidFuzz
+  |-- 2.5: Integrate splitter into clean_cdcms_address() -- depends on 1.3 (step reorder)
+  |-- 2.6: Tests
+  |
+Phase 3: Geocode Validation (depends on 2.2 for dictionary)
+  |-- 3.1: Implement haversine utility
+  |-- 3.2: Build GeocodeValidator
+  |-- 3.3: Add area centroid lookup
+  |-- 3.4: Integrate into CachedGeocoder -- depends on 3.2
+  |-- 3.5: Add retry-with-area-name fallback -- depends on 3.4
+  |-- 3.6: Tests
+  |
+Phase 4: API + Driver UI (depends on 3.4 for confidence data)
+  |-- 4.1: Add confidence fields to API response
+  |-- 4.2: Add "Approx. location" badge to hero card
+  |-- 4.3: Add orange dot to compact cards
+  |-- 4.4: E2E tests
+  |
+Phase 5: Integration Testing (depends on all above)
+  |-- 5.1: Full pipeline test with sample_cdcms_export.csv
+  |-- 5.2: Verify "HDFC ERGO" bug is fixed
+  |-- 5.3: Measure accuracy metrics
+  |-- 5.4: Document upgrade trigger criteria for Approach B (NER)
 ```
-
-Build-dist.sh uses sed to remove everything between markers:
-
-```bash
-sed -i '/# DIST-STRIP-BEGIN/,/# DIST-STRIP-END/d' "$STAGE/apps/kerala_delivery/api/main.py"
-```
-
-**Why markers instead of line numbers:** Line numbers are fragile -- any edit to main.py shifts them. Markers are self-documenting and resilient to code changes above/below.
-
-### Post-Strip: main.py Changes
-
-After stripping, the entire lifespan license block becomes:
-
-```python
-# main.py in distribution
-from core.licensing.enforcement import enforce
-
-# Inside lifespan:
-enforce(app)  # All license logic is inside compiled .so
-```
-
-The full middleware (lines 381-427) is also removed from main.py, since `enforce()` registers its own middleware internally.
-
----
-
-## Docker Compose Changes
-
-### /etc/machine-id Bind Mount
-
-```yaml
-# docker-compose.yml (modified api service)
-api:
-  build:
-    context: .
-    dockerfile: infra/Dockerfile
-  volumes:
-    - ./data:/app/data
-    - dashboard_assets:/srv/dashboard:ro
-    - /etc/machine-id:/etc/machine-id:ro    # NEW: for fingerprinting
-```
-
-**WSL2 behavior:** `/etc/machine-id` in WSL2 is the instance's systemd machine-id. It is persistent across reboots on standard Ubuntu WSL (stored on the ext4 virtual disk). The NixOS-WSL tmpfs issue does not apply to standard Ubuntu/Debian WSL distros used in this project.
-
-**Read-only mount:** `:ro` prevents the container from modifying the host's machine-id.
-
-### docker-compose.license-test.yml Update
-
-```yaml
-# Must mirror the production mount
-api-license-test:
-  volumes:
-    - /etc/machine-id:/etc/machine-id:ro    # NEW: match production
-```
-
----
-
-## Periodic Re-validation Architecture
-
-### Why Request-Based (Not Timer-Based)
-
-A background timer (`asyncio.create_task` with `asyncio.sleep`) has problems:
-- Runs even when the app is idle (wasted cycles)
-- Requires careful lifecycle management (cancel on shutdown)
-- Interacts poorly with uvicorn worker forking (timer per worker)
-
-Request-based re-validation is simpler: the middleware increments a counter on every request and re-validates every Nth request. If the app is idle, no re-validation happens (which is fine -- an idle app is not being exploited).
-
-### Recommended N Value: 500
-
-**Rationale:**
-- At peak load (office uploads + 13 drivers checking routes), the system sees maybe 50-100 requests per hour
-- N=500 means re-validation approximately every 5-10 hours of active use
-- Low enough to catch mid-day license expiry
-- High enough to have zero performance impact (one extra SHA256 + HMAC per 500 requests)
-
-### Counter Implementation
-
-```python
-# Inside enforcement.so (compiled)
-_request_counter: int = 0
-_cached_license_status: LicenseStatus = LicenseStatus.INVALID
-
-async def _enforcement_middleware(request: Request, call_next):
-    global _request_counter, _cached_license_status
-
-    # Always allow health checks
-    if request.url.path == "/health":
-        response = await call_next(request)
-        if _cached_license_status != LicenseStatus.VALID:
-            response.headers["X-License-Status"] = _cached_license_status.value
-        return response
-
-    # Periodic re-validation
-    _request_counter += 1
-    if _request_counter % _REVALIDATION_INTERVAL == 0:
-        _cached_license_status = _do_full_validation()
-        integrity_ok, failures = check_integrity()
-        if not integrity_ok:
-            _cached_license_status = LicenseStatus.INVALID
-            logger.error("File integrity check failed: %s", failures)
-
-    # Enforcement
-    if _cached_license_status == LicenseStatus.INVALID:
-        return JSONResponse(status_code=503, content={
-            "detail": "License expired or invalid. Contact support.",
-            "license_status": "invalid",
-        })
-
-    response = await call_next(request)
-
-    if _cached_license_status == LicenseStatus.GRACE:
-        response.headers["X-License-Warning"] = "License in grace period"
-
-    return response
-```
-
----
-
-## License Renewal Architecture
-
-### Protocol
-
-1. Customer contacts developer saying "license expiring"
-2. Developer runs: `python scripts/generate_license.py --renew --key <current_key> --months 12`
-3. Script decodes existing key to extract customer_id and fingerprint
-4. Script generates new key with same customer_id and fingerprint, new expiry
-5. Developer sends new key to customer
-6. Customer updates LICENSE_KEY env var or license.key file
-7. On next periodic re-validation (every 500th request), new key is picked up automatically -- no restart needed
-
-### Why No Restart Required
-
-The periodic re-validation in enforcement.so re-reads the license key from the environment/file on every Nth request. If the key has been updated, the new expiry is picked up automatically. This is a significant UX improvement over requiring a Docker restart.
-
-### generate_license.py --renew Implementation
-
-```python
-# Pseudocode for the --renew path
-if args.renew:
-    old_info = decode_license_key(args.key)
-    if old_info is None:
-        error("Cannot decode existing key")
-        sys.exit(1)
-    # Reuse customer_id and fingerprint from old key
-    # We only have the fingerprint PREFIX (16 hex chars) in the key,
-    # so we pad it to 64 chars for encode_license_key compatibility
-    fingerprint_padded = old_info.fingerprint + "0" * 48
-    new_key = encode_license_key(
-        customer_id=old_info.customer_id,
-        fingerprint=fingerprint_padded,
-        expires_at=new_expiry,
-    )
-```
-
-**Note:** Since the key only stores the first 8 bytes (16 hex chars) of the fingerprint, and `validate_license()` only compares those first 16 chars, padding the rest with zeros is safe -- the comparison still passes because only the prefix matters.
-
----
-
-## Testing Architecture
-
-### Unit Tests (tests/core/licensing/)
-
-| Test Area | New Tests Needed |
-|-----------|-----------------|
-| Fingerprint | Test with /etc/machine-id present/absent, /proc/cpuinfo present/absent |
-| Fingerprint | Test that container_id no longer affects fingerprint |
-| Integrity | Test check_integrity() with correct manifest -> pass |
-| Integrity | Test check_integrity() with modified file -> fail |
-| Integrity | Test check_integrity() with missing file -> fail |
-| Enforcement | Test enforce() registers middleware on FastAPI app |
-| Enforcement | Test request counter increments and triggers re-validation at N |
-| Renewal | Test --renew flag generates valid key with same fingerprint |
-
-### E2E Tests (e2e/license.spec.ts)
-
-| Test Scenario | How to Test |
-|--------------|-------------|
-| Existing: 503 with invalid license | Already covered |
-| Existing: /health allowed with invalid license | Already covered |
-| NEW: Integrity check failure | Modify main.py in container, restart, verify 503 |
-| NEW: Periodic re-validation catches expiry | Start with valid license, mock time forward, send 500+ requests |
-| NEW: Renewal picks up new key without restart | Start with expiring license, update license.key, verify re-validation |
-
-### docker-compose.license-test.yml
-
-Needs new test scenarios. The existing setup (single container on port 8001 with invalid key) should be extended with:
-- A valid-license container for testing periodic re-validation
-- A tampered-file container for testing integrity checking
-
----
-
-## Suggested Build Order
-
-Based on dependencies between components:
-
-### Phase 1: Stronger Fingerprinting (no dependencies on other phases)
-
-**Files:** `core/licensing/license_manager.py`, `scripts/get_machine_id.py`, `docker-compose.yml`, `docker-compose.license-test.yml`
-**Tests:** `tests/core/licensing/test_license_manager.py` (new fingerprint tests)
-**Rationale:** Self-contained change. The fingerprint function is used by both validation and key generation. Changing it first means all subsequent phases use the new fingerprint.
-
-### Phase 2: Dev-Mode Stripping + Enforcement Module (depends on understanding Phase 1)
-
-**Files:** `core/licensing/enforcement.py` (NEW), `core/licensing/integrity.py` (NEW), `core/licensing/__init__.py`, `apps/kerala_delivery/api/main.py`
-**Tests:** `tests/core/licensing/test_enforcement.py` (NEW), `tests/core/licensing/test_integrity.py` (NEW)
-**Rationale:** Creates the enforcement module that absorbs middleware from main.py. The dev-mode block in main.py is replaced by a single `enforce(app)` call. This is the largest architectural change and should be done before Cython compilation so the code can be tested as plain Python first.
-
-### Phase 3: Cython Compilation (depends on Phase 2 being stable)
-
-**Files:** `scripts/cython_build.py` (NEW), `scripts/build-dist.sh` (major rewrite), `scripts/verify-dist.sh`
-**Tests:** Manual build + import validation, verify-dist.sh execution
-**Rationale:** Replace compileall with Cython. This is a build-system change, not a runtime change. All logic should already work as plain Python from Phase 2. Cython compilation is purely a protection layer.
-
-### Phase 4: File Integrity Checking (depends on Phase 3 for manifest injection)
-
-**Files:** Manifest generation in `build-dist.sh`, manifest injection into `enforcement.py`
-**Tests:** `tests/core/licensing/test_integrity.py` (manifest tests), `e2e/license.spec.ts` (integrity E2E)
-**Rationale:** Integrity checking requires the build pipeline to generate and inject manifests. This must come after the Cython build pipeline is working.
-
-### Phase 5: Periodic Re-validation (depends on Phase 2 enforcement module)
-
-**Files:** Counter logic in `core/licensing/enforcement.py`
-**Tests:** `tests/core/licensing/test_enforcement.py` (counter tests), `e2e/license.spec.ts` (re-validation E2E)
-**Rationale:** Adds request counting to the enforcement middleware created in Phase 2.
-
-### Phase 6: License Renewal (independent, can be done anytime after Phase 1)
-
-**Files:** `scripts/generate_license.py`
-**Tests:** Unit tests for --renew flag
-**Rationale:** Developer-side tool change. Independent of all runtime changes.
 
 ### Build Order Rationale
 
-- **Fingerprinting first** because it changes the identity function used everywhere
-- **Enforcement module before Cython** because debugging plain Python is easier than debugging compiled .so
-- **Cython before integrity** because integrity manifests need to be injected before compilation
-- **Periodic re-validation late** because it builds on the enforcement module
-- **Renewal is independent** and can slot in anywhere
+- **Phase 1 first** because the `address_display` fix and regex improvements are safe, independent, and immediately beneficial. They can ship before the dictionary exists.
+- **Phase 2 before Phase 3** because the validator uses the same dictionary for area centroid lookups. Building the dictionary infrastructure once and sharing it across both components avoids duplication.
+- **Phase 3 before Phase 4** because the API confidence fields are only meaningful after the validator assigns adjusted confidence scores. Without validation, all Google results have the same confidence regardless of whether they are in-zone.
+- **Phase 4 last (before integration testing)** because UI changes should reflect the complete pipeline behavior, not an intermediate state.
+- **Phase 5 is verification, not implementation** -- it tests the assembled pipeline end-to-end.
+
+---
+
+## Haversine Function Sharing Decision
+
+The codebase already has `haversine_meters()` in `core/geocoding/duplicate_detector.py` (lines 50-64). The new `GeocodeValidator` also needs haversine distance.
+
+**Decision: Duplicate the haversine function in `validator.py`.**
+
+**Rationale:**
+- The function is 10 lines of pure math with no dependencies
+- Extracting to a shared `core/geocoding/utils.py` would require modifying `duplicate_detector.py` imports, which adds a code change and test update to a module that is NOT part of this milestone
+- The haversine formula is universally known and unlikely to have bugs or need changes
+- If a shared utility becomes warranted later (3+ call sites), refactor then
+
+---
+
+## Scalability Considerations
+
+| Concern | At 50 orders/day (current) | At 500 orders/day | At 5000 orders/day |
+|---------|---------------------------|--------------------|--------------------|
+| Dictionary loading | ~5ms one-time (285 entries) | Same -- loaded once | Same |
+| Fuzzy matching per address | ~0.1ms (scan 285 entries) | Acceptable | Consider building a Trie or prefix index |
+| Validation (haversine) | <0.01ms per check | Negligible | Negligible |
+| Fallback retries (area geocode) | 1 extra Google API call per out-of-zone | Same cost per failure | Consider batch validation |
+| Dictionary maintenance | Manual refresh via script | Same | Need automated refresh + versioning |
+
+At the current scale of 40-50 deliveries/day, all performance concerns are negligible. The dictionary scan is O(n) where n=285, taking ~0.1ms per address. Even at 500 orders, this adds only 50ms total.
+
+---
+
+## Integration Risk Assessment
+
+| Integration Point | Risk Level | What Could Go Wrong | Mitigation |
+|-------------------|-----------|---------------------|------------|
+| Step reordering in clean_cdcms_address() | Medium | Existing test expectations change | Run full test suite after reorder. Most changes are improvements. |
+| AddressSplitter lazy init | Low | Dictionary file missing at runtime | Graceful None fallback. Preprocessor works without splitter (regex-only). |
+| Validator in CachedGeocoder | Medium | area_name not available (non-CDCMS uploads) | Default area_name="" skips area retry. Still does zone check. |
+| API response additions | Low | Breaking change for consumers | Additive fields only. No existing fields removed. |
+| Driver PWA badge | Low | Older cached PWA versions | New fields ignored by old JS. Badge simply won't appear. |
+| vroom_adapter address_display fix | Low | Some consumers expected Google's formatted_address | address_raw is always present and more recognizable to drivers. |
 
 ---
 
 ## Sources
 
-- [Cython Build Documentation](https://cython.readthedocs.io/en/latest/src/quickstart/build.html) -- setup.py patterns, build_ext --inplace
-- [Cython Pure Python Mode](https://cython.readthedocs.io/en/latest/src/tutorial/pure.html) -- compiling .py files directly
-- [Cython Source Files and Compilation](https://cython.readthedocs.io/en/latest/src/userguide/source_files_and_compilation.html) -- Extension objects, compiler directives
-- [Cython Docker Multi-stage Build Gist](https://gist.github.com/operatorequals/a1264ad67b3b9a08651c9736bbfe26b0) -- Builder stage pattern for .so compilation
-- [Protecting Python with Cython and Docker](https://shawinnes.com/protecting-python/) -- Practical guide to Cython code protection
-- [WSL2 /etc/machine-id Persistence](https://github.com/nix-community/NixOS-WSL/issues/574) -- NixOS-WSL tmpfs issue (does not affect standard Ubuntu WSL)
-- [Docker /etc/machine-id Feature Request](https://forums.docker.com/t/host-machine-id-visible-from-containers/100533) -- Bind-mounting host machine-id into containers
-- [freedesktop.org machine-id spec](https://www.freedesktop.org/software/systemd/man/machine-id.html) -- Official machine-id documentation
-- [Python hashlib File Hashing](https://docs.python.org/3/library/hashlib.html#hashlib.file_digest) -- SHA256 file integrity
-- [FastAPI Advanced Middleware](https://fastapi.tiangolo.com/advanced/middleware/) -- Middleware registration patterns
-- Existing codebase: `core/licensing/license_manager.py`, `apps/kerala_delivery/api/main.py`, `scripts/build-dist.sh`, `docker-compose.yml`, `infra/Dockerfile`
+- Design spec: `docs/superpowers/specs/2026-03-10-address-preprocessing-design.md` -- comprehensive design document with algorithm details, interface definitions, and implementation plan
+- Existing codebase architecture: `.planning/codebase/ARCHITECTURE.md` -- system layer analysis
+- Source code analysis: `core/data_import/cdcms_preprocessor.py`, `core/geocoding/cache.py`, `core/geocoding/google_adapter.py`, `core/geocoding/validator.py` (planned), `core/optimizer/vroom_adapter.py`, `core/database/repository.py`, `core/database/models.py`, `apps/kerala_delivery/api/main.py`
+- Project context: `.planning/PROJECT.md` -- constraints, key decisions, scope
 
 ---
-*Architecture research for: v2.1 Licensing & Distribution Security*
+*Architecture research for: v2.2 Address Preprocessing Pipeline*
 *Researched: 2026-03-10*

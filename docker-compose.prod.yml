@@ -229,10 +229,6 @@ services:
       # If the file doesn't exist, Docker creates an empty directory — that's
       # fine, the license manager handles "file not found" gracefully.
       - ./license.key:/app/license.key:ro
-      # Renewal key -- drop alongside license.key, restart API to renew
-      - ./renewal.key:/app/renewal.key:ro
-      # Machine identity for license fingerprint -- must match host's machine-id
-      - /etc/machine-id:/etc/machine-id:ro
     depends_on:
       db-init:
         condition: service_completed_successfully

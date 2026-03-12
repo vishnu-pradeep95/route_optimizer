@@ -138,9 +138,8 @@ async def save_optimization_run(
             order_id=order.order_id,
             customer_ref=order.customer_ref,
             address_raw=order.address_raw,
-            address_display=(
-                order.location.address_text if order.location else None
-            ),
+            address_display=order.address_raw,
+            address_original=order.address_original,
             weight_kg=order.weight_kg,
             quantity=order.quantity,
             priority=order.priority,
@@ -160,6 +159,10 @@ async def save_optimization_run(
             geocode_confidence=(
                 order.location.geocode_confidence if order.location else None
             ),
+            # Phase 13: Persist geocode fallback method for analytics and
+            # "approx. location" badge. Prefer order-level field (set during
+            # validation) over location-level confidence.
+            geocode_method=getattr(order, "geocode_method", None),
         )
         # Set PostGIS geometry if geocoded
         if order.location:
@@ -194,6 +197,7 @@ async def save_optimization_run(
                 order_id=db_order_id,
                 sequence=stop.sequence,
                 address_display=stop.address_display,
+                address_original=stop.address_original,
                 distance_from_prev_km=stop.distance_from_prev_km,
                 duration_from_prev_minutes=stop.duration_from_prev_minutes,
                 weight_kg=stop.weight_kg,
@@ -840,6 +844,7 @@ def route_db_to_pydantic(route_db: RouteDB) -> Route:
                 order_id=stop_db.order.order_id if stop_db.order else str(stop_db.order_id),
                 location=loc if loc else Location(latitude=0, longitude=0),
                 address_display=stop_db.address_display or "",
+                address_original=stop_db.address_original or None,
                 sequence=stop_db.sequence,
                 distance_from_prev_km=stop_db.distance_from_prev_km or 0.0,
                 duration_from_prev_minutes=stop_db.duration_from_prev_minutes or 0.0,
@@ -847,6 +852,13 @@ def route_db_to_pydantic(route_db: RouteDB) -> Route:
                 quantity=stop_db.quantity or 1,
                 notes=stop_db.notes or "",
                 status=stop_db.status or "pending",
+                # Phase 14: Propagate geocode fields from linked OrderDB
+                geocode_confidence=(
+                    stop_db.order.geocode_confidence if stop_db.order else None
+                ),
+                geocode_method=(
+                    stop_db.order.geocode_method if stop_db.order else None
+                ),
             )
         )
 

@@ -1,187 +1,256 @@
 # Pitfalls Research
 
-**Domain:** Licensing & Distribution Security -- Cython compilation, file integrity checking, machine fingerprinting, periodic re-validation, dev-mode stripping, and license renewal for an existing FastAPI/Docker application on WSL2
+**Domain:** Address preprocessing pipeline, geocode validation, and confidence UI -- adding to an existing LPG delivery routing system (Kerala/Vatakara region)
 **Researched:** 2026-03-10
-**Confidence:** HIGH for Cython/.so pitfalls (verified against Cython docs, FastAPI issue tracker, CPython naming conventions); HIGH for WSL2 fingerprinting instability (verified against WSL GitHub issue tracker); MEDIUM for integrity manifest bypass patterns (general security principles, not project-specific verification); HIGH for async middleware counter pitfalls (verified against FastAPI concurrency docs)
+**Confidence:** HIGH for cache/integration pitfalls (verified against codebase analysis); HIGH for fuzzy matching pitfalls (verified against RapidFuzz documentation); MEDIUM for dictionary data quality (based on OSM Overpass and India Post API characteristics); HIGH for address_display downstream impact (traced through vroom_adapter.py, repository.py, OrderDB, RouteStopDB, driver PWA)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Cython .so Files Are Python-Version-AND-Platform-Locked
+### Pitfall 1: Geocode Cache Poisoning from Preprocessing Changes
 
 **What goes wrong:**
-Cython compiles `.py` files into native `.so` shared libraries with names like `license_manager.cpython-312-x86_64-linux-gnu.so`. This name encodes the exact Python minor version (3.12) and platform (x86_64 Linux). If the build machine uses Python 3.12 but the Docker image upgrades to Python 3.13 (even a minor bump like `python:3.12-slim` -> `python:3.13-slim`), the `.so` file will not import. Python's import machinery looks for the platform-tagged name first and silently skips files that don't match.
+The existing geocode cache in PostGIS contains ~hundreds of entries keyed by `normalize_address(address_raw)`. When you change how `clean_cdcms_address()` works (adding word splitting, reordering abbreviation expansion), the same CDCMS input now produces a DIFFERENT cleaned address. This new address does not match any existing cache key, causing a cache miss. The system re-geocodes all addresses on next upload, consuming Google API quota. Worse: the cache now contains TWO entries for the same physical address -- the old garbled version AND the new cleaned version -- potentially with different coordinates.
 
-This is worse than the current `.pyc` approach. `.pyc` files have a magic number check that produces a clear error message. `.so` files simply aren't found by the import system -- you get `ModuleNotFoundError: No module named 'core.licensing.license_manager'` with zero indication that the problem is a version mismatch.
+The old cache entries are never invalidated. If a future code path or script uses the raw CDCMS text without going through the new preprocessing, it hits the old (wrong) cache entry and gets the wrong coordinates.
 
 **Why it happens:**
-The current Dockerfile uses `python:3.12-slim` and the build script uses the host's Python. Developers assume "Python 3" is enough. But Cython's `cythonize()` and `setuptools.build_ext` produce ABI-tagged `.so` files that are pinned to the exact CPython version and ABI flags. Even a rebuild on the same machine with a different Python patch version (3.12.3 vs 3.12.5) is fine (same ABI tag), but 3.12 vs 3.13 is not.
+The cache key flows through `normalize_address()` which lowercases, strips punctuation, and collapses whitespace -- but it does NOT perform word splitting or abbreviation expansion. So `clean_cdcms_address("MUTTUNGALPOBALAVADI")` currently produces `"Muttungalpobalavadi"` which normalizes to `"muttungalpobalavadi"`. After the fix, it produces `"Muttungal P.O. Balavadi"` which normalizes to `"muttungal po balavadi"`. These are different cache keys. The existing cached geocode for `"muttungalpobalavadi"` (which may point to the wrong location) remains in the database forever.
 
 **How to avoid:**
-1. **Compile inside the same Docker image** used for runtime. Add a build stage to the Dockerfile or use a separate build script that runs `python setup.py build_ext --inplace` inside a `python:3.12-slim` container. Never compile on the host and copy into Docker.
-2. **Pin the exact Python minor version** in both Dockerfile (`FROM python:3.12-slim`) and build script. Add a version check at the top of `build-dist.sh`: `python3 -c "import sys; assert sys.version_info[:2] == (3, 12), f'Need Python 3.12, got {sys.version_info}'"`.
-3. **Test the import inside the Docker container** as part of the build pipeline, not just on the host. The existing import validation step (`PYTHONPATH="$STAGE" python3 -c "import core.licensing..."`) must run inside the target Docker image.
+1. Do NOT touch `normalize_address()`. It is the cache key function and must remain stable. The design spec correctly identifies it as "unchanged" -- enforce this.
+2. Accept that preprocessing changes will cause cache misses for affected addresses. This is the DESIRED behavior -- the old cache entries had wrong coordinates because the garbled address geocoded incorrectly.
+3. Add a migration script (or one-time cleanup) that identifies orphaned cache entries where `address_raw` contains concatenated text patterns (no spaces between words) and flags them for review. Do not auto-delete -- some may have been driver-verified.
+4. Log when a "similar but different" cache key is created for an address that already has a nearby variant. The duplicate detector (15m proximity) may catch some of these.
 
 **Warning signs:**
-- `ModuleNotFoundError` for `core.licensing` in the container but works on the host
-- `.so` filename in the staging directory doesn't match the Python version in the Docker image
-- `build-dist.sh` runs on a host with a different Python version than the Dockerfile's base image
+- Spike in Google API calls after deploying preprocessing changes (monitor `stats["misses"]` counter)
+- Duplicate location warnings from the existing duplicate detector for addresses that differ only in whitespace/abbreviation
+- Two geocode_cache rows where `address_raw` values are clearly the same physical address with different formatting
 
 **Phase to address:**
-Phase 1 (Cython compilation pipeline) -- this must be validated before any other feature is built on top of the compiled module.
+Phase 1 (Foundation) -- document expected cache miss behavior. Phase 5 (Integration Testing) -- verify cache miss count is within budget and old entries are not causing confusion.
 
 ---
 
-### Pitfall 2: WSL2 MAC Address Changes on Every Reboot, Breaking Fingerprints
+### Pitfall 2: address_display Change Breaks Downstream Consumers Silently
 
 **What goes wrong:**
-The current `get_machine_fingerprint()` uses `uuid.getnode()` (MAC address) as a primary fingerprint signal. In WSL2, the virtual network adapter's MAC address changes on every WSL restart or Windows reboot. This is a known, long-standing WSL2 issue (microsoft/WSL#5352, microsoft/WSL#5291). The fingerprint computed at license-generation time will not match the fingerprint computed after a reboot, causing the license to fail validation with "License key is not valid for this machine."
+The design spec calls for changing `vroom_adapter.py:278` from `order.location.address_text or order.address_raw` to `order.address_raw`. This one-line change affects every downstream consumer that reads `address_display`:
 
-Compounding the problem: Python's `uuid.getnode()` may not even return the real MAC address when built with `libuuid` -- it can return a random number that is cached per-process but not persistent across restarts (cpython/cpython#132710).
+1. **OrderDB.address_display** (String(255)) -- stored in the database during `save_optimization_run()`
+2. **RouteStopDB.address_display** (String(255)) -- stored for each stop in the route
+3. **API response** -- `/api/routes/{vehicle_id}` returns `address_display` to the driver PWA
+4. **QR sheet generation** -- `qr_helpers.py` uses `address_display` for print labels
+5. **Google Maps navigation URL** -- the driver's "Navigate" button passes the address to Google Maps
+6. **Dashboard route details** -- the React dashboard shows `address_display` in route tables
+
+If `order.address_raw` is longer than 255 characters (the DB column limit for `address_display`), the database INSERT will either truncate silently (depending on PostgreSQL strict mode) or raise a `DataError`. CDCMS addresses with area suffix appended can easily reach 200+ characters; with the new word splitting adding spaces and commas, some may exceed 255.
+
+Additionally, changing the address source changes what Google Maps searches for when the driver taps "Navigate." If the old `formatted_address` was "Vatakara, Kerala, India" (wrong place but parseable by Google Maps) and the new `address_raw` is "8/542 Sreeshylam, Anandamandiram, K.T. Bazar, Vatakara, Kozhikode, Kerala" (correct but verbose), Google Maps may interpret it differently.
 
 **Why it happens:**
-WSL2 runs as a lightweight VM with a virtual Hyper-V network adapter. Microsoft intentionally randomizes the MAC address on each start for network isolation. This was a design choice, not a bug, and there is no official fix. Setting a static MAC address manually breaks internet connectivity in WSL2.
+The fix is conceptually correct (show the original address, not Google's interpretation), but the ripple effects through multiple database columns, API responses, and UI consumers are easy to underestimate. The `address_display` field appears in 6+ code paths.
 
 **How to avoid:**
-1. **Drop MAC address from the fingerprint entirely** for WSL2 deployments. The v2.1 plan already calls for this (replacing container_id with /etc/machine-id + /proc/cpuinfo), but the MAC address must also be removed, not just supplemented.
-2. **Use `/etc/machine-id` as the primary stable signal.** WSL2's `/etc/machine-id` is generated once during distro installation and persists across reboots. Bind-mount it read-only into the Docker container.
-3. **Use CPU model string from `/proc/cpuinfo`** (e.g., `model name : Intel(R) Core(TM) i7-10750H`) as a secondary signal. This is stable across reboots and reflects the actual hardware. Do NOT use clock speed (`cpu MHz`) which fluctuates with power management.
-4. **Use hostname as a tertiary signal**, but document that changing the WSL hostname invalidates the license (acceptable -- customers rarely change hostnames).
+1. Check the maximum length of `address_raw` values in production data before deploying. Run: `SELECT MAX(LENGTH(address_raw)) FROM orders;` and verify it is under 255 characters.
+2. If CDCMS addresses with area suffix can exceed 255 chars, either increase the column size via Alembic migration or truncate explicitly with a logged warning: `address_display = (order.address_raw or "")[:255]`.
+3. Test the Google Maps navigation URL with several real `address_raw` values to ensure Google Maps can parse them. The area suffix (", Vatakara, Kozhikode, Kerala") is critical for Google Maps -- verify it is present.
+4. Grep the entire codebase for `address_display` consumers before making the change. The design spec lists "Unchanged Files" but does NOT list `qr_helpers.py` or `import_orders.py`, both of which reference `address_display` or `address_text`.
+5. Write a test that uploads a CSV, runs optimization, and verifies `address_display` in the API response matches the cleaned CDCMS address (not Google's formatted_address).
 
 **Warning signs:**
-- License works after fresh generation but fails after Windows reboot
-- `get_machine_id.py` produces different output each time it runs
-- Customer reports "license stopped working" with no code changes
+- `DataError` or `StringDataRightTruncation` in PostgreSQL logs during upload
+- Driver PWA shows truncated addresses (ending in "...")
+- Google Maps opens to wrong location when driver taps "Navigate" with the new address format
+- QR sheet prints show garbled or overly long addresses that wrap badly
 
 **Phase to address:**
-Phase 2 (Fingerprinting hardening) -- must be implemented before shipping any builds to customers, and before license renewal is implemented (otherwise renewal keys will also be unstable).
+Phase 1 (Foundation) -- the `address_display` source fix is listed as task 1.1 and must include downstream consumer audit. Phase 4 (API + Driver UI) -- verify end-to-end that the address shown in the PWA is correct and navigable.
 
 ---
 
-### Pitfall 3: Cython Cannot Compile FastAPI Async Route Handlers
+### Pitfall 3: Fuzzy Matching False Positives on Short Kerala Place Names
 
 **What goes wrong:**
-If you accidentally try to compile `main.py` or any module containing `async def` route handlers with Cython, the compiled code will silently break. Cython-compiled async functions don't pass `asyncio.iscoroutinefunction()` checks, which FastAPI uses internally to determine whether to `await` a handler's return value. The result: handlers return raw coroutine objects instead of awaited responses, producing `TypeError("'coroutine' object is not iterable")` or `TypeError('vars() argument must have __dict__ attribute')` at runtime.
+The dictionary-powered word splitter uses RapidFuzz with an 85% similarity threshold. Kerala has many short place names (4-6 characters) that are similar to each other or to common Malayalam words:
 
-This has been a documented issue since FastAPI#1921 (2020) and remains unfixed in FastAPI itself. Cython 3.0+ partially addresses it, but the `iscoroutinefunction` mismatch persists in some introspection paths.
+| Place A | Place B | `fuzz.ratio` | Should match? |
+|---------|---------|--------------|---------------|
+| EDAPPAL | EDAPPAL | 100 | Yes |
+| EDAPPAL | EDAPALLI | 88 | No -- different place (50km apart) |
+| KUTTUR | KUTTOOR | 86 | Maybe -- transliteration variant |
+| AZHIKODE | AZHIYUR | 71 | No |
+| VADAKARA | VADAKKARA | 94 | Yes -- same place |
+| PARAMBA | PARAMBU | 86 | No -- "paramba" = compound, "parambu" = land |
+
+At 85% threshold, `EDAPPAL` and `EDAPALLI` would match (88% similarity), which is wrong -- they are completely different places 50km apart. The splitter would then insert a word break and assign coordinates for the wrong location.
+
+For 4-character names, an 85% threshold means 1 character difference triggers a match. `KODI` matches `KADI` (75%), `PADI` matches `MADI` (75%) -- these are wrong. RapidFuzz's `fuzz.ratio` on short strings is inherently unreliable because one character edit represents a high percentage of the total length.
 
 **Why it happens:**
-The v2.1 scope is to compile only `core/licensing/` -- which contains synchronous functions only. But during implementation, there's a temptation to also compile the enforcement middleware in `main.py` (which is `async def`) or to move enforcement logic into an async function inside the licensing module. Any async code in the compiled module will hit this bug.
+The design spec recommends 85% threshold as "conservative," but this assessment assumes longer strings where 85% is indeed conservative. For strings under 8 characters, 85% is very aggressive. Malayalam place names in romanized form are typically 5-10 characters.
 
 **How to avoid:**
-1. **Strict scope: compile ONLY `core/licensing/` and nothing else.** The licensing module (`license_manager.py`, `__init__.py`) contains zero async code -- it's all synchronous (hashlib, hmac, struct, file I/O). Keep it that way.
-2. **Never add `async def` to any file that will be Cython-compiled.** The enforcement middleware must stay in `main.py` as plain Python. The compiled module should expose synchronous validation functions that the middleware calls.
-3. **Add a lint check in `build-dist.sh`** that greps for `async def` in files targeted for Cython compilation and fails the build if found: `grep -r "async def" core/licensing/ && { echo "ERROR: async code in licensing module will break Cython"; exit 1; }`.
+1. Use a **length-dependent threshold**: 95% for names under 6 characters, 90% for 6-8 characters, 85% for names over 8 characters. Short names need near-exact matches because one character flip changes meaning.
+2. Prefer `rapidfuzz.fuzz.ratio` over `token_sort_ratio` or `partial_ratio` -- the latter are even more permissive and produce more false positives for place name matching.
+3. Require that fuzzy matches are within the delivery zone (30km). If `EDAPPAL` in the dictionary is at lat/lon X and the matched `EDAPALLI` would be 50km away, reject the match. The dictionary already has coordinates -- use them for spatial validation of fuzzy matches.
+4. Build a curated **alias list** in the dictionary rather than relying on fuzzy matching for known variants. The design spec already supports an `aliases` array per place entry. Explicit aliases ("VADAKARA" -> "VADAKKARA") are always safer than fuzzy matching.
+5. Add a logging mode that reports all fuzzy matches with their scores during testing. Review the match list manually for false positives before deploying to production.
 
 **Warning signs:**
-- `TypeError: 'coroutine' object is not iterable` in production logs
-- License validation works in unit tests (pure Python) but fails in Docker (compiled)
-- Endpoints return empty 500 errors with no clear traceback
+- Addresses geocode to a place name that sounds similar but is in a different district
+- The splitter inserts word breaks at unexpected positions in an address
+- Fuzzy match log shows matches at exactly the threshold (85-87%) -- these are the most likely false positives
 
 **Phase to address:**
-Phase 1 (Cython compilation pipeline) -- enforce with a build-time check so this can never slip in during later phases.
+Phase 2 (Place Name Dictionary) -- the fuzzy matching threshold must be tuned with real CDCMS data, not hypothetical examples. Phase 5 (Integration Testing) -- measure false positive rate on the 27 sample addresses.
 
 ---
 
-### Pitfall 4: Dev-Mode Code Stripping Leaves Syntactically Invalid Python
+### Pitfall 4: Fallback Chain Creates Inconsistent Confidence Across Re-uploads
 
 **What goes wrong:**
-The plan calls for `build-dist.sh` to remove the `if env == "development"` block from `main.py` before packaging. Naive text-based stripping (using `sed` or similar) can leave syntactically broken Python if the if/else structure is not perfectly handled. For example, removing the `else:` branch of `if env == "production":` / `else:` leaves an orphaned `if` with no body, or removing the wrong lines breaks indentation. The tarball ships, the Docker container starts, and `main.py` fails to parse -- the entire API is down with `SyntaxError`.
+The geocode validation fallback chain (geocode -> validate -> retry with area name -> centroid fallback) produces different confidence scores depending on when an address is first geocoded:
 
-This is especially dangerous because the current dev-mode block (main.py lines 184-203) creates a replacement `LicenseInfo` object inside the `else:` branch. Simply deleting those lines leaves the `if license_info.status == LicenseStatus.INVALID:` branch's `else:` clause empty.
+- **Day 1:** Upload CSV. Address "MUTTUNGALPOBALAVADI" geocodes to wrong location (50km away). Validator catches it, retries with "Muttungal, Vatakara, Kozhikode, Kerala", gets a valid result at confidence 0.7 * 0.6 = 0.42. Cached at 0.42.
+- **Day 2:** New preprocessing deployed. Same address now cleans to "Muttungal P.O., Balavadi". Different cache key -> cache miss. Google geocodes it correctly within the zone at confidence 0.60. Cached at 0.60.
+- **Day 3:** Same address uploaded again. Cache hit from Day 2 entry at 0.60.
+
+Now the database has TWO cache entries for the same physical address, with different confidence scores (0.42 and 0.60). Depending on which cleaned form is used, the driver sees different confidence badges for the same delivery location. If a third upload uses yet another cleaning variant, a third entry appears.
+
+The fallback chain also means that two addresses in the SAME upload batch can get different treatment: one geocodes correctly on first try (confidence 0.80), another goes through the area-only retry (confidence 0.56). The driver sees the first as "confirmed" and the second as "approximate" even though both are equally accurate delivery locations.
 
 **Why it happens:**
-Text-based code manipulation is fragile. The developer writes a `sed` command that works for the current code, but any reformatting, added comments, or minor refactoring breaks the regex. There's no feedback loop -- the build script "succeeds" but produces invalid Python.
+The confidence score conflates two meanings: (1) how confident Google is in the geocode, and (2) how many fallback steps were needed to get a valid result. A centroid fallback with confidence 0.3 is genuinely approximate, but an area-only retry with confidence 0.42 might be perfectly accurate -- it just went through an extra step.
 
 **How to avoid:**
-1. **Use AST-based transformation, not text manipulation.** Write a small Python script that uses the `ast` module to parse `main.py`, identify and remove the dev-mode branch, and write valid Python back. This is robust against formatting changes.
-2. **Alternatively, restructure `main.py` before v2.1** so the dev-mode code is isolated behind a clear sentinel marker (e.g., `# BEGIN_DEV_ONLY` / `# END_DEV_ONLY`) that can be reliably stripped with a simple line-range delete.
-3. **Validate the stripped `main.py` parses correctly** in `build-dist.sh`: `python3 -c "import ast; ast.parse(open('$STAGE/apps/kerala_delivery/api/main.py').read())"`. This catches syntax errors immediately.
-4. **Run the existing unit test suite against the staged directory** before packaging. If `main.py` is broken, tests will fail.
+1. Separate `geocode_confidence` (Google's raw score) from `validation_confidence` (whether the result passed zone validation). The driver cares about the FINAL result quality, not how many retries it took.
+2. Set clear thresholds: confidence < 0.5 shows "Approx. location" badge. Document that this threshold applies to the FINAL confidence after all fallbacks, not to intermediate values.
+3. When the fallback chain produces a result, log the full chain for debugging: "Address X: geocoded at 0.40 (outside zone) -> retry with area at 0.60 (within zone) -> final confidence 0.60."
+4. When a driver-verified location is saved (confidence 0.95), it overrides ALL previous cache entries for that normalized address. Ensure the `save_driver_verified()` path uses the same normalized key as the preprocessing pipeline.
 
 **Warning signs:**
-- `SyntaxError` when the API container starts (check Docker logs)
-- Build script succeeds but `python3 -c "import ..."` against the staged directory fails
-- Customer reports "API won't start after update"
+- Same physical address shows "Approx. location" badge on one day but not another
+- Driver-verified locations (0.95) coexist with low-confidence entries (0.30) for the same address
+- Confidence scores cluster around arbitrary multiplication products (0.42, 0.28) rather than meaningful values
 
 **Phase to address:**
-Phase 1 (Dev-mode stripping) -- implement and validate before the Cython compilation phase, because the stripped `main.py` is what gets integrity-checked.
+Phase 3 (Geocode Validation) -- design the confidence calculation carefully. Phase 4 (API + Driver UI) -- set the "approximate" badge threshold with clear documentation of what it means.
 
 ---
 
-### Pitfall 5: Integrity Manifest Becomes Stale After Docker Compose Edits
+### Pitfall 5: Dictionary Build Script Fetches Stale or Incomplete OSM Data
 
 **What goes wrong:**
-The SHA256 integrity manifest is generated at build time and baked into the compiled `.so`. It covers `main.py`, `middleware.py`, and `docker-compose.yml`. But the customer might legitimately edit `docker-compose.yml` to change environment variables (e.g., `POSTGRES_PASSWORD`, `GOOGLE_MAPS_API_KEY`, port mappings). Any edit to a manifest-covered file triggers an integrity failure, and the license stops working. The customer sees "License expired or invalid" with no indication that a config file edit caused it.
+The place name dictionary is built once from OSM Overpass API and India Post API. Both data sources have significant coverage gaps for rural Kerala:
+
+1. **OSM coverage in rural Kerala is spotty.** Many hamlets, colonies, and micro-localities in the Vatakara region are not mapped in OpenStreetMap. OSM has good road coverage for Kerala but place name coverage for small settlements (which is exactly what CDCMS addresses reference) is incomplete. A 30km radius query might return 200 place nodes, but the actual CDCMS dataset references 50+ place names not in OSM.
+
+2. **India Post API returns post office names, not localities.** The PostalPinCode API for PIN codes 673101-673110 returns ~77 post office names. But CDCMS addresses reference landmarks, house names, colonies, and micro-areas that are NOT post offices. "K.T. Bazar" is a market area, not a post office. "Sarambi" is a locality, not a post office.
+
+3. **OSM Overpass API has no SLA.** The public Overpass API at `overpass-api.de` has rate limits (~10,000 requests/day) and occasionally goes down. If the build script runs when the API is slow or down, it produces an incomplete dictionary. The script should retry, but the design spec shows a single query approach.
+
+The dictionary is committed to the repo, so a bad build persists until someone notices and rebuilds.
 
 **Why it happens:**
-The manifest design treats all file modifications as tampering. But `docker-compose.yml` contains both infrastructure config (which customers must customize) and security-critical config (which should not be modified). There's no way to distinguish between the two after the manifest is generated.
+The design spec correctly identifies these as data sources but overestimates their coverage for rural Kerala micro-localities. OSM is excellent for cities like Kozhikode or Kochi but has much thinner coverage for the hamlets and colonies that CDCMS addresses reference in the Vatakara hinterland. The spec estimates "~200-300 entries" but the actual unique place names in CDCMS data may number 400+.
 
 **How to avoid:**
-1. **Exclude `docker-compose.yml` from the integrity manifest.** It's not a code file -- it's a config file that customers must edit. Protecting it adds friction without security benefit (the real enforcement is in the compiled `.so`).
-2. **Only manifest files that contain enforcement logic:** `main.py`, any middleware files that import from `core.licensing`, and the `core/licensing/__init__.py` stub (if one exists after compilation). These are the files where someone would try to bypass licensing.
-3. **Provide clear, specific error messages** when integrity check fails: "File X has been modified (expected hash: abc..., actual: def...). If you need to customize configuration, edit .env instead of docker-compose.yml." This prevents customer confusion.
-4. **Consider using `.env` for all customer-configurable values** and making `docker-compose.yml` read-only in the distribution. The existing `.env.example` pattern already supports this.
+1. **Bootstrap the dictionary from actual CDCMS data**, not just OSM/India Post. Extract unique AreaName values from historical CDCMS uploads and add them to the dictionary. The area_name column in existing orders contains the most relevant place names. Run: `SELECT DISTINCT area_name FROM orders;` to get the real-world vocabulary.
+2. **Treat the dictionary as a living document.** When the splitter encounters an address it cannot split (no dictionary match), log the address. Periodically review logged addresses and add new place names to the dictionary.
+3. **Validate the dictionary against the 27 sample CDCMS addresses** from the test suite. Every area_name in the sample data must appear in the dictionary. If any are missing, the dictionary is incomplete.
+4. **Add a fallback for dictionary build failures.** If the Overpass API is down, the build script should fail loudly (not produce a partial dictionary) and documentation should explain how to retry.
+5. **Include GPS coordinates for CDCMS area names** from the geocode cache. If "MUTTUNGAL" has been geocoded before (even incorrectly), the cache has approximate coordinates that can seed the dictionary entry.
 
 **Warning signs:**
-- Customer reports license failure after changing database password
-- Integrity check fails on first boot because the customer followed setup instructions that involve editing docker-compose.yml
-- Support tickets spike after distribution updates
+- Dictionary has fewer than 150 entries (suggests API returned incomplete data)
+- CDCMS area names in the sample CSV do not appear in the dictionary
+- Build script completes in under 2 seconds (suggests API returned empty or cached error response)
+- Multiple addresses fall through to "passthrough for unknown text" in the splitter logs
 
 **Phase to address:**
-Phase 3 (Integrity manifest) -- the manifest file list must be carefully chosen during design, not as an afterthought.
+Phase 2 (Place Name Dictionary) -- validate dictionary completeness against real CDCMS data before proceeding to Phase 3. This is a gate: if the dictionary covers less than 80% of area names in sample data, stop and augment before continuing.
 
 ---
 
-### Pitfall 6: Request-Counter Re-Validation Blocks the Event Loop on Synchronous License Check
+### Pitfall 6: Validator Retry Doubles Google API Cost Without Budget Guard
 
 **What goes wrong:**
-The periodic re-validation plan calls for the compiled middleware to re-run license validation every N requests. The current `validate_license()` function performs synchronous file I/O (reading `license.key`) and hashing operations. If called directly from an `async def` middleware handler, it blocks the asyncio event loop for the duration of the validation (10-50ms for SHA256 hashing of manifest files + file reads). During that time, ALL concurrent requests are stalled -- not just the one that triggered re-validation.
+The geocode validation fallback chain can make up to 3 Google API calls per address:
+1. Original geocode (always)
+2. Retry with area name only (if original is outside 30km)
+3. Potential additional call if the area-only retry also fails and a different reformulation is attempted
 
-With 2 uvicorn workers and ~100 concurrent requests during peak delivery hours, a 50ms block means 100 requests wait 50ms extra. At every-100th-request validation, this happens once per second at 100 req/s. The cumulative effect is noticeable latency spikes in the driver PWA.
+For a batch of 50 addresses where 30% fail zone validation (15 addresses), that is 15 extra API calls. At $5/1000 requests, the cost is negligible ($0.075). But the design spec does not address what happens when the Google API key is invalid (`REQUEST_DENIED` -- the current known state of the system).
+
+With an invalid API key, EVERY geocode call fails. The fallback chain then retries EVERY address, doubling the number of failed API calls and associated error logging. The system degrades to: geocode fails -> validator retries -> retry also fails -> centroid fallback for ALL addresses. Every delivery gets confidence 0.3 and "Approx. location" badge. Drivers see a wall of orange badges and lose trust in the system.
 
 **Why it happens:**
-FastAPI's `async def` middleware runs on the main event loop thread. Unlike `def` endpoints (which run in a threadpool), middleware has no automatic threadpool offloading. Developers assume "it's just a hash check, it's fast" -- but file I/O + SHA256 of multiple files adds up, especially on Docker's overlayfs.
+The design spec acknowledges the invalid API key as a "known constraint" but the fallback chain design assumes the API is functional and only SOME addresses fail validation. When the API is completely down, the entire chain degrades to centroid-only mode, which is not the intended behavior.
 
 **How to avoid:**
-1. **Run the re-validation in a threadpool** using `asyncio.get_event_loop().run_in_executor(None, validate_and_check_integrity)`. This offloads the synchronous work to a thread, keeping the event loop responsive.
-2. **Cache the validation result** with a timestamp. Instead of re-running full validation on every Nth request, check "has it been M seconds since last validation?" and only re-validate if both the request count AND time threshold are met. This bounds the worst-case frequency.
-3. **Keep the counter as a simple integer in the compiled module.** In CPython, integer increment (`counter += 1`) is atomic due to the GIL, even with multiple uvicorn workers (each worker is a separate process with its own counter, which is fine -- each process validates independently).
-4. **Set N to a reasonable value** like 500-1000 requests, not 10 or 50. At 100 req/s peak, N=500 means re-validation every 5 seconds -- more than sufficient to catch a mid-runtime license change.
+1. **Check API key validity BEFORE running the fallback chain.** If the first geocode call returns `REQUEST_DENIED`, skip all retries and use cache-only mode. Do not retry with area name -- the same key will be denied again.
+2. **Add a circuit breaker for Google API calls.** If 3 consecutive calls return `REQUEST_DENIED` or `OVER_QUERY_LIMIT`, stop making API calls for this batch and log a clear error: "Google Maps API key is invalid -- all addresses will use cached or approximate locations."
+3. **Track retry API cost separately.** The existing cost tracking (cache hits vs API calls) should distinguish between first-attempt calls and retry calls. This makes the retry cost visible.
+4. **When ALL addresses fall back to centroid, surface a prominent warning** in the upload response and on the dashboard -- not just individual "approximate" badges on each stop.
 
 **Warning signs:**
-- Latency spikes every N requests in driver PWA network tab
-- Uvicorn logs show "WARNING: ... took longer than expected" for middleware
-- `asyncio` debug mode reports "Executing ... took 0.050 seconds"
+- Upload response shows 100% of addresses as "approximate" (centroid fallback)
+- Google API cost tracker shows double the expected number of API calls
+- Logs show `REQUEST_DENIED` errors for every geocode attempt plus every retry attempt
+- Driver PWA shows "Approx. location" badge on every single stop
 
 **Phase to address:**
-Phase 4 (Periodic re-validation) -- must use threadpool executor from the start, not retrofitted after performance complaints.
+Phase 3 (Geocode Validation) -- the circuit breaker and API key check must be part of the validator, not an afterthought. Phase 4 (API + Driver UI) -- add a batch-level warning when all addresses are approximate.
 
 ---
 
-### Pitfall 7: Cython Build Produces Architecture-Mismatched .so for Docker
+### Pitfall 7: Regex Reordering Breaks Existing Clean Address Tests
 
 **What goes wrong:**
-If `build-dist.sh` runs on an ARM Mac (Apple Silicon) or any non-x86_64 host, the compiled `.so` will be for the wrong architecture. The Docker container runs `python:3.12-slim` which is x86_64 Linux (or matches the Docker host platform). A `.so` compiled natively on macOS/ARM will produce `license_manager.cpython-312-aarch64-linux-gnu.so` or `license_manager.cpython-312-darwin.so`, which the x86_64 container cannot load.
+The design spec calls for reordering cleaning steps: "split words BEFORE expanding abbreviations" (task 1.3). The current step order in `clean_cdcms_address()` is:
 
-This is not currently a problem (deployment is WSL2 on x86_64), but it will bite if the developer works on a Mac or if the build pipeline moves to GitHub Actions (which uses x86_64 Linux runners by default but may switch to ARM).
+1. Remove phone numbers
+2. Remove CDCMS artifacts
+3. Normalize backticks
+4. Expand abbreviations (NR -> Near, PO -> P.O., (H) -> House)
+5. Add spaces before uppercase after digits
+6. Collapse whitespace
+7. Remove dangling punctuation
+8. Title case
+9. Fix title-case artifacts
+10. Append area suffix
+
+The proposed reorder moves step 5 before step 4. But the abbreviation expansion in step 4 depends on the text NOT having spaces inserted yet. For example:
+
+- Input: `KUNIYILNR.EK GOPALAN`
+- Current step 4: `NR.` matched as abbreviation -> `KUNIYIL Near EK GOPALAN`
+- Proposed step 5 first: `(\d)([A-Z])` and `([a-z])([A-Z])` regexes -> no match (NR. has period, not case transition)
+
+But consider: `CHEKKIPURATHPO.`
+- Current step 4: `([a-zA-Z])PO\.` matches -> `CHEKKIPURATH P.O.`
+- Proposed step 5 first: `([a-z])([A-Z])` on uppercase text -> no match (all uppercase)
+
+The reordering seems safe for the specific examples in the design spec, but there are edge cases where abbreviation patterns like `NR` or `PO` appear at positions that interact with the word-splitting regex. The existing 426 unit tests include tests for `clean_cdcms_address()` that may fail if the step order changes.
 
 **Why it happens:**
-Cython compiles to native code, unlike `.pyc` which is platform-independent bytecode. The current `.pyc` approach works everywhere because CPython's bytecode is architecture-agnostic. Switching to `.so` breaks this portability.
+Text processing pipelines are order-dependent. Each regex assumes a specific input format produced by the previous step. Changing the order is equivalent to changing the input contract for each subsequent step. The design spec identifies the happy-path cases but does not exhaustively test all combinations.
 
 **How to avoid:**
-1. **Always compile inside the target Docker container**, not on the host. Use a Docker-based build step: `docker run --rm -v $(pwd):/app -w /app python:3.12-slim pip install cython && python setup.py build_ext --inplace`. This guarantees the `.so` matches the runtime environment.
-2. **Add an architecture check in `build-dist.sh`** that verifies the `.so` file's ELF header matches the target: `file "$STAGE/core/licensing/license_manager*.so" | grep -q "x86-64" || { echo "ERROR: .so is not x86_64"; exit 1; }`.
-3. **Document the build requirement**: "Must build on x86_64 Linux or inside Docker."
+1. **Run existing tests BEFORE and AFTER the reorder.** The test suite has tests for `clean_cdcms_address()` in `tests/core/data_import/test_cdcms_preprocessor.py`. Run them first to establish a baseline, then after reordering.
+2. **Add the new `lowercase -> uppercase` regex as an ADDITIONAL step, not a replacement.** The design spec says "Also add: `re.sub(r"([a-z])([A-Z])", r"\1 \2", addr)`" -- keep this as a new step 5b alongside the existing step 5, not as a replacement.
+3. **Do NOT reorder abbreviation expansion.** The existing abbreviation expansion (PO -> P.O., NR -> Near) works correctly on concatenated text because the regex patterns handle inline detection (`([a-zA-Z])PO\.`). Moving word splitting before abbreviation expansion would break this inline detection because the text would already have spaces inserted.
+4. **Test with ALL 27 sample CDCMS addresses**, not just the 4 examples in the design spec. Edge cases will surface with real data.
 
 **Warning signs:**
-- `ImportError: ... wrong ELF class` or `invalid ELF header` in container logs
-- `.so` filename contains `darwin` or `aarch64` instead of `x86_64-linux-gnu`
-- Build works on developer's machine but fails in Docker
+- Existing `test_cdcms_preprocessor.py` tests start failing after the reorder
+- Addresses that previously cleaned correctly now have garbled abbreviations ("P.o." instead of "P.O.", "Nr." not expanding)
+- The `clean_cdcms_address()` function grows beyond 50 lines with interleaved regex steps that are hard to reason about
 
 **Phase to address:**
-Phase 1 (Cython compilation pipeline) -- the build must be containerized from day one.
+Phase 1 (Foundation) -- tasks 1.2 through 1.5 must be done carefully with full test coverage before AND after changes. Do NOT change step order unless tests prove it is necessary and safe.
 
 ---
 
@@ -189,99 +258,107 @@ Phase 1 (Cython compilation pipeline) -- the build must be containerized from da
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Compiling `.so` on host instead of in Docker | Faster build iteration | Breaks on any platform mismatch; silent import failures | Never for distribution builds; OK for local testing only |
-| Text-based sed stripping of dev-mode code | Simple, no Python dependency in build | Breaks on any reformatting; no syntax validation | Never -- use AST-based or sentinel-based approach |
-| Including docker-compose.yml in integrity manifest | More files "protected" | Customer edits break license; support burden | Never -- protect code files only |
-| Hardcoding N=100 for re-validation counter | Simple implementation | Too frequent at high load; performance cost | Only if combined with time-based debounce |
-| Using `uuid.getnode()` for MAC in WSL2 | No code change needed | Fingerprint changes on reboot; license breaks | Never on WSL2 -- remove MAC entirely |
-| Monolithic `validate_license()` doing fingerprint + integrity + expiry | Single function, simple | Cannot test components independently; re-validation is all-or-nothing | Only in v1.x; refactor for v2.1 to separate concerns |
+| Hardcoding 85% fuzzy threshold | Simple, one value to tune | False positives on short names; need per-length thresholds | Never for place name matching -- use length-dependent thresholds from the start |
+| Committing a dictionary built from one-time API fetch | Quick, no ongoing maintenance | Dictionary becomes stale as new addresses appear; misses localities not in OSM/India Post | Acceptable for MVP if combined with a logging-and-augment workflow for missed names |
+| Multiplying confidence scores (0.7 * 0.6 = 0.42) | Simple arithmetic | Confidence values become meaningless products; hard to interpret or set thresholds against | Never -- use discrete confidence levels or clearly defined multiplier semantics |
+| Storing area centroid fallback with same Location model | No model changes needed | Centroid locations are fundamentally different from geocoded locations (100m accuracy vs 5km accuracy) but stored identically | Acceptable if `geocode_confidence` clearly distinguishes them (0.3 for centroid vs 0.6+ for geocoded) |
+| Skipping Alembic migration for confidence field exposure | No DB schema change needed (field already exists) | Future developers assume no migration means no DB impact; may miss that the field was NULL for old records | Acceptable here -- the field exists and is nullable. Document that old records have NULL confidence. |
+| Using `order.address_raw` directly as `address_display` | One-line fix, eliminates the display inconsistency | `address_raw` may contain CDCMS artifacts not caught by preprocessing; driver sees semi-raw text | Acceptable if preprocessing is thorough enough; add a "cleaned but unrecognizable" safety net |
 
 ## Integration Gotchas
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Cython + Docker multi-stage build | Installing Cython in runtime stage (bloats image, exposes build tools) | Install Cython only in the builder stage; copy only the compiled `.so` to runtime stage; never ship Cython itself |
-| `/etc/machine-id` bind mount | Mounting without `:ro` flag; container could theoretically write to host's machine-id | Always use `- /etc/machine-id:/etc/machine-id:ro` in docker-compose.yml; add comment explaining why |
-| `/proc/cpuinfo` in Docker | Reading `cpu MHz` (fluctuates with power management) or `processor` count (varies with `--cpus` flag) | Read only `model name` and `vendor_id` -- these are hardware constants that don't change with Docker resource limits |
-| Cython + existing test suite | Tests import from `core.licensing.license_manager` which no longer exists as `.py` | Tests must run against source `.py` (not compiled `.so`); keep `.py` in the repository; only remove in `build-dist.sh` staging |
-| License renewal + fingerprint change | Generating renewal key with old fingerprint signals (MAC), which no longer match after the fingerprinting upgrade | Generate renewal keys using the NEW fingerprint format; provide a migration path for existing customers (re-run `get_machine_id.py` with updated script) |
-| `build-dist.sh` + Cython setup.py | Running `setup.py build_ext` in the project root, polluting source tree with `.so` files and `build/` directory | Use `--build-lib` to output to the staging directory; or run inside an isolated temp directory; clean up `build/` and `*.c` intermediates |
+| AddressSplitter + CachedGeocoder | Initializing the splitter inside the geocoder (tight coupling); if dictionary file is missing, geocoder crashes | Splitter is initialized in `cdcms_preprocessor.py` (preprocessing layer), not in the geocoder. Geocoder receives already-split text. Splitter is `None` if dictionary missing -- graceful degradation. |
+| GeocodeValidator + CachedGeocoder | Validator calls upstream geocoder for retry, creating a recursive loop (cached -> validate -> retry via cached -> validate again) | Validator retries must go through the UPSTREAM geocoder directly (GoogleGeocoder), not through CachedGeocoder. Otherwise the retry result gets cached with wrong confidence before validation completes. |
+| Dictionary JSON + Docker volume | Dictionary file in `data/` directory is bind-mounted in Docker; rebuilding dictionary on host requires container restart to pick up changes | The dictionary is loaded lazily on first use per the design spec. Add a reload mechanism or document that container restart is needed after dictionary rebuild. |
+| RapidFuzz + Docker image | `rapidfuzz` has C++ extensions that need compilation; `python:3.12-slim` may lack build tools | Use `rapidfuzz` wheel (pre-compiled for linux/x86_64) or install `gcc` in the Dockerfile build stage. Test the Docker build BEFORE deploying -- a missing wheel causes `pip install` failure. |
+| Haversine validator + PostGIS | Implementing haversine in Python when PostGIS already provides `ST_DistanceSphere` for the same calculation | The Python haversine is correct here -- the validator runs BEFORE saving to the database, so PostGIS is not available. But if validation is ever moved to a DB query, use `ST_DistanceSphere` instead. |
+| New `location_approximate` field + existing API consumers | Adding a new field to the API response that the dashboard does not expect; dashboard TypeScript types may need updating | The driver PWA (vanilla JS) handles unknown fields gracefully. The dashboard (TypeScript) will NOT break on extra fields but will not display them either. Update TypeScript types if dashboard should show confidence. |
+| Driver-verified geocode + preprocessing pipeline | Driver confirms delivery at GPS coordinates; `save_driver_verified()` stores with confidence 0.95. Next upload preprocesses the same address differently, creates a new cache key, and geocodes again -- ignoring the driver-verified entry. | Ensure `save_driver_verified()` uses the SAME normalized key that the preprocessing pipeline produces. If preprocessing changes the cleaned address, the driver-verified entry becomes orphaned. Consider linking driver-verified entries by physical proximity (within 50m), not just by text match. |
 
 ## Performance Traps
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| Synchronous integrity check in async middleware | All concurrent requests block during file hashing; latency spikes every N requests | Use `run_in_executor()` for file I/O and hashing; cache result with TTL | At ~50 concurrent requests; noticeable at 100+ |
-| Re-hashing all manifest files on every check | Disk I/O on overlayfs is slow; each file read + SHA256 = 5-20ms | Hash once at startup; re-hash only on re-validation trigger (every Nth request) | At any concurrency level -- overlayfs is slow |
-| Full `validate_license()` on every re-validation | Reads license.key from disk, computes fingerprint, decodes key, checks expiry | Cache decoded license info; only re-read file if mtime changed; only recompute fingerprint on first call (it doesn't change mid-runtime) | Immediately measurable; 10-50ms per validation call |
+| Loading full dictionary JSON on every request | 200-300 entry JSON parsed and fuzzy index rebuilt per geocode call; adds ~50ms per address | Load dictionary once at startup (module-level or singleton); the design spec calls for lazy initialization -- do it exactly once, not per-call | Immediately noticeable at 50 addresses/batch (~2.5s overhead) |
+| RapidFuzz `extractOne` on full dictionary for every word in an address | O(N*M) where N = words in address, M = dictionary entries; ~10ms per word * 8 words * 50 addresses = 4 seconds | Pre-sort dictionary by length (longest first) for greedy matching; use `rapidfuzz.process.extractOne` with `score_cutoff` parameter to skip low-score comparisons early | At 300+ dictionary entries with 8+ word addresses |
+| Haversine calculation per validation | Negligible (~0.1ms per call) | Not a performance concern at this scale | Never at 50 addresses/day; would matter at 10K+/day |
+| Fallback retry doubles geocode time for out-of-zone results | Addresses that fail validation take 2x as long (two API calls instead of one); if 30% fail, batch takes 30% longer | Acceptable at current scale (extra 15 API calls * 1 sec rate limit = 15 extra seconds). Would be a problem at 500+ addresses where 150 retries = 2.5 extra minutes. | At 200+ addresses per batch with >20% validation failure rate |
 
 ## Security Mistakes
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Embedding HMAC secret in compiled `.so` without changing the derivation seed | Determined attacker extracts the seed from the old `.pyc` (trivial) and it still works with the new `.so` | Rotate the `_DERIVATION_SEED` value when switching from `.pyc` to `.so`; existing license keys must be re-generated |
-| Integrity manifest stored as a separate file (not embedded in `.so`) | Attacker replaces both the manifest file and the code files; manifest check passes with attacker's hashes | Embed manifest directly in the Cython source before compilation; it becomes part of the native binary |
-| Request counter stored in `app.state` (Python object) | Attacker patches `main.py` to reset counter to 0 on each request, preventing re-validation | Store counter inside the compiled `.so` module as a module-level variable; inaccessible without reverse-engineering the binary |
-| `/etc/machine-id` readable by any process in the container | Not a real risk for licensing, but principle of least privilege | Mount read-only; run container as non-root (already done); this is defense in depth |
-| Logging fingerprint details in plaintext | Customer sends logs to support; logs contain all fingerprint signals; attacker on same network intercepts | Log only the final SHA256 hash, never the component signals (hostname, machine-id, CPU info); current code already follows this pattern |
-| Not changing the HMAC key derivation when format changes | License keys from v1.x (with MAC + container_id fingerprint) could be replayed against v2.1 (with machine-id + cpuinfo fingerprint) if the HMAC key is unchanged | The fingerprint is embedded IN the key, so old keys won't match new fingerprints; BUT if the attacker generates their own key, the same HMAC key means the generation script still works. Rotate the seed. |
+| Dictionary JSON containing exact delivery zone boundary (depot lat/lon + 30km radius) | Reveals the business's operational area to anyone with repo access; competitive intelligence risk | The dictionary is committed to the repo (by design). If the repo is private, this is acceptable. If public/shared, strip depot coordinates from the dictionary metadata and store them only in `config.py`. |
+| Logging full addresses in fuzzy match debug output | CDCMS addresses contain customer names, house names, and potentially phone numbers; logging them violates privacy | Log only the address fragment being matched (first 30 chars) and the match score, not the full address. The existing codebase follows this pattern (`address[:50]` in log messages). |
+| Area centroid coordinates hardcoded in dictionary | If dictionary is leaked, reveals exact delivery area boundaries | Acceptable risk -- OSM data is public. The centroid coordinates are derived from publicly available OpenStreetMap data. |
+
+## UX Pitfalls
+
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| "Approx. location" badge on EVERY stop when API key is invalid | Drivers lose trust in the system; badge becomes meaningless noise; drivers stop paying attention to it | When ALL stops are approximate, show a SINGLE banner at the top ("Location data unavailable -- all locations are approximate today") instead of per-stop badges. |
+| Orange badge color on orange/saffron-themed dark PWA | The design spec uses `tw:badge-warning` (DaisyUI warning = amber/orange). The driver PWA already uses saffron as an accent color for buttons. Orange badge blends with orange buttons -- low visual contrast. | Use a distinct color for the approximate badge. Consider `tw:badge-info` (blue) or a custom color that stands out against the dark theme. Test on a real phone screen in sunlight. |
+| "Approx. location" text without actionable guidance | Driver sees "approximate" but does not know what to do. Call the customer? Navigate anyway? Report to office? | Add a tap action to the badge that shows a tooltip or small dialog: "Location is approximate. Navigate to this area, then call customer for exact directions." Link to the Call Office FAB. |
+| Confidence score displayed as a number (0.42) | Numbers below 1.0 are meaningless to delivery drivers. "0.42 confidence" means nothing. | Never show the raw confidence number to drivers. Map it to simple categories: green check (> 0.7), orange tilde (0.3-0.7), red question mark (< 0.3). Only show the icon, not the number. |
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Cython compilation:** Often missing the `__init__.py` compilation -- both `__init__.py` AND `license_manager.py` must be compiled to `.so`. If `__init__.py` is left as `.py`, it creates an import inconsistency. If it's deleted without compilation, `import core.licensing` fails entirely.
-- [ ] **Dev-mode stripping:** Often strips the code but forgets to remove the `ENVIRONMENT` variable from `docker-compose.yml` -- customer sets `ENVIRONMENT=development` in `.env` and bypasses everything.
-- [ ] **Fingerprint migration:** Often updates `license_manager.py` fingerprinting but forgets to update `scripts/get_machine_id.py` -- customer runs old script, sends old fingerprint, gets a key that doesn't match new validation.
-- [ ] **Docker volume mount:** Often adds `/etc/machine-id` mount to `docker-compose.yml` but forgets `docker-compose.license-test.yml` and `docker-compose.prod.yml` -- E2E license tests fail or production deploys fail.
-- [ ] **build-dist.sh exclusions:** Often adds Cython build artifacts (`.c` files, `build/` directory, `*.egg-info`) but forgets to add them to the rsync `--exclude` list -- tarball ships with intermediate C files and build metadata.
-- [ ] **License renewal E2E test:** Often tests renewal happy path but forgets to test renewal-after-fingerprint-change scenario -- renewal works in dev but fails for customers who rebooted between initial license and renewal.
-- [ ] **Verify-dist.sh updates:** Often updates `build-dist.sh` for Cython but forgets to update `verify-dist.sh` which still checks for `.pyc` files instead of `.so` files.
-- [ ] **ENVIRONMENT variable removal:** Strips dev-mode code from `main.py` but leaves `ENVIRONMENT=${ENVIRONMENT:-development}` in docker-compose.yml; the variable is unused but confusing, and a determined attacker might try to re-add the dev-mode code path.
+- [ ] **address_display fix:** Often changes `vroom_adapter.py:278` but forgets to update `scripts/import_orders.py:219-220` which also sets `address_display` from `order.location.address_text` -- the script still uses the old logic.
+- [ ] **Dictionary build script:** Often fetches OSM data and commits JSON but forgets to validate against real CDCMS area names -- dictionary may miss 30% of actual delivery areas.
+- [ ] **Fuzzy matching:** Often tests with the 4 examples from the design spec but forgets to test with short names (4-5 chars) where false positive rate is highest.
+- [ ] **Geocode validation:** Often tests the happy path (address within zone) and the fallback (centroid) but forgets to test the intermediate case (area-only retry succeeds) -- the retry confidence multiplier may produce unexpected values.
+- [ ] **API confidence field:** Often adds `geocode_confidence` to the route response but forgets that OLD routes (before this feature) have `NULL` confidence -- driver PWA must handle `null` without crashing.
+- [ ] **Driver PWA badge:** Often adds the badge HTML but forgets to test with `location_approximate: false` (badge should be hidden) and with missing field (pre-upgrade API responses) -- badge must default to hidden.
+- [ ] **RapidFuzz in Docker:** Often adds `rapidfuzz` to `requirements.txt` but forgets to verify the Docker build succeeds -- `rapidfuzz` C++ extensions may need build tools in the Docker image.
+- [ ] **Haversine formula:** Often implements the formula correctly but uses degrees instead of radians in the `math.sin()`/`math.cos()` calls -- produces wildly wrong distances. Always convert lat/lon to radians first.
+- [ ] **Existing tests:** Often adds new preprocessing tests but forgets to run the existing 426 unit tests -- regex reordering may break tests for `clean_cdcms_address()` that passed before.
+- [ ] **Cache key consistency:** Often changes preprocessing but forgets that `normalize_address()` is a SEPARATE function from `clean_cdcms_address()` -- changes to cleaning do NOT automatically update cache keys, which is correct but must be understood.
 
 ## Recovery Strategies
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| .so version mismatch (wrong Python version) | LOW | Rebuild with correct Python version inside Docker; re-package tarball; no customer data lost |
-| Fingerprint changes after WSL reboot | MEDIUM | Customer re-runs `get_machine_id.py`, sends new fingerprint; we generate new key or renewal key; customer replaces `license.key` and restarts. Requires support interaction. |
-| Dev-mode stripping produces broken main.py | HIGH | Customer's API is completely down. Emergency: ship a corrected tarball. Prevention is much cheaper than recovery. |
-| Integrity manifest blocks legitimate edits | LOW | Customer restores original file from backup or re-extracts from tarball; OR we ship a new build with corrected manifest. Support must identify which file was modified. |
-| Event loop blocked by sync re-validation | LOW | Deploy a patched version with `run_in_executor()`. No data loss, just performance degradation until patched. |
-| HMAC seed not rotated, old keys still work | MEDIUM | Generate new keys with new seed for all customers; coordinate key replacement. Old keys stop working immediately when new `.so` is deployed. Must time the rollout carefully. |
-| Architecture-mismatched .so in tarball | LOW | Rebuild inside Docker on correct platform; re-package; no data loss. But the customer's system is down until the new tarball arrives. |
+| Cache poisoning (duplicate entries for same address) | LOW | Run deduplication query: find geocode_cache entries where `address_norm` values differ but locations are within 50m. Keep the highest-confidence entry. No data loss -- addresses re-geocode on next upload with new preprocessing. |
+| address_display truncation in DB | LOW | Alter column: `ALTER TABLE orders ALTER COLUMN address_display TYPE TEXT;` (removes 255 char limit). Re-upload affected CSV to populate correct values. |
+| Fuzzy matching false positive (wrong place assigned) | MEDIUM | Identify affected addresses in the geocode cache by checking if cached location is far from the dictionary's coordinates for the matched place name. Delete incorrect cache entries. Re-geocode on next upload. Driver-verified entries override any cache errors over time. |
+| Inconsistent confidence scores across uploads | LOW | Redefine confidence as a simple function of the final state, not a product of intermediate scores. Update existing cache entries with recalculated confidence. No delivery impact -- confidence is informational only. |
+| Dictionary missing critical place names | LOW | Add missing names manually to the JSON file and re-commit. No code change needed. The splitter picks up new entries on next lazy load (container restart). |
+| Regex reordering breaks existing tests | LOW | Revert to original step order. Add the new regex as an ADDITIONAL step at the end (before title case) rather than reordering. Run test suite to confirm. |
+| All addresses show "approximate" due to API key failure | MEDIUM | Fix the Google API key (enable Geocoding API, set up billing). Re-upload the CSV. Addresses will geocode correctly this time and cache will be populated. Until the key is fixed, the centroid fallback provides serviceable (not perfect) locations. |
 
 ## Pitfall-to-Phase Mapping
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| .so Python version lock | Phase 1: Cython Pipeline | `python3 -c "import core.licensing"` runs inside Docker container after build; `.so` filename contains `cpython-312` |
-| WSL2 MAC address instability | Phase 2: Fingerprint Hardening | `get_machine_id.py` produces same output before and after WSL restart; no `uuid.getnode()` calls remain |
-| Async code in compiled module | Phase 1: Cython Pipeline | `grep -r "async def" core/licensing/` returns nothing; build-time check enforced |
-| Dev-mode stripping syntax errors | Phase 1: Dev-Mode Stripping | `python3 -c "ast.parse(...)"` against stripped `main.py`; pytest runs against staged directory |
-| Integrity manifest over-coverage | Phase 3: Integrity Manifest | Manifest file list documented; `docker-compose.yml` explicitly excluded; customer can edit `.env` without triggering integrity failure |
-| Event loop blocking on re-validation | Phase 4: Periodic Re-Validation | Load test with 50 concurrent requests; no request takes >200ms during re-validation window |
-| Architecture mismatch | Phase 1: Cython Pipeline | `file *.so` shows `x86-64` and `ELF`; build runs inside Docker |
-| HMAC seed not rotated | Phase 1: Cython Pipeline | Old license keys fail validation with new `.so`; generate_license.py updated with new seed |
-| `get_machine_id.py` out of sync | Phase 2: Fingerprint Hardening | `get_machine_id.py` and `license_manager.py` produce identical fingerprints on same machine |
-| Docker volume mounts missing | Phase 2: Fingerprint Hardening | All docker-compose*.yml files mount `/etc/machine-id:ro`; E2E license tests pass |
-| verify-dist.sh still checks .pyc | Phase 1: Cython Pipeline | `verify-dist.sh` checks for `.so` files and validates they import correctly |
-| ENVIRONMENT variable in docker-compose.yml | Phase 1: Dev-Mode Stripping | Distributed `docker-compose.yml` does not reference `ENVIRONMENT` variable at all |
+| Cache poisoning from preprocessing changes | Phase 1: Foundation | Monitor cache miss count on first upload after deployment; verify no duplicate cache entries within 50m |
+| address_display downstream breakage | Phase 1: Foundation | Grep for `address_display` in all `.py`, `.tsx`, `.html` files; verify max length of `address_raw` < 255 chars |
+| Fuzzy matching false positives | Phase 2: Place Name Dictionary | Test with ALL sample addresses; log all fuzzy matches with scores; manual review of matches below 90% |
+| Inconsistent confidence across re-uploads | Phase 3: Geocode Validation | Upload same CSV twice; verify confidence scores are identical for all addresses |
+| Dictionary incompleteness | Phase 2: Place Name Dictionary | Compare dictionary place names against `SELECT DISTINCT area_name FROM orders`; coverage must be > 80% |
+| Validator retry doubling API cost | Phase 3: Geocode Validation | Add circuit breaker for `REQUEST_DENIED`; test with invalid API key -- verify retry count is bounded |
+| Regex reordering breaking tests | Phase 1: Foundation | Run full test suite before AND after changes; zero regressions allowed |
+| "Approx. location" badge UX problems | Phase 4: API + Driver UI | Test on real phone in sunlight; verify badge contrast ratio; test with all-approximate scenario |
+| RapidFuzz Docker build failure | Phase 2: Place Name Dictionary | Rebuild Docker image from scratch after adding rapidfuzz to requirements.txt; verify successful `import rapidfuzz` inside container |
+| Haversine implementation error | Phase 3: Geocode Validation | Test with known distance pairs: Vatakara depot to Kozhikode city (~37km), depot to Mahe (~12km); compare with Google Maps distance |
+| Driver-verified entries orphaned by preprocessing changes | Phase 3: Geocode Validation | Verify that driver-verified entries are accessible after preprocessing changes; test the proximity-based lookup path |
 
 ## Sources
 
-- [Cython FastAPI coroutine issue: FastAPI#1921](https://github.com/fastapi/fastapi/issues/1921)
-- [Cython .so naming convention: Cython documentation](https://cython.readthedocs.io/en/latest/src/userguide/source_files_and_compilation.html)
-- [WSL2 MAC address instability: microsoft/WSL#5352](https://github.com/microsoft/WSL/issues/5352)
-- [WSL2 fixed MAC address request: microsoft/WSL#5291](https://github.com/microsoft/WSL/issues/5291)
-- [Python uuid.getnode() not tied to MAC with libuuid: cpython#132710](https://github.com/python/cpython/issues/132710)
-- [Cython async iscoroutinefunction issue: cython/cython#2273](https://github.com/cython/cython/issues/2273)
-- [FastAPI concurrency model: FastAPI docs](https://fastapi.tiangolo.com/async/)
-- [Docker /proc/cpuinfo inconsistencies: docker/for-mac#6111](https://github.com/docker/for-mac/issues/6111)
-- [Cython glibc version compatibility](https://snorfalorpagus.net/blog/2016/07/17/compiling-python-extensions-for-old-glibc-versions/)
-- [Protecting Python code with Cython and Docker](https://shawinnes.com/protecting-python/)
-- [Cython Pure Python Mode](https://cython.readthedocs.io/en/latest/src/tutorial/pure.html)
-- [Docker bind mount security: Docker docs](https://docs.docker.com/engine/storage/bind-mounts/)
-- [FastAPI thread safety discussion: fastapi#876](https://github.com/fastapi/fastapi/issues/876)
+- [Google Geocoding API Best Practices](https://developers.google.com/maps/documentation/geocoding/best-practices) -- official guidance on handling ambiguous results, not parsing formatted_address
+- [Indian Address Geocoding Challenges](https://thebangaloreguy.com/problem-of-geocoding-non-standardised-addresses-in-india-an-nlp-problem/) -- non-standardized Indian address formats as NLP problem
+- [RapidFuzz Documentation](https://rapidfuzz.github.io/RapidFuzz/Usage/fuzz.html) -- fuzzy matching functions and score behavior on different string lengths
+- [RapidFuzz GitHub](https://github.com/rapidfuzz/RapidFuzz) -- C++ extension build requirements, wheel availability
+- [OSM Overpass API Rate Limiting](https://wiki.openstreetmap.org/wiki/Overpass_API) -- 10,000 requests/day guideline, 429 rate limit responses
+- [India Post PIN Code API](http://www.postalpincode.in/Api-Details) -- 1000 requests/hour rate limit, post office names (not localities)
+- [Haversine vs OSRM for Routing](https://www.nextmv.io/blog/haversine-vs-osrm-distance-and-cost-experiments-on-a-vehicle-routing-problem-vrp) -- haversine accuracy limitations for actual road distance
+- [Geocoding Tips for Last-Mile Delivery](https://routinguk.descartes.com/resources/geocoding-best-practices-delivery-management) -- inaccurate geocode knock-on effect on all routes
+- [Google Geocoding Request/Response](https://developers.google.com/maps/documentation/geocoding/requests-geocoding) -- formatted_address field semantics, location_type confidence mapping
+- Codebase analysis: `.planning/codebase/ARCHITECTURE.md`, `CONCERNS.md`, `INTEGRATIONS.md` -- existing system architecture and known issues
+- Design spec: `docs/superpowers/specs/2026-03-10-address-preprocessing-design.md` -- the plan being evaluated for pitfalls
+- Source code: `core/geocoding/cache.py`, `core/geocoding/normalize.py`, `core/data_import/cdcms_preprocessor.py`, `core/optimizer/vroom_adapter.py`, `core/database/models.py` -- actual implementation being modified
 
 ---
-*Pitfalls research for: v2.1 Licensing & Distribution Security*
+*Pitfalls research for: v2.2 Address Preprocessing Pipeline*
 *Researched: 2026-03-10*

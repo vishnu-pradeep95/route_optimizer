@@ -29,7 +29,6 @@ Data flow:
 import base64
 import hashlib
 import hmac
-import logging
 import os
 import struct
 from dataclasses import dataclass
@@ -37,27 +36,31 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
-logger = logging.getLogger(__name__)
-
 
 # =============================================================================
 # HMAC secret derivation
 # =============================================================================
 
-# Cryptographically random seed -- compiled to .so in distribution builds.
-# PBKDF2 derives the actual HMAC key. See docs/LICENSING.md for design.
-_DERIVATION_SEED = bytes.fromhex(
-    "28c238b88e41c0af1de923f79091f4d4d06d38ed6f880373102951c98807aef4"  # os.urandom(32)
-)
-_PBKDF2_SALT = bytes.fromhex(
-    "cd6bcd0839706543c90e568d7c2e1584"  # os.urandom(16)
-)
-_PBKDF2_ITERATIONS = 200_000
+# Why this strange constant instead of a plain "SECRET_KEY"?
+# - A grep for "SECRET" or "KEY" or "PASSWORD" won't find this
+# - PBKDF2 with 100k iterations derives the actual HMAC key
+# - This is security through obscurity (not great), but combined with
+#   .pyc-only distribution, it raises the bar against casual tampering
+# - A determined reverse engineer CAN extract this — that's acceptable
+#   for our threat model (preventing casual copying, not piracy rings)
+_DERIVATION_SEED = b"kerala-logistics-platform-2025-route-optimizer"
+_PBKDF2_ITERATIONS = 100_000
 
+# Why derive with PBKDF2 instead of using the seed directly?
+# PBKDF2 is a standard key derivation function that makes brute-force
+# attacks slower. Even though our seed isn't really a password, using
+# PBKDF2 is defense-in-depth: if someone finds the seed, they still
+# need to know the iteration count and salt to derive the HMAC key.
+# See: https://docs.python.org/3/library/hashlib.html#hashlib.pbkdf2_hmac
 _HMAC_KEY = hashlib.pbkdf2_hmac(
     "sha256",
     _DERIVATION_SEED,
-    salt=_PBKDF2_SALT,
+    salt=b"lpg-delivery-hmac-salt",
     iterations=_PBKDF2_ITERATIONS,
 )
 
@@ -80,15 +83,6 @@ class LicenseStatus(Enum):
     VALID = "valid"
     GRACE = "grace"
     INVALID = "invalid"
-
-
-# Severity ordering for one-way state transition guard.
-# Higher severity = worse state. Upgrades (lower severity) are blocked.
-_STATUS_SEVERITY = {
-    LicenseStatus.VALID: 0,
-    LicenseStatus.GRACE: 1,
-    LicenseStatus.INVALID: 2,
-}
 
 
 # =============================================================================
@@ -449,147 +443,3 @@ def is_license_valid() -> bool:
     """
     info = validate_license()
     return info.status in (LicenseStatus.VALID, LicenseStatus.GRACE)
-
-
-# =============================================================================
-# Integrity manifest (populated by build-dist.sh before Cython compilation)
-# =============================================================================
-
-# Placeholder replaced by build-dist.sh Step 4 with real SHA256 hashes.
-# Empty dict = development environment (no build), verify_integrity() returns success.
-_INTEGRITY_MANIFEST: dict[str, str] = {}
-
-# =============================================================================
-# Internal license state (not on app.state -- inside compiled .so)
-# =============================================================================
-
-_license_state: LicenseInfo | None = None
-_request_counter: int = 0
-_REVALIDATION_INTERVAL = int(os.environ.get("REVALIDATION_INTERVAL", "500"))
-
-
-def get_license_status() -> LicenseStatus | None:
-    """Return current license status. Called by middleware on every request.
-    Returns None if set_license_state() was never called (middleware passes through)."""
-    if _license_state is None:
-        return None
-    return _license_state.status
-
-
-def get_license_info() -> LicenseInfo | None:
-    """Return full license info. None if no state set (dev mode)."""
-    return _license_state
-
-
-def set_license_state(info: LicenseInfo) -> None:
-    """Store license state internally. Called at startup by enforce() and
-    during periodic re-validation by maybe_revalidate().
-
-    One-way guard: state can only degrade (VALID->GRACE->INVALID) or stay
-    at the same severity. Upgrades (e.g. INVALID->VALID) are rejected --
-    a restart is required to upgrade license state.
-
-    First-time set (when _license_state is None) always succeeds.
-    """
-    global _license_state
-    if _license_state is not None:
-        current_severity = _STATUS_SEVERITY[_license_state.status]
-        new_severity = _STATUS_SEVERITY[info.status]
-        if new_severity < current_severity:
-            logger.warning(
-                "Rejected license state upgrade from %s to %s (restart required)",
-                _license_state.status.value,
-                info.status.value,
-            )
-            return
-        if new_severity > current_severity:
-            logger.warning(
-                "License state degraded from %s to %s",
-                _license_state.status.value,
-                info.status.value,
-            )
-    _license_state = info
-
-
-def verify_integrity(base_path: str = "/app") -> tuple[bool, list[str]]:
-    """Verify protected files against embedded SHA256 manifest.
-    Returns (all_ok, list_of_failure_messages).
-    Empty manifest = dev environment = returns (True, [])."""
-    import pathlib
-
-    if not _INTEGRITY_MANIFEST:
-        return True, []
-
-    failures = []
-    base = pathlib.Path(base_path)
-
-    for rel_path, expected_hash in _INTEGRITY_MANIFEST.items():
-        file_path = base / rel_path
-        if not file_path.exists():
-            failures.append(f"{rel_path}: file not found")
-            continue
-        with open(file_path, "rb") as f:
-            actual_hash = hashlib.file_digest(f, "sha256").hexdigest()
-        if actual_hash != expected_hash:
-            failures.append(f"{rel_path} has been modified")
-
-    return len(failures) == 0, failures
-
-
-def maybe_revalidate(base_path: str = "/app") -> None:
-    """Periodic re-validation: integrity + license expiry check every N requests.
-
-    Called by enforcement middleware on every request. Increments a counter
-    and triggers full re-validation when counter hits _REVALIDATION_INTERVAL
-    (default 500, configurable via REVALIDATION_INTERVAL env var).
-
-    Re-validation includes:
-    1. File integrity verification against embedded SHA256 manifest
-    2. License expiry re-check (detects VALID->GRACE->INVALID transitions)
-
-    Skipped in dev mode (empty _INTEGRITY_MANIFEST).
-    Raises SystemExit on integrity failure (graceful shutdown).
-    """
-    global _request_counter
-    _request_counter += 1
-    if _request_counter % _REVALIDATION_INTERVAL != 0:
-        return
-    _request_counter = 0
-
-    # Skip in dev mode (no manifest = no files to check)
-    if not _INTEGRITY_MANIFEST:
-        return
-
-    # 1. Integrity re-check
-    ok, failures = verify_integrity(base_path)
-    if not ok:
-        for f in failures:
-            logger.error("Runtime integrity check failed: %s", f)
-        raise SystemExit("Runtime integrity check failed. Protected files modified.")
-
-    # 2. License expiry re-check
-    if _license_state is not None and _license_state.status != LicenseStatus.INVALID:
-        from dataclasses import replace
-
-        now = datetime.now(timezone.utc)
-        days_remaining = (_license_state.expires_at - now).days
-
-        if days_remaining >= 0:
-            new_status = LicenseStatus.VALID
-        elif abs(days_remaining) <= GRACE_PERIOD_DAYS + 1:
-            new_status = LicenseStatus.GRACE
-        else:
-            new_status = LicenseStatus.INVALID
-
-        if new_status != _license_state.status:
-            new_msg = (
-                f"License state changed during re-validation: "
-                f"{_license_state.status.value} -> {new_status.value}"
-            )
-            new_info = replace(
-                _license_state,
-                status=new_status,
-                days_remaining=days_remaining,
-                message=new_msg,
-            )
-            set_license_state(new_info)

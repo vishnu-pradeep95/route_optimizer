@@ -76,11 +76,6 @@ def main():
         action="store_true",
         help="After generating, verify the key decodes correctly",
     )
-    parser.add_argument(
-        "--renew",
-        action="store_true",
-        help="Generate a renewal key (same format, customer drops as renewal.key)",
-    )
 
     args = parser.parse_args()
 
@@ -114,10 +109,7 @@ def main():
 
     print()
     print("=" * 60)
-    if args.renew:
-        print("  RENEWAL KEY GENERATED")
-    else:
-        print("  LICENSE KEY GENERATED")
+    print("  LICENSE KEY GENERATED")
     print("=" * 60)
     print()
     print(f"  Customer:    {args.customer}")
@@ -127,13 +119,8 @@ def main():
     print()
     print(f"  Key: {key}")
     print()
-    if args.renew:
-        print("  Save as: renewal.key")
-        print("  Customer drops this file alongside license.key and restarts the API.")
-        print("  The API will pick up the new expiry automatically on restart.")
-    else:
-        print("  To activate: set LICENSE_KEY environment variable or")
-        print("  save the key to a file called 'license.key' in the project root.")
+    print("  To activate: set LICENSE_KEY environment variable or")
+    print("  save the key to a file called 'license.key' in the project root.")
     print()
 
     # Optionally verify

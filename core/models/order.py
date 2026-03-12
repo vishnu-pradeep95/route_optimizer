@@ -58,6 +58,11 @@ class Order(BaseModel):
     address_raw: str = Field(
         ..., description="Original address text from source system (CDCMS etc.)"
     )
+    address_original: str | None = Field(
+        default=None,
+        description="Completely unprocessed address text from source system (CDCMS ConsumerAddress). "
+                    "None for pre-v2.2 orders where original text was not preserved."
+    )
     customer_ref: str = Field(
         ..., description="Pseudonymized customer reference (NOT real name)"
     )
@@ -80,6 +85,19 @@ class Order(BaseModel):
     # Phase 2: delivery time windows — "deliver between 09:00 and 12:00"
     # Used by VROOM's VRPTW solver to respect customer time preferences.
     # If both are None, the order has no time constraint (pure CVRP).
+    # Phase 13: Geocode validation fields — track how each order was geocoded.
+    # These are set during the upload pipeline's geocoding loop and persisted
+    # to OrderDB for analytics and the "approx. location" badge (Phase 14).
+    geocode_confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Geocode confidence score (0.1=depot fallback, 1.0=direct hit). None if not geocoded.",
+    )
+    geocode_method: str | None = Field(
+        default=None,
+        description="Geocoding fallback method used: 'direct', 'area_retry', 'centroid', or 'depot'. None if not geocoded.",
+    )
     delivery_window_start: time | None = Field(
         default=None, description="Earliest acceptable delivery time (HH:MM)"
     )

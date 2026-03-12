@@ -458,3 +458,349 @@ class TestStatsAndBatch:
         """Stats summary with zero total should show N/A for hit rate."""
         summary = cached_geocoder.get_stats_summary()
         assert "N/A" in summary
+
+
+# =============================================================================
+# Validator Integration Tests (Phase 13 Plan 02)
+# =============================================================================
+
+
+class TestCachedGeocoderWithValidator:
+    """Verify CachedGeocoder integration with optional GeocodeValidator.
+
+    Tests that:
+    - CachedGeocoder accepts an optional validator parameter
+    - When validator is provided, geocode results are validated against zone
+    - In-zone results get method='direct', confidence=1.0
+    - Out-of-zone results trigger the fallback chain via validator
+    - Circuit breaker integration works (denial tracking)
+    - Without validator, behavior is identical to before (backward compat)
+    """
+
+    @pytest.fixture
+    def in_zone_location(self):
+        """Location within 30km of Vatakara depot (11.6244, 75.5796)."""
+        return Location(
+            latitude=11.5950,
+            longitude=75.5700,
+            address_text="Near Vatakara",
+            geocode_confidence=0.95,
+        )
+
+    @pytest.fixture
+    def out_of_zone_location(self):
+        """Location far outside 30km of Vatakara depot (Delhi)."""
+        return Location(
+            latitude=28.6139,
+            longitude=77.2090,
+            address_text="New Delhi",
+            geocode_confidence=0.95,
+        )
+
+    @pytest.fixture
+    def mock_validator_in_zone(self):
+        """Mock validator that says coordinates are in-zone."""
+        from core.geocoding.validator import ValidationResult
+
+        validator = MagicMock()
+        validator.validate.return_value = ValidationResult(
+            latitude=11.5950,
+            longitude=75.5700,
+            confidence=1.0,
+            method="direct",
+        )
+        validator.is_tripped = False
+        return validator
+
+    @pytest.fixture
+    def mock_validator_out_of_zone(self):
+        """Mock validator that returns area_retry fallback for out-of-zone."""
+        from core.geocoding.validator import ValidationResult
+
+        validator = MagicMock()
+        validator.validate.return_value = ValidationResult(
+            latitude=11.6000,
+            longitude=75.5800,
+            confidence=0.7,
+            method="area_retry",
+            original_lat=28.6139,
+            original_lon=77.2090,
+        )
+        validator.is_tripped = False
+        return validator
+
+    @pytest.mark.asyncio
+    async def test_accepts_validator_parameter(self, mock_session):
+        """CachedGeocoder should accept an optional validator parameter."""
+        upstream = MagicMock()
+        validator = MagicMock()
+        geocoder = CachedGeocoder(
+            upstream=upstream,
+            session=mock_session,
+            validator=validator,
+        )
+        assert geocoder._validator is validator
+
+    @pytest.mark.asyncio
+    async def test_no_validator_works_as_before(
+        self, mock_session, in_zone_location
+    ):
+        """Without validator, geocode() behaves exactly as before."""
+        upstream = MagicMock()
+        upstream.geocode.return_value = GeocodingResult(
+            location=in_zone_location,
+            confidence=0.95,
+            formatted_address="Near Vatakara",
+        )
+        geocoder = CachedGeocoder(upstream=upstream, session=mock_session)
+        with patch(
+            PATCH_GET_CACHED,
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            PATCH_SAVE_CACHED,
+            new_callable=AsyncMock,
+        ):
+            result = await geocoder.geocode("Near Vatakara")
+
+        assert result.success is True
+        assert result.confidence == 0.95
+        # method should be the default "direct" from GeocodingResult
+        assert result.method == "direct"
+
+    @pytest.mark.asyncio
+    async def test_validator_in_zone_direct_hit(
+        self, mock_session, in_zone_location, mock_validator_in_zone
+    ):
+        """In-zone result with validator should get method='direct', confidence=1.0."""
+        upstream = MagicMock()
+        upstream.geocode.return_value = GeocodingResult(
+            location=in_zone_location,
+            confidence=0.95,
+            formatted_address="Near Vatakara",
+        )
+        geocoder = CachedGeocoder(
+            upstream=upstream,
+            session=mock_session,
+            validator=mock_validator_in_zone,
+        )
+        with patch(
+            PATCH_GET_CACHED,
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            PATCH_SAVE_CACHED,
+            new_callable=AsyncMock,
+        ):
+            result = await geocoder.geocode(
+                "Near Vatakara", area_name="VATAKARA"
+            )
+
+        assert result.method == "direct"
+        assert result.confidence == 1.0
+        mock_validator_in_zone.validate.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_validator_out_of_zone_area_retry(
+        self, mock_session, out_of_zone_location, mock_validator_out_of_zone
+    ):
+        """Out-of-zone result with validator should trigger area retry."""
+        upstream = MagicMock()
+        upstream.geocode.return_value = GeocodingResult(
+            location=out_of_zone_location,
+            confidence=0.95,
+            formatted_address="New Delhi",
+        )
+        geocoder = CachedGeocoder(
+            upstream=upstream,
+            session=mock_session,
+            validator=mock_validator_out_of_zone,
+        )
+        with patch(
+            PATCH_GET_CACHED,
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            PATCH_SAVE_CACHED,
+            new_callable=AsyncMock,
+        ):
+            result = await geocoder.geocode(
+                "Some Delhi Address", area_name="EDAPPAL"
+            )
+
+        assert result.method == "area_retry"
+        assert result.confidence == 0.7
+        # Location should be the validated coordinates, not the original
+        assert result.location.latitude == pytest.approx(11.6000)
+        assert result.location.longitude == pytest.approx(75.5800)
+
+    @pytest.mark.asyncio
+    async def test_validator_cache_hit_also_validated(
+        self, mock_session, in_zone_location, mock_validator_in_zone
+    ):
+        """Cache hits should also be validated (re-validate on every upload)."""
+        upstream = MagicMock()
+        geocoder = CachedGeocoder(
+            upstream=upstream,
+            session=mock_session,
+            validator=mock_validator_in_zone,
+        )
+        with patch(
+            PATCH_GET_CACHED,
+            new_callable=AsyncMock,
+            return_value=in_zone_location,
+        ):
+            result = await geocoder.geocode(
+                "Vatakara Bus Stand", area_name="VATAKARA"
+            )
+
+        assert result.method == "direct"
+        assert result.confidence == 1.0
+        # Validator should be called even for cache hits
+        mock_validator_in_zone.validate.assert_called_once()
+        # Upstream should NOT be called (cache hit)
+        upstream.geocode.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_geocode_accepts_area_name_parameter(self, mock_session):
+        """geocode() should accept an optional area_name parameter."""
+        upstream = MagicMock()
+        upstream.geocode.return_value = GeocodingResult(
+            location=Location(latitude=11.6, longitude=75.5),
+            confidence=0.95,
+        )
+        geocoder = CachedGeocoder(upstream=upstream, session=mock_session)
+        with patch(
+            PATCH_GET_CACHED,
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            PATCH_SAVE_CACHED,
+            new_callable=AsyncMock,
+        ):
+            # Should not raise -- area_name is optional and ignored without validator
+            result = await geocoder.geocode(
+                "Some Address", area_name="VATAKARA"
+            )
+
+        assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_circuit_breaker_denial_tracking(self, mock_session):
+        """REQUEST_DENIED in raw_response should be tracked by validator."""
+        from core.geocoding.validator import ValidationResult
+
+        upstream = MagicMock()
+        upstream.geocode.return_value = GeocodingResult(
+            location=Location(latitude=11.6, longitude=75.5),
+            confidence=0.95,
+            raw_response={"status": "REQUEST_DENIED"},
+        )
+        validator = MagicMock()
+        validator.validate.return_value = ValidationResult(
+            latitude=11.6, longitude=75.5, confidence=1.0, method="direct"
+        )
+        validator.is_tripped = False
+
+        geocoder = CachedGeocoder(
+            upstream=upstream, session=mock_session, validator=validator
+        )
+        with patch(
+            PATCH_GET_CACHED,
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            PATCH_SAVE_CACHED,
+            new_callable=AsyncMock,
+        ):
+            await geocoder.geocode("Some Address", area_name="TEST")
+
+        validator.record_api_denial.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_successful_response_records_api_success(self, mock_session):
+        """Non-REQUEST_DENIED response should record API success on validator."""
+        from core.geocoding.validator import ValidationResult
+
+        upstream = MagicMock()
+        upstream.geocode.return_value = GeocodingResult(
+            location=Location(latitude=11.6, longitude=75.5),
+            confidence=0.95,
+            raw_response={"status": "OK"},
+        )
+        validator = MagicMock()
+        validator.validate.return_value = ValidationResult(
+            latitude=11.6, longitude=75.5, confidence=1.0, method="direct"
+        )
+        validator.is_tripped = False
+
+        geocoder = CachedGeocoder(
+            upstream=upstream, session=mock_session, validator=validator
+        )
+        with patch(
+            PATCH_GET_CACHED,
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            PATCH_SAVE_CACHED,
+            new_callable=AsyncMock,
+        ):
+            await geocoder.geocode("Some Address", area_name="TEST")
+
+        validator.record_api_success.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_validation_stats_tracked(self, mock_session):
+        """Validation stats should be tracked in CachedGeocoder stats."""
+        from core.geocoding.validator import ValidationResult
+
+        upstream = MagicMock()
+        upstream.geocode.return_value = GeocodingResult(
+            location=Location(latitude=11.6, longitude=75.5),
+            confidence=0.95,
+        )
+        validator = MagicMock()
+        validator.validate.return_value = ValidationResult(
+            latitude=11.6, longitude=75.5, confidence=1.0, method="direct"
+        )
+        validator.is_tripped = False
+
+        geocoder = CachedGeocoder(
+            upstream=upstream, session=mock_session, validator=validator
+        )
+        with patch(
+            PATCH_GET_CACHED,
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            PATCH_SAVE_CACHED,
+            new_callable=AsyncMock,
+        ):
+            await geocoder.geocode("Some Address", area_name="TEST")
+
+        assert geocoder.stats["validation_direct"] == 1
+
+    @pytest.mark.asyncio
+    async def test_failed_geocode_skips_validation(self, mock_session):
+        """When upstream returns no location, validation should be skipped."""
+        upstream = MagicMock()
+        upstream.geocode.return_value = GeocodingResult(
+            location=None,
+            confidence=0.0,
+            raw_response={"status": "ZERO_RESULTS"},
+        )
+        validator = MagicMock()
+        validator.is_tripped = False
+
+        geocoder = CachedGeocoder(
+            upstream=upstream, session=mock_session, validator=validator
+        )
+        with patch(
+            PATCH_GET_CACHED,
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            result = await geocoder.geocode("Nowhere", area_name="TEST")
+
+        assert result.success is False
+        validator.validate.assert_not_called()

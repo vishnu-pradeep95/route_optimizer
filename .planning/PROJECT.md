@@ -58,7 +58,7 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ CSV format reference with error glossary and address cleaning pipeline — v1.3
 - ✓ README/DEPLOY.md accuracy and non-technical audience restructure — v1.3
 - ✓ Plain-English error messages for upload validation and geocoding — v1.3
-- ✓ Distribution build with compiled licensing module (.pyc → .so in Phase 6) — v1.3
+- ✓ Distribution build with compiled licensing module (.pyc) — v1.3
 - ✓ OSRM Docker image pinned to v5.27.1 for deployment resilience — v1.3
 - ✓ Error message documentation synced with code (25 messages traced) — v1.3
 - ✓ Playwright E2E test suite (38 tests: API, Driver PWA, Dashboard, License) — v1.4
@@ -80,27 +80,20 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ Stable machine fingerprint using /etc/machine-id + CPU model (replaces hostname+MAC+container_id) — Phase 5
 - ✓ Docker bind mount for host-container fingerprint consistency — Phase 5
 - ✓ 13 new fingerprint unit tests with mocked filesystem (38 total fingerprint tests) — Phase 5
-- ✓ Production-default ENVIRONMENT logic — dev conveniences gated behind explicit ENVIRONMENT=development — Phase 6
-- ✓ HMAC seed rotated to 32-byte cryptographic random with 200k PBKDF2 iterations — Phase 6
-- ✓ Distribution build with compiled licensing module (.so via Cython, not .pyc) — Phase 6
-- ✓ Zero ENVIRONMENT references in distributed Python files (build-time stripping + validation) — Phase 6
-- ✓ Customer migration documentation for v2.1 breaking changes (fingerprint + HMAC) — Phase 6
-- ✓ Periodic runtime re-validation every 500 requests (integrity manifest + license expiry) — Phase 8
-- ✓ One-way license state guard preventing accidental upgrades without restart — Phase 8
-- ✓ Enforcement middleware re-reads license status after re-validation for same-request state reflection — Phase 8
-- ✓ enforce(app) single entry point — main.py has zero inline enforcement logic — v2.1
-- ✓ SHA256 integrity manifest embedded in compiled .so, verified at startup — v2.1
-- ✓ License renewal via renewal.key file drop without re-keying cycle — v2.1
-- ✓ X-License-Expires-In header on all API responses for monitoring — v2.1
-- ✓ License status (valid/expired/grace, expiry date, fingerprint match) in /health endpoint — v2.1
-- ✓ E2E security pipeline tests (fingerprint mismatch, re-validation, integrity tamper, renewal) — v2.1
-- ✓ docs/LICENSING.md rewritten from scratch, ERROR-MAP.md + SETUP.md + MIGRATION.md updated — v2.1
-- ✓ build-dist.sh ENVIRONMENT stripping covers enforcement.py, import validation checks all 8 exports — v2.1
-- ✓ docker-compose.prod.yml machine-id bind mount for production fingerprint consistency — v2.1
+- ✓ address_display always shows cleaned CDCMS original text (not Google's formatted_address) — v2.2
+- ✓ Regex word splitting at lowercase→uppercase transitions in concatenated CDCMS text — v2.2
+- ✓ Two-pass abbreviation expansion (inline then standalone) with protected word set — v2.2
+- ✓ 381-entry Kerala place name dictionary from OSM Overpass with 100% CDCMS coverage — v2.2
+- ✓ AddressSplitter with RapidFuzz fuzzy matching for transliteration variants — v2.2
+- ✓ GeocodeValidator with 30km zone check, area-name retry, centroid fallback, circuit breaker — v2.2
+- ✓ geocode_confidence and location_approximate fields in API route responses — v2.2
+- ✓ Driver PWA "Approx. location" badge (hero card) and orange dot indicator (compact cards) — v2.2
+- ✓ Full pipeline integration tests with HDFC ERGO regression verification — v2.2
+- ✓ Accuracy metrics documented with NER upgrade trigger criteria — v2.2
 
 ### Active
 
-(No active milestone — use `/gsd:new-milestone` to start next)
+(No active requirements — next milestone not yet defined)
 
 ### Out of Scope
 
@@ -124,8 +117,8 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v2.1 shipped (2026-03-11). ~3.2k Python LOC, ~4.3k TypeScript LOC, ~2.6k Shell LOC. E2E security tests + 571 total tests passing. 7 milestones shipped (v1.0-v1.4, v2.0-v2.1), 35 phases, 77 plans.
-- **Known tech debt**: Physical Android device testing for outdoor contrast; 8 GB laptop testing for install script OSRM OOM validation; 6 ErrorCode enum values reserved for future use; X-License-Expires-In missing from CORS expose_headers (LOW — same-origin unaffected).
+- **Current state**: v2.2 shipped (2026-03-12). ~20k Python LOC, ~6k TypeScript LOC, ~3k Shell LOC. 38 E2E tests + 435+ unit tests. 8 milestones shipped (v1.0-v1.4, v2.0, v2.2), 33 phases, 77 plans.
+- **Known tech debt**: Physical Android device testing for outdoor contrast; 8 GB laptop testing for install script OSRM OOM validation; 6 ErrorCode enum values reserved for future use; NER model upgrade path documented but not triggered (centroid fallback < 5%).
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
 ## Constraints
@@ -173,6 +166,12 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | Standalone compose for verification | Docker Compose merges ports additively in overrides, causing conflicts | ✓ Good — isolated stack with no name/port collisions |
 | Skip OSRM/VROOM in tarball verification | Endpoints don't require routing; saves 300+ MB download and minutes of init | ✓ Good — verification runs in ~30s instead of 10+ min |
 
+| Playwright 4-project config | Separate projects for api, driver-pwa, dashboard, license with different base URLs and viewports | ✓ Good |
+| Docker Compose override for license tests | Isolated production-mode container on port 8001 | ✓ Good |
+| Sequential story pattern for PWA tests | Shared BrowserContext across ordered tests with UI+API dual verification | ✓ Good |
+| Truncate logs before compose down | docker compose down removes containers and their log files | ✓ Good |
+| Standalone compose for verification | Docker Compose merges ports additively in overrides, causing conflicts | ✓ Good |
+| Skip OSRM/VROOM in tarball verification | Endpoints don't require routing; saves 300+ MB download and minutes of init | ✓ Good |
 | Copyleft-first attribution | Flag restrictive licenses at top for compliance scanning | ✓ Good |
 | docs/ as single documentation home | All docs except README.md/CLAUDE.md consolidated under docs/ | ✓ Good — clean root, discoverable docs |
 | docs/INDEX.md as documentation hub | Central entry point with audience tags replaces scattered README links | ✓ Good — office employees find their docs first |
@@ -182,26 +181,15 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | FLEET_NO_VEHICLES → #step-11-cdcms-data-workflow | Closest relevant heading in SETUP.md (no Fleet Setup section) | ✓ Good — best available anchor |
 | Drop MAC from fingerprint formula | WSL2 generates random MAC on every reboot (microsoft/WSL#5352) | ✓ Good — fingerprint stable across reboots |
 | Read-only bind mount for /etc/machine-id | Prevent container writes to host identity file | ✓ Good — secure host-container identity sharing |
-| Production-default ENVIRONMENT logic | Omitting ENVIRONMENT must not grant dev privileges | ✓ Good — 4 locations inverted, /docs /redoc /openapi.json all gated |
-| bytes.fromhex() for HMAC seed/salt | Not greppable as ASCII strings, raises extraction bar | ✓ Good — old human-readable strings eliminated |
-| PBKDF2 iterations 100k → 200k | Stronger key derivation with negligible startup cost | ✓ Good — measurable brute-force cost increase |
-| Docker-based Cython compilation | Build in python:3.12-slim matching runtime for ABI compatibility | ✓ Good — .so imports validated inside same base image |
-| sed strip-devmode in build pipeline | Hardcode _is_dev_mode=False in staged copy, delete ENVIRONMENT refs | ✓ Good — zero-tolerance grep validation passes |
-| Migration docs written in Phase 6 | Document while both breaking changes (fingerprint + HMAC) are in context | ✓ Good — deferred execution to Phase 10 |
-| _STATUS_SEVERITY ordering for state guard | Maps VALID=0, GRACE=1, INVALID=2 for one-way comparison | ✓ Good — simple, prevents accidental upgrades |
-| Counter resets to 0 after re-validation | Next cycle is exactly 500 requests | ✓ Good — predictable re-validation cadence |
-| SystemExit propagation from middleware | maybe_revalidate() not wrapped in try/except | ✓ Good — graceful shutdown on integrity failure |
-| maybe_revalidate() called on all requests | Including /health — consistent counter increment | ✓ Good — predictable revalidation boundaries |
-| enforce() middleware inside compiled module | @app.middleware defined inside enforce() body — single entry point | ✓ Good — main.py has zero enforcement logic |
-| Empty _INTEGRITY_MANIFEST = dev mode | verify_integrity() returns success without checking in dev | ✓ Good — consistent pattern across enforce/verify/revalidate |
-| hashlib.file_digest() for SHA256 | Python 3.11+ API for clean file hashing | ✓ Good — one line per file, no manual chunking |
-| Manifest injection with sed pipe delimiters | SHA256 hex is [0-9a-f] only, no special char risk | ✓ Good — simple, safe string replacement |
-| enforcement.py kept as .py in tarball | Cython cannot compile async def (FastAPI#1921) | ✓ Good — async wrapper calls compiled sync functions |
-| Renewal check before validate_license() | Avoids one-way state guard blocking INVALID->VALID | ✓ Good — renewal restores valid state without restart |
-| License status informational in /health | Does not degrade overall /health status | ✓ Good — monitoring can alert on license separately |
-| REVALIDATION_INTERVAL as module-level constant | Works identically in .py and .so | ✓ Good — configurable for tests via env var |
-| Separate e2e-security CI job | Different Docker lifecycle than regular e2e | ✓ Good — isolated security test environment |
-| LICENSING.md from scratch (not edited) | Codebase as source of truth, not stale documentation | ✓ Good — accurate, comprehensive, no legacy errors |
+| Trailing letter split heuristic | Split concatenated words at lowercase→uppercase transitions (e.g., ANANDAMANDIRAMK → ANANDAMANDIRAM K) | ✓ Good — handles common CDCMS concatenation pattern |
+| Two-pass abbreviation expansion | Inline expansion before split (NR→Nagar), standalone after split (PO→P.O.) | ✓ Good — catches abbreviations at both positions |
+| address_original field for raw CDCMS text | Preserve completely unprocessed ConsumerAddress alongside cleaned version | ✓ Good — audit trail for address transformations |
+| Coordinate-based navigation with address fallback | navigateTo(lat, lon, address) — coords primary, address for display | ✓ Good — avoids Google re-geocoding cleaned text |
+| OSM Overpass for dictionary build | Free, no API key, covers Kerala place names comprehensively | ✓ Good — 381 entries, 100% CDCMS coverage |
+| Flat 1.0 confidence for direct in-zone hits | 4-tier system (1.0/0.7/0.3/0.0) not 7-tier with Google granularity | ✓ Good — simpler, sufficient for approximate vs precise distinction |
+| Circuit breaker per batch, not global | Stateless per upload; resets on new CSV upload | ✓ Good — one bad batch doesn't poison future uploads |
+| location_approximate computed at serialization | Not stored in DB; derived from confidence < 0.5 at API response time | ✓ Good — single source of truth, threshold adjustable |
+| RapidFuzz for fuzzy matching | Length-dependent thresholds prevent false positives on short names | ✓ Good — handles VATAKARA/VADAKARA without matching EDAPPAL/EDAPALLI |
 
 ---
-*Last updated: 2026-03-11 after v2.1 milestone*
+*Last updated: 2026-03-12 after v2.2 milestone (Address Preprocessing Pipeline shipped)*

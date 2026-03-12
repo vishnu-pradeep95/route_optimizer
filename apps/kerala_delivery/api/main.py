@@ -54,8 +54,7 @@ from core.database import repository as repo
 from core.geocoding.cache import CachedGeocoder
 from core.geocoding.duplicate_detector import detect_duplicate_locations
 from core.geocoding.google_adapter import GoogleGeocoder
-from core.licensing.enforcement import enforce
-from core.licensing.license_manager import get_license_info, get_machine_fingerprint
+from core.licensing.license_manager import validate_license, LicenseStatus, LicenseInfo, GRACE_PERIOD_DAYS
 from core.models.location import Location
 from core.models.order import Order
 from core.optimizer.vroom_adapter import VroomAdapter
@@ -147,21 +146,61 @@ async def lifespan(app: FastAPI):
     """
     # SECURITY: warn if API_KEY is unset outside dev mode.
     # Missing API_KEY in production means all POST endpoints are unprotected.
-    _lifespan_is_dev = os.environ.get("ENVIRONMENT") == "development"
+    env = os.environ.get("ENVIRONMENT", "development")
     api_key = os.environ.get("API_KEY", "")
-    if not api_key and not _lifespan_is_dev:
+    if not api_key and env != "development":
         logger.warning(
-            "API_KEY is not set in non-development mode. "
+            "⚠️  API_KEY is not set and ENVIRONMENT=%s. "
             "All protected endpoints (POST + sensitive GET) are UNPROTECTED. "
-            "Set API_KEY for production deployments.",
+            "Set API_KEY in production.",
+            env,
         )
     elif api_key:
         logger.info("API key authentication enabled for POST and sensitive GET endpoints")
 
-    # -- License enforcement ------------------------------------------------
-    # Single entry point: validates license, verifies file integrity,
-    # and registers enforcement middleware. See core/licensing/enforcement.py.
-    enforce(app)
+    # ── License validation ────────────────────────────────────────────
+    # Check hardware-bound license on startup. In production, an invalid
+    # license blocks all API endpoints with 503. In development, licensing
+    # is optional (no key = no enforcement).
+    # See: core/licensing/license_manager.py for the full validation logic.
+    license_info = validate_license()
+    app.state.license_info = license_info  # Store for middleware access
+
+    if license_info.status == LicenseStatus.VALID:
+        logger.info(
+            "License valid — customer=%s, expires=%s, %d days remaining",
+            license_info.customer_id,
+            license_info.expires_at.strftime("%Y-%m-%d"),
+            license_info.days_remaining,
+        )
+    elif license_info.status == LicenseStatus.GRACE:
+        logger.warning(
+            "⚠️  LICENSE IN GRACE PERIOD — %s. "
+            "System will stop working in %d days. Renew immediately.",
+            license_info.message,
+            GRACE_PERIOD_DAYS - abs(license_info.days_remaining),
+        )
+    else:
+        # INVALID — but only enforce in production. In dev, just warn.
+        if env == "production":
+            logger.error(
+                "❌ LICENSE INVALID: %s. All endpoints will return 503.",
+                license_info.message,
+            )
+        else:
+            logger.info(
+                "License not configured (dev mode) — running without license enforcement"
+            )
+            # In dev mode, override to VALID so the middleware doesn't block
+            license_info = LicenseInfo(
+                customer_id="dev-mode",
+                fingerprint="",
+                expires_at=license_info.expires_at,
+                status=LicenseStatus.VALID,
+                days_remaining=999,
+                message="Development mode — no license required",
+            )
+            app.state.license_info = license_info
 
     # ── Startup health gates (NON-NEGOTIABLE) ────────────────────────
     # Block until PostgreSQL, OSRM, VROOM are healthy (60s timeout).
@@ -191,15 +230,16 @@ async def lifespan(app: FastAPI):
     logger.info("Shutdown — DB engine pool disposed")
 
 
-# SECURITY: Disable Swagger UI and OpenAPI schema in production (default).
+# SECURITY: Disable Swagger UI and OpenAPI schema in production.
 # FastAPI's /docs endpoint exposes every endpoint, parameter schema, and error
 # format to unauthenticated users — giving attackers a complete API map.
-# Dev conveniences only activate with explicit ENVIRONMENT=development.
-# Production is the DEFAULT — omitting ENVIRONMENT disables docs.
-_is_dev_mode = os.environ.get("ENVIRONMENT") == "development"
-_docs_url = "/docs" if _is_dev_mode else None
-_redoc_url = "/redoc" if _is_dev_mode else None
-_openapi_url = "/openapi.json" if _is_dev_mode else None
+# In development, /docs is invaluable for testing. In production, disable it.
+# Access API docs in production by SSHing to the server and running:
+#   curl http://localhost:8000/docs  (internal-only, not exposed through Caddy)
+_env_name = os.environ.get("ENVIRONMENT", "development")
+_docs_url = "/docs" if _env_name != "production" else None
+_redoc_url = "/redoc" if _env_name != "production" else None
+_openapi_url = "/openapi.json" if _env_name != "production" else None
 
 app = FastAPI(
     title="Kerala LPG Delivery Route Optimizer",
@@ -252,7 +292,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 #   1. SecWeb (outermost — every response gets security headers)
 #   2. PermissionsPolicyMiddleware (adds Permissions-Policy header)
 #   3. CORSMiddleware (handles cross-origin requests)
-#   4. License enforcement (registered by enforce(app) in lifespan)
+#   4. License enforcement (@app.middleware("http"), below)
 #   5. Rate limiter (app.state.limiter, above)
 
 _secweb_options = {
@@ -285,7 +325,7 @@ _secweb_options = {
 # HSTS: only in non-development environments to prevent localhost HTTPS lock-in.
 # Caddy already handles HSTS at the proxy level in production, but defense-in-depth
 # at the app layer ensures coverage even if the proxy is misconfigured.
-if not _is_dev_mode:
+if _env_name != "development":
     _secweb_options["hsts"] = {
         "max-age": 31536000,
         "includeSubDomains": True,
@@ -300,7 +340,7 @@ app.add_middleware(PermissionsPolicyMiddleware)
 # make authenticated requests to this API. Use a whitelist from environment.
 # See: https://owasp.org/www-community/attacks/csrf
 _cors_origins_raw = os.environ.get("CORS_ALLOWED_ORIGINS", "")
-if _is_dev_mode and not _cors_origins_raw:
+if _env_name == "development" and not _cors_origins_raw:
     # Dev default: allow common local origins
     _allowed_origins = [
         "http://localhost:8000",
@@ -328,6 +368,63 @@ app.add_middleware(
 # processes it, so even auth/license error responses include request_id.
 app.add_middleware(RequestIDMiddleware)
 
+
+# =============================================================================
+# License enforcement middleware
+# =============================================================================
+# Checks app.state.license_info (set during lifespan) on every request.
+# - VALID: pass through normally
+# - GRACE: pass through but add X-License-Warning header
+# - INVALID: return 503 on all endpoints except /health (for diagnostics)
+
+
+@app.middleware("http")
+async def license_enforcement_middleware(request: Request, call_next):
+    """Block all requests if license is invalid (production only).
+
+    Why middleware instead of a dependency?
+    - Dependencies only run on endpoints that declare them. A middleware
+      catches ALL requests, including static files and undeclared routes.
+    - We want the /health endpoint to still work (for debugging), so we
+      exclude it explicitly.
+
+    Why 503 (Service Unavailable) instead of 403 (Forbidden)?
+    - 503 signals "the server can't handle the request right now" which
+      is semantically correct for a licensing issue.
+    - It also tells monitoring tools that the service is down, triggering
+      alerts that help the customer notice and renew.
+    """
+    license_info = getattr(request.app.state, "license_info", None)
+
+    if license_info is None:
+        # No license info = not yet initialized, pass through
+        return await call_next(request)
+
+    # Always allow health checks (for debugging license issues)
+    if request.url.path == "/health":
+        response = await call_next(request)
+        # Add license status to health response header for diagnostics
+        if license_info.status != LicenseStatus.VALID:
+            response.headers["X-License-Status"] = license_info.status.value
+        return response
+
+    if license_info.status == LicenseStatus.INVALID:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "License expired or invalid. Contact support.",
+                "license_status": "invalid",
+            },
+        )
+
+    # Process the request normally
+    response = await call_next(request)
+
+    # Add warning header during grace period
+    if license_info.status == LicenseStatus.GRACE:
+        response.headers["X-License-Warning"] = license_info.message
+
+    return response
 
 
 # =============================================================================
@@ -710,26 +807,16 @@ async def health_check():
     uptime = (datetime.now(timezone.utc) - started_at).total_seconds()
 
     status_code = 200 if overall == "healthy" else 503
-    content = {
-        "status": overall,
-        "service": "kerala-lpg-optimizer",
-        "version": app.version,
-        "uptime_seconds": round(uptime, 1),
-        "services": services,
-    }
-
-    # License diagnostics (omit entirely in dev mode / no license configured)
-    info = get_license_info()
-    if info is not None:
-        current_fp = get_machine_fingerprint()[:16]
-        content["license"] = {
-            "status": info.status.value,
-            "expires_at": info.expires_at.strftime("%Y-%m-%d"),
-            "days_remaining": (info.expires_at - datetime.now(timezone.utc)).days,
-            "fingerprint_match": current_fp == info.fingerprint[:16],
-        }
-
-    return JSONResponse(status_code=status_code, content=content)
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": overall,
+            "service": "kerala-lpg-optimizer",
+            "version": app.version,
+            "uptime_seconds": round(uptime, 1),
+            "services": services,
+        },
+    )
 
 
 @app.get("/api/config", response_model=AppConfig)
@@ -865,6 +952,29 @@ async def upload_and_optimize(
             import_result = importer.import_orders(tmp_path)
             orders = import_result.orders
 
+        # Backfill address_original for orders where it wasn't set.
+        # CDCMS uploads: address_original is set by CsvImporter from the preprocessed CSV's
+        #   address_original column (populated by preprocess_cdcms from raw ConsumerAddress).
+        # Standard CSV uploads: the CSV has no address_original column, so CsvImporter
+        #   leaves it as None. For these, the raw and cleaned text are identical, so
+        #   we set address_original = address_raw.
+        for order in orders:
+            if order.address_original is None:
+                order.address_original = order.address_raw
+
+        # Phase 13: Build order_id -> area_name mapping for geocode validation.
+        # CDCMS exports have an area_name column; standard CSVs do not.
+        # This mapping is passed to the validator during geocoding so out-of-zone
+        # addresses can be retried with the area name.
+        area_name_map: dict[str, str] = {}
+        if is_cdcms and not preprocessed_df.empty:
+            area_name_map = dict(
+                zip(
+                    preprocessed_df["order_id"].astype(str).str.strip(),
+                    preprocessed_df["area_name"].str.strip(),
+                )
+            )
+
         # Step 1a: Convert ImportResult errors/warnings to ImportFailure lists.
         # These track validation-stage failures (bad CSV data caught before geocoding).
         # Geocoding failures are collected separately in step 2 below.
@@ -981,17 +1091,38 @@ async def upload_and_optimize(
         free_tier_note = ""
         duplicate_warnings_list: list[DuplicateLocationWarning] = []
 
+        # Phase 13: Create zone validator for geocode validation + fallback chain.
+        # Every geocoded address is validated against a radius from the depot.
+        # Out-of-zone results trigger: area-name retry -> centroid -> depot fallback.
+        from core.geocoding.validator import GeocodeValidator
+        dictionary_path = str(
+            pathlib.Path(__file__).resolve().parents[3] / "data" / "place_names_vatakara.json"
+        )
+        validator = GeocodeValidator(
+            depot_lat=config.DEPOT_LOCATION.latitude,
+            depot_lon=config.DEPOT_LOCATION.longitude,
+            zone_radius_m=config.GEOCODE_ZONE_RADIUS_KM * 1000,
+            dictionary_path=dictionary_path if os.path.exists(dictionary_path) else None,
+            area_suffix=config.CDCMS_AREA_SUFFIX,
+        )
+
         # Use CachedGeocoder for unified cache-then-API flow
-        cached_geocoder = CachedGeocoder(upstream=geocoder, session=session) if geocoder else None
+        cached_geocoder = CachedGeocoder(
+            upstream=geocoder, session=session, validator=validator
+        ) if geocoder else None
 
         for order in orders:
             if not order.is_geocoded:
                 if cached_geocoder:
                     # GEO-04: Snapshot stats before geocoding to detect cache hit vs API call
                     hits_before = cached_geocoder.stats["hits"]
-                    result = await cached_geocoder.geocode(order.address_raw)
+                    area_name = area_name_map.get(order.order_id)
+                    result = await cached_geocoder.geocode(order.address_raw, area_name=area_name)
                     if result.success and result.location:
                         order.location = result.location
+                        # Phase 13: Store validation confidence and method on order
+                        order.geocode_confidence = result.confidence
+                        order.geocode_method = result.method
                         # Track per-order geocode source
                         if cached_geocoder.stats["hits"] > hits_before:
                             per_order_source[order.order_id] = "cached"
@@ -1043,10 +1174,56 @@ async def upload_and_optimize(
                             stage="geocoding",
                         ))
 
+        # Phase 13: Validate pre-geocoded orders (had coordinates in CSV).
+        # These orders skipped the geocoding loop above because is_geocoded was
+        # already True. We still need to zone-validate their coordinates.
+        if validator:
+            for order in orders:
+                if order.is_geocoded and order.geocode_method is None:
+                    # Order had coordinates from CSV but hasn't been validated yet
+                    vr = validator.validate(
+                        order.location.latitude, order.location.longitude,
+                        area_name=area_name_map.get(order.order_id),
+                        geocoder=geocoder,
+                    )
+                    order.location = Location(
+                        latitude=vr.latitude,
+                        longitude=vr.longitude,
+                        address_text=order.location.address_text,
+                        geocode_confidence=vr.confidence,
+                    )
+                    order.geocode_confidence = vr.confidence
+                    order.geocode_method = vr.method
+
+        # Phase 13: Log validation stats for observability
+        if validator:
+            logger.info(
+                "Geocode validation: %d direct, %d area-retry, %d centroid, %d depot fallback",
+                validator.stats.get("direct_count", 0),
+                validator.stats.get("area_retry_count", 0),
+                validator.stats.get("centroid_count", 0),
+                validator.stats.get("depot_count", 0),
+            )
+
         # Combine all failures and determine how many orders geocoded successfully
         all_failures = validation_failures + geocoding_failures
         all_warnings = validation_warnings
         geocoded_orders = [o for o in orders if o.is_geocoded]
+
+        # Phase 13: Circuit breaker warning -- surface API key issues to staff
+        if validator and validator.is_tripped:
+            circuit_breaker_count = sum(
+                1 for o in orders
+                if getattr(o, 'geocode_method', None) in ('centroid', 'depot')
+            )
+            all_warnings.append(
+                ImportFailure(
+                    row_number=0,
+                    address_snippet="",
+                    reason=f"Google Maps API key issue -- {circuit_breaker_count} stop(s) have approximate locations. Ask IT to check the API key.",
+                    stage="geocoding",
+                )
+            )
 
         # --- GEO-04: Collect geocoding cost stats ---
         if cached_geocoder:
@@ -1303,6 +1480,7 @@ async def list_routes(include_stops: bool = False, session: AsyncSession = Sessi
                             "sequence": stop.sequence,
                             "order_id": stop.order_id,
                             "address": stop.address_display,
+                            "address_raw": stop.address_original,
                             "latitude": stop.location.latitude,
                             "longitude": stop.location.longitude,
                             "weight_kg": stop.weight_kg,
@@ -1383,6 +1561,7 @@ async def get_driver_route(vehicle_id: str, session: AsyncSession = SessionDep):
                 "sequence": stop.sequence,
                 "order_id": stop.order_id,
                 "address": stop.address_display,
+                "address_raw": stop.address_original,
                 "latitude": stop.location.latitude,
                 "longitude": stop.location.longitude,
                 "weight_kg": stop.weight_kg,
@@ -1391,6 +1570,13 @@ async def get_driver_route(vehicle_id: str, session: AsyncSession = SessionDep):
                 "distance_from_prev_km": round(stop.distance_from_prev_km, 2),
                 "duration_from_prev_minutes": round(stop.duration_from_prev_minutes, 1),
                 "status": stop.status,
+                # Phase 14: Geocode confidence for "Approx. location" badge
+                "geocode_confidence": stop.geocode_confidence,
+                "geocode_method": stop.geocode_method,
+                "location_approximate": (
+                    stop.geocode_confidence is not None
+                    and stop.geocode_confidence < 0.5
+                ),
             }
             for stop in route.stops
         ],

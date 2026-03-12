@@ -3,8 +3,8 @@
 > **Audience:** Developer
 
 **Created:** Phase 20 (Sync Error Message Documentation)
-**Verified:** 2026-03-11
-**Total entries:** 35 (9 file-level + 9 row-level + 7 geocoding + 7 licensing errors + 3 licensing headers)
+**Verified:** 2026-03-10
+**Total entries:** 25 (9 file-level + 9 row-level + 7 geocoding)
 
 This artifact maps every user-facing error message documented in CSV_FORMAT.md to its source code location. Used by the development team to keep documentation in sync with code.
 
@@ -49,27 +49,3 @@ This artifact maps every user-facing error message documented in CSV_FORMAT.md t
 | "Google Maps is temporarily unavailable -- try again in a few minutes" | `apps/kerala_delivery/api/main.py:99` (GEOCODING_REASON_MAP, key: UNKNOWN_ERROR) | verified |
 | "Geocoding service not configured (missing API key)" | `apps/kerala_delivery/api/main.py:1123` (no geocoder configured fallback) | verified |
 | "Could not find this address -- try checking the spelling" | `apps/kerala_delivery/api/main.py:1098` (GEOCODING_REASON_MAP.get default fallback) | verified |
-
-## Licensing Errors (v2.1)
-
-Error messages returned by the licensing system. All licensing errors result in HTTP 503 responses on all endpoints (except `/health`).
-
-| Message | Code Location | Status |
-|---------|--------------|--------|
-| "No license key found. Set LICENSE_KEY env var or place license.key file." | `core/licensing/license_manager.py:410` | verified |
-| "Invalid license key format or tampered key." | `core/licensing/license_manager.py:422` | verified |
-| "License key is not valid for this machine. Run scripts/get_machine_id.py and send the output to support." | `core/licensing/license_manager.py:436-437` | verified |
-| "License expired beyond grace period. Contact support." | `core/licensing/license_manager.py:347` | verified |
-| "License expired or invalid. Contact support." | `core/licensing/enforcement.py:203` (503 JSON body) | verified |
-| "File integrity check failed. Protected files have been modified." | `core/licensing/enforcement.py:171` (SystemExit at startup) | verified |
-| "Runtime integrity check failed. Protected files modified." | `core/licensing/license_manager.py:566-567` (SystemExit during re-validation) | verified |
-
-### Licensing Response Headers (v2.1)
-
-Headers added to HTTP responses by the license enforcement middleware.
-
-| Header | Value | Code Location | Status |
-|--------|-------|--------------|--------|
-| `X-License-Status` | `invalid` | `core/licensing/enforcement.py:193` | verified |
-| `X-License-Warning` | `License in grace period` | `core/licensing/enforcement.py:215` | verified |
-| `X-License-Expires-In` | `{N}d` (e.g., `45d`, `-3d`) | `core/licensing/enforcement.py:219` | verified |

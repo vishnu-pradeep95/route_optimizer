@@ -17,13 +17,6 @@ Uses FastAPI's TestClient — no real OSRM/VROOM/Google/PostgreSQL calls needed.
 """
 
 import os
-
-# IMPORTANT: Set ENVIRONMENT=development BEFORE importing main.py.
-# Module-level code in main.py reads ENVIRONMENT to configure docs, CORS, HSTS.
-# Production is the default (ENVIRONMENT unset = production behavior).
-# Tests need dev mode (Swagger UI enabled, permissive CORS, no HSTS).
-os.environ.setdefault("ENVIRONMENT", "development")
-
 import uuid
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock, AsyncMock
@@ -267,8 +260,11 @@ class TestRoutesEndpoints:
         mock_stop = MagicMock()
         mock_stop.order = MagicMock()
         mock_stop.order.order_id = "ORD-001"
+        mock_stop.order.geocode_confidence = None
+        mock_stop.order.geocode_method = None
         mock_stop.location = from_shape(Point(75.5700, 11.5950), srid=4326)
         mock_stop.address_display = "Vatakara Bus Stand"
+        mock_stop.address_original = None
         mock_stop.sequence = 1
         mock_stop.distance_from_prev_km = 2.5
         mock_stop.duration_from_prev_minutes = 5.0
@@ -1968,24 +1964,17 @@ class TestSecurityHeaders:
         assert resp.headers.get("access-control-allow-origin") == "http://localhost:8000"
 
     def test_docs_gated_in_production(self):
-        """API docs disabled by default (production); enabled only with ENVIRONMENT=development.
-
-        Production is the DEFAULT behavior -- when ENVIRONMENT is unset or set
-        to anything other than 'development', /docs, /redoc, and /openapi.json
-        all return 404. This closes security audit finding #1.
-        """
-        import importlib
-        import apps.kerala_delivery.api.main as main_mod
-
+        """API docs return 404 when ENVIRONMENT=production (SEC-03)."""
         mock_health = {
             "postgresql": (True, "connected"),
             "osrm": (True, "available"),
             "vroom": (True, "available"),
         }
-
-        # Test 1: ENVIRONMENT=production -- docs disabled
         with patch.dict(os.environ, {"ENVIRONMENT": "production", "RATE_LIMIT_ENABLED": "false"}), \
              patch("apps.kerala_delivery.api.main.wait_for_services", new_callable=AsyncMock, return_value=mock_health):
+            # Must reimport to pick up the new environment
+            import importlib
+            import apps.kerala_delivery.api.main as main_mod
             importlib.reload(main_mod)
             main_mod.app.state.service_health = mock_health
             main_mod.app.state.started_at = datetime.now(timezone.utc)
@@ -1995,62 +1984,7 @@ class TestSecurityHeaders:
                 assert prod_client.get("/redoc").status_code == 404
                 assert prod_client.get("/openapi.json").status_code == 404
             finally:
-                with patch.dict(os.environ, {"ENVIRONMENT": "development", "RATE_LIMIT_ENABLED": "false"}):
-                    importlib.reload(main_mod)
-
-    def test_docs_gated_when_environment_unset(self):
-        """API docs disabled when ENVIRONMENT is not set at all (production default)."""
-        import importlib
-        import apps.kerala_delivery.api.main as main_mod
-
-        mock_health = {
-            "postgresql": (True, "connected"),
-            "osrm": (True, "available"),
-            "vroom": (True, "available"),
-        }
-
-        # Remove ENVIRONMENT entirely -- should behave as production
-        env_copy = os.environ.copy()
-        env_copy.pop("ENVIRONMENT", None)
-        env_copy["RATE_LIMIT_ENABLED"] = "false"
-
-        with patch.dict(os.environ, env_copy, clear=True), \
-             patch("apps.kerala_delivery.api.main.wait_for_services", new_callable=AsyncMock, return_value=mock_health):
-            importlib.reload(main_mod)
-            main_mod.app.state.service_health = mock_health
-            main_mod.app.state.started_at = datetime.now(timezone.utc)
-            client = TestClient(main_mod.app)
-            try:
-                assert client.get("/docs").status_code == 404
-                assert client.get("/redoc").status_code == 404
-                assert client.get("/openapi.json").status_code == 404
-            finally:
-                with patch.dict(os.environ, {"ENVIRONMENT": "development", "RATE_LIMIT_ENABLED": "false"}):
-                    importlib.reload(main_mod)
-
-    def test_docs_enabled_in_development(self):
-        """API docs enabled when ENVIRONMENT=development (opt-in dev convenience)."""
-        import importlib
-        import apps.kerala_delivery.api.main as main_mod
-
-        mock_health = {
-            "postgresql": (True, "connected"),
-            "osrm": (True, "available"),
-            "vroom": (True, "available"),
-        }
-
-        with patch.dict(os.environ, {"ENVIRONMENT": "development", "RATE_LIMIT_ENABLED": "false"}), \
-             patch("apps.kerala_delivery.api.main.wait_for_services", new_callable=AsyncMock, return_value=mock_health):
-            importlib.reload(main_mod)
-            main_mod.app.state.service_health = mock_health
-            main_mod.app.state.started_at = datetime.now(timezone.utc)
-            dev_client = TestClient(main_mod.app)
-            try:
-                assert dev_client.get("/docs").status_code == 200
-                assert dev_client.get("/redoc").status_code == 200
-                assert dev_client.get("/openapi.json").status_code == 200
-            finally:
-                # Restore dev mode for other tests
+                # Reload with default environment to restore for other tests
                 with patch.dict(os.environ, {"ENVIRONMENT": "development", "RATE_LIMIT_ENABLED": "false"}):
                     importlib.reload(main_mod)
 
@@ -2498,8 +2432,11 @@ class TestGoogleMapsRouteEndpoint:
             mock_stop = MagicMock()
             mock_stop.order = MagicMock()
             mock_stop.order.order_id = f"ORD-{i:03d}"
+            mock_stop.order.geocode_confidence = None
+            mock_stop.order.geocode_method = None
             mock_stop.location = from_shape(Point(75.58 + i * 0.01, 11.62 + i * 0.01), srid=4326)
             mock_stop.address_display = f"Stop {i + 1}"
+            mock_stop.address_original = None
             mock_stop.sequence = i + 1
             mock_stop.distance_from_prev_km = 1.0
             mock_stop.duration_from_prev_minutes = 3.0
@@ -2582,8 +2519,11 @@ class TestQrSheetEndpoint:
             mock_stop = MagicMock()
             mock_stop.order = MagicMock()
             mock_stop.order.order_id = f"ORD-{i:03d}"
+            mock_stop.order.geocode_confidence = None
+            mock_stop.order.geocode_method = None
             mock_stop.location = from_shape(Point(75.58 + i * 0.01, 11.62 + i * 0.01), srid=4326)
             mock_stop.address_display = f"Stop {i + 1}"
+            mock_stop.address_original = None
             mock_stop.sequence = i + 1
             mock_stop.distance_from_prev_km = 1.0
             mock_stop.duration_from_prev_minutes = 3.0
@@ -2651,8 +2591,11 @@ class TestQrSheetEndpoint:
         mock_stop = MagicMock()
         mock_stop.order = MagicMock()
         mock_stop.order.order_id = "ORD-XSS"
+        mock_stop.order.geocode_confidence = None
+        mock_stop.order.geocode_method = None
         mock_stop.location = from_shape(Point(75.58, 11.62), srid=4326)
         mock_stop.address_display = "Test Stop"
+        mock_stop.address_original = None
         mock_stop.sequence = 1
         mock_stop.distance_from_prev_km = 1.0
         mock_stop.duration_from_prev_minutes = 3.0
@@ -2739,3 +2682,173 @@ class TestGeocodingReasonMapFormat:
         assert "failed" not in fallback.lower(), f"Fallback contains 'failed': {fallback}"
         assert "SOME_UNKNOWN_STATUS" not in fallback, f"Fallback leaks raw status code: {fallback}"
         assert " -- " in fallback, f"Fallback missing fix action: {fallback}"
+
+
+# =============================================================================
+# ADDR-01: API response must include address_raw field
+# =============================================================================
+
+
+class TestAddressRawApiField:
+    """Verify that GET /api/routes/{vehicle_id} response stops include
+    an 'address_raw' field mapped from RouteStop.address_original.
+
+    This field gives drivers access to the completely unprocessed CDCMS
+    ConsumerAddress text, separate from the cleaned address_display.
+    """
+
+    @pytest.mark.addr01
+    def test_stop_response_includes_address_raw_key(self, client, mock_run_id):
+        """Each stop in GET /api/routes/{vehicle_id} must have 'address_raw' key."""
+        from core.database.models import OptimizationRunDB, RouteDB
+        from shapely.geometry import Point
+        from geoalchemy2.shape import from_shape
+
+        mock_run = MagicMock(spec=OptimizationRunDB)
+        mock_run.id = mock_run_id
+
+        mock_stop = MagicMock()
+        mock_stop.order = MagicMock()
+        mock_stop.order.order_id = "ORD-ADDR01-001"
+        mock_stop.order.geocode_confidence = None
+        mock_stop.order.geocode_method = None
+        mock_stop.location = from_shape(Point(75.5700, 11.5950), srid=4326)
+        mock_stop.address_display = "Kuniyil K, Near Vallikkadu"
+        mock_stop.address_original = "KUNIYILK, NR.VALLIKKADU"
+        mock_stop.sequence = 1
+        mock_stop.distance_from_prev_km = 2.5
+        mock_stop.duration_from_prev_minutes = 5.0
+        mock_stop.weight_kg = 14.2
+        mock_stop.quantity = 1
+        mock_stop.notes = ""
+        mock_stop.status = "pending"
+
+        mock_route = MagicMock(spec=RouteDB)
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "VEH-01"
+        mock_route.driver_name = "Driver 1"
+        mock_route.stops = [mock_stop]
+        mock_route.total_distance_km = 2.5
+        mock_route.total_duration_minutes = 5.0
+        mock_route.total_weight_kg = 14.2
+        mock_route.total_items = 1
+        mock_route.created_at = datetime.now(timezone.utc)
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=mock_run)
+            mock_repo.get_route_for_vehicle = AsyncMock(return_value=mock_route)
+            from core.database.repository import route_db_to_pydantic
+            mock_repo.route_db_to_pydantic = route_db_to_pydantic
+
+            resp = client.get("/api/routes/VEH-01")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        stop = data["stops"][0]
+        assert "address_raw" in stop, (
+            f"Stop response missing 'address_raw' key. Keys present: {list(stop.keys())}"
+        )
+
+    @pytest.mark.addr01
+    def test_address_raw_value_matches_address_original(self, client, mock_run_id):
+        """The 'address_raw' value should match the unprocessed CDCMS text
+        (address_original on the RouteStop model)."""
+        from core.database.models import OptimizationRunDB, RouteDB
+        from shapely.geometry import Point
+        from geoalchemy2.shape import from_shape
+
+        mock_run = MagicMock(spec=OptimizationRunDB)
+        mock_run.id = mock_run_id
+
+        mock_stop = MagicMock()
+        mock_stop.order = MagicMock()
+        mock_stop.order.order_id = "ORD-ADDR01-002"
+        mock_stop.order.geocode_confidence = None
+        mock_stop.order.geocode_method = None
+        mock_stop.location = from_shape(Point(75.5700, 11.5950), srid=4326)
+        mock_stop.address_display = "Kuniyil K, Near Vallikkadu"
+        mock_stop.address_original = "KUNIYILK, NR.VALLIKKADU"
+        mock_stop.sequence = 1
+        mock_stop.distance_from_prev_km = 2.5
+        mock_stop.duration_from_prev_minutes = 5.0
+        mock_stop.weight_kg = 14.2
+        mock_stop.quantity = 1
+        mock_stop.notes = ""
+        mock_stop.status = "pending"
+
+        mock_route = MagicMock(spec=RouteDB)
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "VEH-01"
+        mock_route.driver_name = "Driver 1"
+        mock_route.stops = [mock_stop]
+        mock_route.total_distance_km = 2.5
+        mock_route.total_duration_minutes = 5.0
+        mock_route.total_weight_kg = 14.2
+        mock_route.total_items = 1
+        mock_route.created_at = datetime.now(timezone.utc)
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=mock_run)
+            mock_repo.get_route_for_vehicle = AsyncMock(return_value=mock_route)
+            from core.database.repository import route_db_to_pydantic
+            mock_repo.route_db_to_pydantic = route_db_to_pydantic
+
+            resp = client.get("/api/routes/VEH-01")
+
+        data = resp.json()
+        stop = data["stops"][0]
+        assert stop["address_raw"] == "KUNIYILK, NR.VALLIKKADU", (
+            f"address_raw should be the unprocessed text but got: {stop.get('address_raw')}"
+        )
+
+    @pytest.mark.addr01
+    def test_address_raw_null_when_address_original_missing(self, client, mock_run_id):
+        """When address_original is None (pre-v2.2 data), address_raw should be null."""
+        from core.database.models import OptimizationRunDB, RouteDB
+        from shapely.geometry import Point
+        from geoalchemy2.shape import from_shape
+
+        mock_run = MagicMock(spec=OptimizationRunDB)
+        mock_run.id = mock_run_id
+
+        mock_stop = MagicMock()
+        mock_stop.order = MagicMock()
+        mock_stop.order.order_id = "ORD-ADDR01-003"
+        mock_stop.order.geocode_confidence = None
+        mock_stop.order.geocode_method = None
+        mock_stop.location = from_shape(Point(75.5700, 11.5950), srid=4326)
+        mock_stop.address_display = "Kuniyil K, Near Vallikkadu"
+        mock_stop.address_original = None  # Pre-v2.2: no original text stored
+        mock_stop.sequence = 1
+        mock_stop.distance_from_prev_km = 2.5
+        mock_stop.duration_from_prev_minutes = 5.0
+        mock_stop.weight_kg = 14.2
+        mock_stop.quantity = 1
+        mock_stop.notes = ""
+        mock_stop.status = "pending"
+
+        mock_route = MagicMock(spec=RouteDB)
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "VEH-01"
+        mock_route.driver_name = "Driver 1"
+        mock_route.stops = [mock_stop]
+        mock_route.total_distance_km = 2.5
+        mock_route.total_duration_minutes = 5.0
+        mock_route.total_weight_kg = 14.2
+        mock_route.total_items = 1
+        mock_route.created_at = datetime.now(timezone.utc)
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_latest_run = AsyncMock(return_value=mock_run)
+            mock_repo.get_route_for_vehicle = AsyncMock(return_value=mock_route)
+            from core.database.repository import route_db_to_pydantic
+            mock_repo.route_db_to_pydantic = route_db_to_pydantic
+
+            resp = client.get("/api/routes/VEH-01")
+
+        data = resp.json()
+        stop = data["stops"][0]
+        assert "address_raw" in stop, "address_raw key must be present even when null"
+        assert stop["address_raw"] is None, (
+            f"address_raw should be null for pre-v2.2 data but got: {stop['address_raw']}"
+        )

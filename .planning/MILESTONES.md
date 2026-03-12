@@ -1,18 +1,18 @@
 # Milestones
 
-## v2.1 Licensing & Distribution Security (Shipped: 2026-03-11)
+## v2.2 Address Preprocessing Pipeline (Shipped: 2026-03-12)
 
-**Phases completed:** 7 phases (5-11), 13 plans
-**Timeline:** 2 days (2026-03-10 -> 2026-03-11)
-**Git range:** 45 commits, 47 files changed (+7,274 / -348)
+**Phases completed:** 5 phases (11-15), 13 plans
+**Timeline:** 2 days (2026-03-10 → 2026-03-12)
+**Git range:** 107 commits, 47 files changed (+10,602 / -287)
 
 **Key accomplishments:**
-- Stable machine fingerprint using /etc/machine-id + CPU model, replacing spoofable hostname+MAC+container_id with Docker bind mounts for host-container consistency
-- Cython-compiled licensing modules (.so) with full build pipeline: strip dev-mode -> hash protected files -> compile -> validate .so import -> package tarball
-- Single enforce(app) entry point — main.py contains zero inline enforcement logic; SHA256 integrity manifest embedded in compiled .so and verified at startup
-- Periodic runtime re-validation every 500 requests with one-way state guard preventing accidental INVALID->VALID transitions without restart
-- License renewal via file drop (renewal.key extends expiry without re-keying), X-License-Expires-In header on all responses, license diagnostics in /health endpoint
-- E2E security test suite with 4 scenarios: fingerprint mismatch rejection, periodic re-validation, integrity tamper detection, license renewal via file drop
+- Fixed address_display to always show cleaned CDCMS original text; regex splits concatenated ALL-CAPS words at case transitions
+- Built 381-entry Kerala place name dictionary from OSM Overpass + manual seeds with 100% CDCMS area name coverage
+- AddressSplitter with RapidFuzz fuzzy matching splits concatenated text at known place name boundaries (e.g., MUTTUNGALPOBALAVADI → MUTTUNGAL P.O. BALAVADI)
+- GeocodeValidator with 30km zone check, area-name retry, centroid fallback from dictionary, and circuit breaker for API failures
+- API surfaces geocode_confidence/location_approximate per stop; Driver PWA shows "Approx. location" badges for low-confidence stops
+- Integration tests verify full pipeline end-to-end; HDFC ERGO regression test confirms wrong-location bug fixed; NER upgrade criteria documented
 
 ---
 

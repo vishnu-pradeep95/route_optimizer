@@ -1,18 +1,29 @@
 """Software licensing module for the delivery route optimizer.
 
-Provides hardware-bound license key validation for offline deployment.
-See docs/LICENSING.md for architecture and design decisions.
+This module provides hardware-bound license key validation to prevent
+unauthorized redistribution of the software. It's designed to stop
+*casual* copying — a determined reverse engineer could bypass it,
+but that's an acceptable trade-off for a small-scale deployment tool.
 
-Public API:
-    license_manager.validate_license() -- full validation pipeline
-    license_manager.get_machine_fingerprint() -- machine identity hash
-    license_manager.encode_license_key() -- key generation (dev only)
-    license_manager.get_license_status() -- current license status (per-request)
-    license_manager.get_license_info() -- full license info (or None in dev mode)
-    license_manager.set_license_state() -- store license state (startup only)
-    license_manager.verify_integrity() -- SHA256 manifest verification
-    license_manager.maybe_revalidate() -- periodic integrity + expiry re-check (every 500 requests)
+Design decisions:
+-   OFFLINE validation — no license server needed (matches our
+    offline-capable constraint for Kerala's patchy internet).
+-   Hardware fingerprint — ties the license to a specific machine
+    using hostname + MAC address + Docker container ID.
+-   HMAC-based keys — the license key itself contains the customer ID,
+    expiry date, and machine fingerprint, signed with HMAC-SHA256.
+-   7-day grace period — after expiry, the system continues to work
+    for 7 days with a warning header, giving time to renew.
 
-    enforcement.enforce(app) -- single entry point for all enforcement
-        Import as: from core.licensing.enforcement import enforce
+License key format:
+    LPG-XXXX-XXXX-XXXX-XXXX (base32-encoded payload + HMAC signature)
+
+Security notes:
+    - The HMAC secret is derived via PBKDF2 from an innocuous-looking
+      constant (not a plain "SECRET_KEY" string that's easy to grep).
+    - The .py source for this module should be compiled to .pyc before
+      distribution (see `scripts/build-dist.sh`). This isn't real protection
+      but raises the bar slightly above "open the file and delete the check".
+    - This module is in core/ (not apps/) because licensing is reusable
+      across any deployment of the platform.
 """
