@@ -64,8 +64,14 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 (None -- all milestones shipped.)
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 4 | Audit docs for new-computer setup freshness | 2026-03-12 | e0c7e6a | [4-audit-docs-for-new-computer-setup-freshn](./quick/4-audit-docs-for-new-computer-setup-freshn/) |
+
 ## Session Continuity
 
-Last session: 2026-03-12T23:43:58.871Z
+Last activity: 2026-03-12 - Completed quick task 4: Audit docs for new-computer setup freshness
 Stopped at: Completed quick-4 docs audit
 Resume file: None
