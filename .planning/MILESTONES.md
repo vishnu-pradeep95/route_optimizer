@@ -1,5 +1,21 @@
 # Milestones
 
+## v2.1 Licensing & Distribution Security (Shipped: 2026-03-11)
+
+**Phases completed:** 7 phases (5-11), 13 plans
+**Timeline:** 2 days (2026-03-10 -> 2026-03-11)
+**Git range:** 45 commits, 47 files changed (+7,274 / -348)
+
+**Key accomplishments:**
+- Stable machine fingerprint using /etc/machine-id + CPU model, replacing spoofable hostname+MAC+container_id with Docker bind mounts for host-container consistency
+- Cython-compiled licensing modules (.so) with full build pipeline: strip dev-mode -> hash protected files -> compile -> validate .so import -> package tarball
+- Single enforce(app) entry point — main.py contains zero inline enforcement logic; SHA256 integrity manifest embedded in compiled .so and verified at startup
+- Periodic runtime re-validation every 500 requests with one-way state guard preventing accidental INVALID->VALID transitions without restart
+- License renewal via file drop (renewal.key extends expiry without re-keying), X-License-Expires-In header on all responses, license diagnostics in /health endpoint
+- E2E security test suite with 4 scenarios: fingerprint mismatch rejection, periodic re-validation, integrity tamper detection, license renewal via file drop
+
+---
+
 ## v2.0 Documentation & Error Handling (Shipped: 2026-03-10)
 
 **Phases completed:** 4 phases, 9 plans

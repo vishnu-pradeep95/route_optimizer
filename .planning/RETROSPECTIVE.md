@@ -2,6 +2,56 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v2.1 — Licensing & Distribution Security
+
+**Shipped:** 2026-03-11
+**Phases:** 7 | **Plans:** 13 | **Timeline:** 2 days
+
+### What Was Built
+- Stable machine fingerprint using /etc/machine-id + CPU model, replacing spoofable hostname+MAC+container_id with Docker bind mounts
+- Cython-compiled licensing modules (.so) with full build pipeline: strip dev-mode -> hash -> compile -> validate -> package
+- Single enforce(app) entry point — main.py has zero inline enforcement logic; SHA256 integrity manifest in compiled .so
+- Periodic runtime re-validation every 500 requests with one-way state guard and graceful shutdown on integrity failure
+- License renewal via renewal.key file drop without re-keying, X-License-Expires-In header, /health license diagnostics
+- E2E security test suite with 4 scenarios covering fingerprint mismatch, re-validation, integrity tamper, and renewal
+- Complete documentation rewrite: LICENSING.md from scratch, ERROR-MAP.md + SETUP.md + MIGRATION.md updated for v2.1
+
+### What Worked
+- TDD approach for all licensing modules — every phase started with failing tests, then implemented to pass
+- Cython async limitation identified early (Phase 6 research) — enforcement.py kept as .py wrapper calling compiled sync functions
+- Milestone audit → gap closure → re-audit flow caught 2 critical integration breaks (build-dist.sh ENVIRONMENT stripping, docker-compose.prod.yml missing mount)
+- Phase 11 (gap closure) was surgical: 1 commit, 3 targeted fixes, re-audit passed immediately
+- LICENSING.md written from scratch using codebase as source of truth instead of editing stale content — eliminated all legacy errors
+- Module-level state pattern (_license_state, _request_counter) kept enforcement logic self-contained in compiled .so
+
+### What Was Inefficient
+- ROADMAP phase checkboxes showed `[ ]` for Phases 7-11 despite being complete — same recurring tracking issue from v2.0
+- summary-extract CLI reported 0 phases/plans because phase directories were already moved to milestones/ before milestone complete ran
+- Phase 8 directory named `08-api-dead-code-hygiene` (leftover from v1.2 naming) instead of `08-runtime-protection` — no functional impact but confusing in archive
+
+### Patterns Established
+- Empty `_INTEGRITY_MANIFEST` dict as dev mode signal — consistent pattern across enforce(), verify_integrity(), and maybe_revalidate()
+- _STATUS_SEVERITY one-way state guard — prevents accidental INVALID→VALID transitions without restart
+- `hashlib.file_digest()` (Python 3.11+) for clean SHA256 computation — one line per file
+- sed pipe delimiters for manifest injection — SHA256 hex is [0-9a-f] only, safe for any delimiter
+- Renewal check placed before validate_license() to avoid state guard blocking recovery
+- REVALIDATION_INTERVAL as env-var-configurable module constant — testable without recompilation
+
+### Key Lessons
+1. Cython cannot compile `async def` — enforcement middleware must use async .py wrapper calling sync compiled functions
+2. Milestone audit → gap closure → re-audit is now a proven pattern (v1.3, v2.0, v2.1 all benefited)
+3. Build pipeline validation (import checks, ENVIRONMENT stripping) must cover ALL files, not just the obvious ones — enforcement.py was missed initially
+4. Docker Compose volume mounts must be consistent across all compose files (dev, test, prod) — production missing /etc/machine-id caused fingerprint mismatch
+5. Documentation written from scratch using code as truth > editing existing docs — old content has legacy errors that survive incremental edits
+6. Security modules benefit from self-contained state (module-level variables) over app.state — harder to inspect/modify from outside
+
+### Cost Observations
+- Model mix: opus for all phases (quality profile)
+- Sessions: ~3 sessions across 2 days
+- Notable: 13 plans in 2 days (6.5 plans/day) — fastest plans/day rate. Phase 11 gap closure in 1 commit. Average plan duration: ~4 minutes.
+
+---
+
 ## Milestone: v2.0 — Documentation & Error Handling
 
 **Shipped:** 2026-03-10
@@ -281,6 +331,7 @@
 | v1.3 | 14 days | 8 | 10 | Milestone audit + gap closure; documentation-as-code traceability |
 | v1.4 | 2 days | 4 | 10 | E2E testing as quality gate; parallel doc plans; standalone compose for isolation |
 | v2.0 | 2 days | 4 | 9 | Audit-driven gap closure; error handling as dedicated milestone; version naming discipline |
+| v2.1 | 2 days | 7 | 13 | TDD for security modules; Cython compilation pipeline; audit→gap→re-audit proven pattern |
 
 ### Cumulative Quality
 
@@ -292,6 +343,7 @@
 | v1.3 | 2.7k | 3.7k | 2.0k | 1.6k | Bootstrap/startup scripts, CSV docs, humanized errors, dist build |
 | v1.4 | 17.9k | 5.0k | -- | 3.0k | E2E test suite, CI/CD pipeline, stop/verify scripts, 5 doc artifacts |
 | v2.0 | 19.5k | 6.0k | -- | 3.0k | ErrorResponse model, health gates, retry logic, frontend error UI, doc restructure |
+| v2.1 | 3.2k | 4.3k | -- | 2.6k | Cython .so licensing, enforce(app), runtime re-validation, renewal mechanism, E2E security tests |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -308,3 +360,6 @@
 11. Pre-existing test failure counts should be tracked with exact numbers, not estimates carried forward from stale context
 12. Error handling infrastructure is best added after MVP — stable API surface makes retrofitting manageable
 13. Audit → gap closure → re-audit is the right milestone completion flow — catches real integration issues before shipping
+14. Security modules benefit from self-contained state (module-level variables) — harder to inspect/modify from outside the compiled .so
+15. Build pipeline validation must cover ALL files (enforcement.py was missed initially) — exhaustive checks prevent gap re-opening
+16. Documentation written from scratch using code as truth is more reliable than editing existing docs — legacy errors survive incremental edits

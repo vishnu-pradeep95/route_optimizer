@@ -8,7 +8,7 @@
 - ✅ **v1.3 Office-Ready Deployment** -- Phases 13-20 (shipped 2026-03-07)
 - ✅ **v1.4 Ship-Ready QA** -- Phases 21-24 (shipped 2026-03-09)
 - ✅ **v2.0 Documentation & Error Handling** -- Phases 1-4 (shipped 2026-03-10)
-- 🚧 **v2.1 Licensing & Distribution Security** -- Phases 5-11 (in progress)
+- ✅ **v2.1 Licensing & Distribution Security** -- Phases 5-11 (shipped 2026-03-11)
 
 ## Phases
 
@@ -80,128 +80,20 @@
 
 </details>
 
-### v2.1 Licensing & Distribution Security (In Progress)
+<details>
+<summary>✅ v2.1 Licensing & Distribution Security (Phases 5-11) -- SHIPPED 2026-03-11</summary>
 
-**Milestone Goal:** Close all identified loopholes in the licensing and distribution system that allow customers to circumvent license enforcement.
+- [x] Phase 5: Fingerprinting Overhaul (2/2 plans) -- completed 2026-03-10
+- [x] Phase 6: Build Pipeline -- Dev-Mode Stripping and Cython (3/3 plans) -- completed 2026-03-10
+- [x] Phase 7: Enforcement Module (2/2 plans) -- completed 2026-03-10
+- [x] Phase 8: Runtime Protection (2/2 plans) -- completed 2026-03-11
+- [x] Phase 9: License Management (2/2 plans) -- completed 2026-03-11
+- [x] Phase 10: End-to-End Validation (2/2 plans) -- completed 2026-03-11
+- [x] Phase 11: Integration Gap Fixes (1 fix) -- completed 2026-03-11
 
-- [x] **Phase 5: Fingerprinting Overhaul** - Replace unstable Docker/MAC fingerprint with machine-id + CPU model signals -- completed 2026-03-10
-- [x] **Phase 6: Build Pipeline -- Dev-Mode Stripping and Cython Compilation** - Strip dev bypass from builds and compile licensing modules to native .so -- completed 2026-03-10
-- [ ] **Phase 7: Enforcement Module** - Move enforcement logic and integrity manifest into compiled module with single entry point
-- [ ] **Phase 8: Runtime Protection** - Add periodic license and integrity re-validation during operation
-- [ ] **Phase 9: License Management** - Renewal mechanism and expiry visibility for monitoring
-- [x] **Phase 10: End-to-End Validation** - E2E tests exercising the full security pipeline plus customer migration documentation (completed 2026-03-11)
-- [ ] **Phase 11: Integration Gap Fixes** - Fix critical build and deployment integration breaks found by milestone audit
-
-## Phase Details
-
-### Phase 5: Fingerprinting Overhaul
-**Goal**: Machine identity is stable across container recreation, WSL reboots, and routine Docker operations
-**Depends on**: Nothing (first phase in v2.1)
-**Requirements**: FPR-01, FPR-02, FPR-03
-**Success Criteria** (what must be TRUE):
-  1. Running `get_machine_id.py` on the host produces the same fingerprint before and after a WSL restart
-  2. Running `get_machine_id.py` inside the Docker API container produces the same fingerprint as the host script
-  3. Rebuilding or recreating the API container (`docker compose up -d --force-recreate api`) does not change the fingerprint
-  4. The fingerprint formula uses `/etc/machine-id` and `/proc/cpuinfo` CPU model (not container ID or MAC address)
-**Plans**: 2 plans
-
-Plans:
-- [x] 05-01-PLAN.md — TDD fingerprint formula: MAC decision + tests + implementation in license_manager.py and get_machine_id.py
-- [x] 05-02-PLAN.md — Docker bind mounts + integration verification of host-container fingerprint match
-
-### Phase 6: Build Pipeline -- Dev-Mode Stripping and Cython Compilation
-**Goal**: Distributed builds contain no dev-mode bypass and licensing modules are compiled to native machine code
-**Depends on**: Phase 5 (new fingerprint formula must be in place before compiling)
-**Requirements**: ENF-01, ENF-02, ENF-04, BLD-01, BLD-02, BLD-03
-**Success Criteria** (what must be TRUE):
-  1. Running `grep -r "ENVIRONMENT"` on an unpacked distribution tarball returns zero matches in Python source files
-  2. The distribution tarball contains `.so` files (not `.py` or `.pyc`) for all `core/licensing/` modules
-  3. Running `python -c "from core.licensing.license_manager import get_machine_fingerprint"` inside a Docker container built from the tarball succeeds (no ImportError)
-  4. The HMAC derivation seed in the compiled `.so` differs from the seed in any previously shipped `.pyc` file
-  5. `build-dist.sh` completes without errors and produces a tarball with the correct pipeline ordering (strip -> hash -> compile -> validate -> package)
-**Plans**: 3 plans
-
-Plans:
-- [x] 06-01-PLAN.md — Refactor main.py ENVIRONMENT checks to production-default (no dev bypass when ENVIRONMENT unset)
-- [x] 06-02-PLAN.md — Rotate HMAC seed/salt/iterations and clean __init__.py docstring
-- [x] 06-03-PLAN.md — Cython build pipeline: Dockerfile.build + cython_build.py + upgraded build-dist.sh
-
-### Phase 7: Enforcement Module
-**Goal**: All enforcement logic lives in a compiled module with a single entry point; main.py contains no inline enforcement code
-**Depends on**: Phase 6 (Cython compilation pipeline must be working)
-**Requirements**: ENF-03, RTP-01
-**Success Criteria** (what must be TRUE):
-  1. `main.py` calls `enforce(app)` (or equivalent single function) and contains zero lines of license validation, middleware registration, or enforcement logic
-  2. A SHA256 integrity manifest of protected files is embedded in the compiled `.so` and verified at startup -- tampering with `main.py` causes the API to refuse to start with a clear error
-  3. The enforcement module stores license state internally (not on `app.state` or any other Python-accessible object)
-**Plans**: 2 plans
-
-Plans:
-- [ ] 07-01-PLAN.md — Enforcement module + license_manager state/integrity functions + tests
-- [ ] 07-02-PLAN.md — main.py refactor to enforce(app) + build-dist.sh manifest injection
-
-### Phase 8: Runtime Protection
-**Goal**: License validity and file integrity are continuously verified during operation, not just at startup
-**Depends on**: Phase 7 (enforcement module with integrity checking must exist)
-**Requirements**: RTP-02, RTP-03
-**Success Criteria** (what must be TRUE):
-  1. After the API has been running and served 500+ requests, modifying a protected file (e.g., `main.py`) causes the next request to fail with a license/integrity error
-  2. After the API has been running and served 500+ requests with an expired license, the next periodic check causes requests to fail with a license expiry error
-  3. Re-validation runs fully offline (no network calls) and does not block the event loop (response latency stays under 100ms during re-validation)
-**Plans**: 2 plans
-
-Plans:
-- [ ] 08-01-PLAN.md — TDD maybe_revalidate() + counter + state guard in license_manager.py
-- [ ] 08-02-PLAN.md — Wire maybe_revalidate() into enforcement middleware
-
-### Phase 9: License Management
-**Goal**: License renewal is a simple file drop without re-keying, and license expiry is visible to monitoring tools
-**Depends on**: Phase 5 (stable fingerprint for renewal keys)
-**Requirements**: LIC-01, LIC-02, LIC-03
-**Success Criteria** (what must be TRUE):
-  1. Generating a renewal key with `generate_license.py --renew` and dropping it as `renewal.key` in the deployment extends the license expiry without requiring a new fingerprint exchange
-  2. API responses include an `X-License-Expires-In` header showing remaining days (e.g., `X-License-Expires-In: 45d`)
-  3. The `/health` endpoint body includes license status fields (valid/expired/grace period, expiry date, fingerprint match)
-**Plans**: 2 plans
-
-Plans:
-- [ ] 09-01-PLAN.md — Renewal mechanism: get_license_info() accessor, --renew flag, renewal.key processing in enforce()
-- [ ] 09-02-PLAN.md — Expiry visibility: X-License-Expires-In header on all responses, license section in /health body
-
-### Phase 10: End-to-End Validation
-**Goal**: The complete v2.1 security pipeline is tested end-to-end and customer migration is documented
-**Depends on**: Phase 8, Phase 9 (all features must be implemented before full integration testing)
-**Requirements**: DOC-01, DOC-02, DOC-03
-**Success Criteria** (what must be TRUE):
-  1. Playwright E2E tests pass for: integrity tamper detection, periodic re-validation triggering, license renewal via file drop, and fingerprint mismatch rejection
-  2. `docs/LICENSING.md` documents the new fingerprint formula, renewal workflow, integrity checking, and periodic re-validation
-  3. `docs/SETUP.md` and `docs/ERROR-MAP.md` are updated with all new error messages and configuration changes from v2.1
-  4. A customer migration document exists with step-by-step instructions for transitioning from the old fingerprint/HMAC to the new one (covering the breaking change)
-**Plans**: 2 plans
-
-Plans:
-- [ ] 10-01-PLAN.md — E2E security pipeline tests: REVALIDATION_INTERVAL env var, Docker Compose services, Playwright security-pipeline.spec.ts, CI job
-- [ ] 10-02-PLAN.md — Documentation rewrite: LICENSING.md from scratch, ERROR-MAP.md + SETUP.md + MIGRATION.md updates
-
-### Phase 11: Integration Gap Fixes
-**Goal**: Distribution builds complete successfully and production deployments have correct machine fingerprint
-**Depends on**: Phase 10 (audit identified the gaps)
-**Requirements**: ENF-01, FPR-02, BLD-02
-**Gap Closure**: Closes gaps from v2.1 milestone audit
-**Success Criteria** (what must be TRUE):
-  1. `build-dist.sh` Step 3 (ENVIRONMENT validation) passes — enforcement.py has no ENVIRONMENT references in staging
-  2. `docker-compose.prod.yml` api service volumes include `/etc/machine-id:/etc/machine-id:ro` matching dev and test compose files
-  3. `build-dist.sh` Step 6 import validation checks all 8 exports including `maybe_revalidate` and `get_license_info`
-**Plans**: 1 plan
-
-Plans:
-- [ ] 11-01-PLAN.md — Fix build-dist.sh ENVIRONMENT stripping + import validation, add machine-id mount to docker-compose.prod.yml
+</details>
 
 ## Progress
-
-**Execution Order:**
-Phases execute in numeric order: 5 -> 6 -> 7 -> 8 -> 9 -> 10
-(Phase 9 depends on Phase 5, not Phase 8, so could theoretically run after Phase 5, but sequencing after Phase 8 avoids context-switching)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -214,7 +106,7 @@ Phases execute in numeric order: 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 7. Driver PWA Refresh | v1.1 | 3/3 | Complete | 2026-03-03 |
 | 8. API Dead Code & Hygiene | v1.2 | 2/2 | Complete | 2026-03-03 |
 | 9. Config Consolidation | v1.2 | 1/1 | Complete | 2026-03-04 |
-| 10. Driver PWA Hardening | 2/2 | Complete    | 2026-03-11 | 2026-03-04 |
+| 10. Driver PWA Hardening | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 11. Dashboard Cleanup | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 12. Data Wiring & Validation | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 13. Bootstrap Installation | v1.3 | 1/1 | Complete | 2026-03-05 |
@@ -234,12 +126,12 @@ Phases execute in numeric order: 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 3. Error Handling Polish | v2.0 | 1/1 | Complete | 2026-03-10 |
 | 4. Documentation Accuracy Refresh | v2.0 | 2/2 | Complete | 2026-03-10 |
 | 5. Fingerprinting Overhaul | v2.1 | 2/2 | Complete | 2026-03-10 |
-| 6. Build Pipeline -- Dev-Mode Stripping and Cython | v2.1 | 3/3 | Complete | 2026-03-10 |
-| 7. Enforcement Module | v2.1 | 0/2 | Not started | - |
-| 8. Runtime Protection | v2.1 | 0/2 | Not started | - |
-| 9. License Management | v2.1 | 0/2 | Not started | - |
-| 10. End-to-End Validation | v2.1 | 0/2 | Not started | - |
-| 11. Integration Gap Fixes | v2.1 | 0/1 | Not started | - |
+| 6. Build Pipeline | v2.1 | 3/3 | Complete | 2026-03-10 |
+| 7. Enforcement Module | v2.1 | 2/2 | Complete | 2026-03-10 |
+| 8. Runtime Protection | v2.1 | 2/2 | Complete | 2026-03-11 |
+| 9. License Management | v2.1 | 2/2 | Complete | 2026-03-11 |
+| 10. End-to-End Validation | v2.1 | 2/2 | Complete | 2026-03-11 |
+| 11. Integration Gap Fixes | v2.1 | 1/1 | Complete | 2026-03-11 |
 
 ---
 *Full phase details archived in `.planning/milestones/`*

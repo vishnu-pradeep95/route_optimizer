@@ -88,21 +88,19 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ Periodic runtime re-validation every 500 requests (integrity manifest + license expiry) — Phase 8
 - ✓ One-way license state guard preventing accidental upgrades without restart — Phase 8
 - ✓ Enforcement middleware re-reads license status after re-validation for same-request state reflection — Phase 8
+- ✓ enforce(app) single entry point — main.py has zero inline enforcement logic — v2.1
+- ✓ SHA256 integrity manifest embedded in compiled .so, verified at startup — v2.1
+- ✓ License renewal via renewal.key file drop without re-keying cycle — v2.1
+- ✓ X-License-Expires-In header on all API responses for monitoring — v2.1
+- ✓ License status (valid/expired/grace, expiry date, fingerprint match) in /health endpoint — v2.1
+- ✓ E2E security pipeline tests (fingerprint mismatch, re-validation, integrity tamper, renewal) — v2.1
+- ✓ docs/LICENSING.md rewritten from scratch, ERROR-MAP.md + SETUP.md + MIGRATION.md updated — v2.1
+- ✓ build-dist.sh ENVIRONMENT stripping covers enforcement.py, import validation checks all 8 exports — v2.1
+- ✓ docker-compose.prod.yml machine-id bind mount for production fingerprint consistency — v2.1
 
 ### Active
 
-## Current Milestone: v2.1 Licensing & Distribution Security
-
-**Goal:** Close all identified loopholes in the licensing and distribution system that allow customers to circumvent license enforcement.
-
-**Target features:**
-- Eliminate ENVIRONMENT=development bypass in distributed builds
-- Move license enforcement logic into compiled .pyc code
-- Strengthen machine fingerprinting against Docker spoofing
-- Add periodic license re-validation (not just startup)
-- Add file integrity checking for shipped code
-- Harden .pyc against casual decompilation
-
+(No active milestone — use `/gsd:new-milestone` to start next)
 
 ### Out of Scope
 
@@ -126,8 +124,8 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v2.0 shipped (2026-03-10). ~19.5k Python LOC, ~6k TypeScript LOC, ~3k Shell LOC. 38 E2E tests + 426 unit tests. 6 milestones shipped (v1.0-v1.4, v2.0), 28 phases, 64 plans.
-- **Known tech debt**: Physical Android device testing for outdoor contrast; 8 GB laptop testing for install script OSRM OOM validation; 6 ErrorCode enum values reserved for future use.
+- **Current state**: v2.1 shipped (2026-03-11). ~3.2k Python LOC, ~4.3k TypeScript LOC, ~2.6k Shell LOC. E2E security tests + 571 total tests passing. 7 milestones shipped (v1.0-v1.4, v2.0-v2.1), 35 phases, 77 plans.
+- **Known tech debt**: Physical Android device testing for outdoor contrast; 8 GB laptop testing for install script OSRM OOM validation; 6 ErrorCode enum values reserved for future use; X-License-Expires-In missing from CORS expose_headers (LOW — same-origin unaffected).
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
 ## Constraints
@@ -175,12 +173,6 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | Standalone compose for verification | Docker Compose merges ports additively in overrides, causing conflicts | ✓ Good — isolated stack with no name/port collisions |
 | Skip OSRM/VROOM in tarball verification | Endpoints don't require routing; saves 300+ MB download and minutes of init | ✓ Good — verification runs in ~30s instead of 10+ min |
 
-| Playwright 4-project config | Separate projects for api, driver-pwa, dashboard, license with different base URLs and viewports | ✓ Good |
-| Docker Compose override for license tests | Isolated production-mode container on port 8001 | ✓ Good |
-| Sequential story pattern for PWA tests | Shared BrowserContext across ordered tests with UI+API dual verification | ✓ Good |
-| Truncate logs before compose down | docker compose down removes containers and their log files | ✓ Good |
-| Standalone compose for verification | Docker Compose merges ports additively in overrides, causing conflicts | ✓ Good |
-| Skip OSRM/VROOM in tarball verification | Endpoints don't require routing; saves 300+ MB download and minutes of init | ✓ Good |
 | Copyleft-first attribution | Flag restrictive licenses at top for compliance scanning | ✓ Good |
 | docs/ as single documentation home | All docs except README.md/CLAUDE.md consolidated under docs/ | ✓ Good — clean root, discoverable docs |
 | docs/INDEX.md as documentation hub | Central entry point with audience tags replaces scattered README links | ✓ Good — office employees find their docs first |
@@ -200,6 +192,16 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | Counter resets to 0 after re-validation | Next cycle is exactly 500 requests | ✓ Good — predictable re-validation cadence |
 | SystemExit propagation from middleware | maybe_revalidate() not wrapped in try/except | ✓ Good — graceful shutdown on integrity failure |
 | maybe_revalidate() called on all requests | Including /health — consistent counter increment | ✓ Good — predictable revalidation boundaries |
+| enforce() middleware inside compiled module | @app.middleware defined inside enforce() body — single entry point | ✓ Good — main.py has zero enforcement logic |
+| Empty _INTEGRITY_MANIFEST = dev mode | verify_integrity() returns success without checking in dev | ✓ Good — consistent pattern across enforce/verify/revalidate |
+| hashlib.file_digest() for SHA256 | Python 3.11+ API for clean file hashing | ✓ Good — one line per file, no manual chunking |
+| Manifest injection with sed pipe delimiters | SHA256 hex is [0-9a-f] only, no special char risk | ✓ Good — simple, safe string replacement |
+| enforcement.py kept as .py in tarball | Cython cannot compile async def (FastAPI#1921) | ✓ Good — async wrapper calls compiled sync functions |
+| Renewal check before validate_license() | Avoids one-way state guard blocking INVALID->VALID | ✓ Good — renewal restores valid state without restart |
+| License status informational in /health | Does not degrade overall /health status | ✓ Good — monitoring can alert on license separately |
+| REVALIDATION_INTERVAL as module-level constant | Works identically in .py and .so | ✓ Good — configurable for tests via env var |
+| Separate e2e-security CI job | Different Docker lifecycle than regular e2e | ✓ Good — isolated security test environment |
+| LICENSING.md from scratch (not edited) | Codebase as source of truth, not stale documentation | ✓ Good — accurate, comprehensive, no legacy errors |
 
 ---
-*Last updated: 2026-03-11 after Phase 8 (Runtime Protection)*
+*Last updated: 2026-03-11 after v2.1 milestone*

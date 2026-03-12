@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
-status: completed
-stopped_at: Completed 10-02-PLAN.md (v2.1 documentation rewrite) -- v2.1 milestone complete
-last_updated: "2026-03-11T11:26:36.018Z"
-last_activity: 2026-03-11 -- Phase 10 plan 02 complete (v2.1 documentation rewrite)
+status: archived
+stopped_at: v2.1 milestone archived
+last_updated: "2026-03-11T23:59:59Z"
+last_activity: 2026-03-11 -- v2.1 milestone archived
 progress:
-  total_phases: 6
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 7
+  completed_phases: 7
+  total_plans: 13
+  completed_plans: 13
   percent: 100
 ---
 
@@ -21,21 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** v2.1 Licensing & Distribution Security -- Phase 10 (End-to-End Validation)
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 10 -- End-to-End Validation
-Plan: 2 of 2 complete
-Status: Phase Complete
-Last activity: 2026-03-11 -- Phase 10 plan 02 complete (v2.1 documentation rewrite)
+Phase: N/A -- milestone complete, awaiting next milestone
+Plan: N/A
+Status: Milestone Archived
+Last activity: 2026-03-11 -- v2.1 Licensing & Distribution Security archived
 
-Progress: [██████████] 100% (13/13 plans across 6 phases)
+Progress: [██████████] 100% (all milestones through v2.1 complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 64 (across v1.0-v2.0)
+- Total plans completed: 77 (across v1.0-v2.1)
 
 **By Milestone:**
 
@@ -47,58 +47,13 @@ Progress: [██████████] 100% (13/13 plans across 6 phases)
 | v1.3 Office-Ready Deployment | 8 (13-20) | 10 | 2026-02-21 -> 2026-03-07 |
 | v1.4 Ship-Ready QA | 4 (21-24) | 10 | 2026-03-08 -> 2026-03-09 |
 | v2.0 Doc & Error Handling | 4 (1-4) | 9 | 2026-03-09 -> 2026-03-10 |
-| v2.1 Licensing Security | 6 (5-10) | TBD | 2026-03-10 -> ... |
+| v2.1 Licensing Security | 7 (5-11) | 13 | 2026-03-10 -> 2026-03-11 |
 
 ## Accumulated Context
 
 ### Decisions
 
-- Phase 5-01: Dropped MAC from fingerprint (WSL2 generates random MAC on reboot, microsoft/WSL#5352)
-- Phase 5-01: Used exact match (not similarity scoring) for fingerprint validation
-- Phase 5-02: Read-only bind mount (:ro) for /etc/machine-id to prevent container writes to host identity
-- Phase 6-02: HMAC seed stored as bytes.fromhex() -- not greppable, not human-readable
-- Phase 6-02: PBKDF2 iterations doubled to 200k for stronger key derivation
-- Phase 6-02: Migration docs written in Phase 6 while context fresh (execution deferred to Phase 10)
-
-- Phase 6-01: Set ENVIRONMENT=development at top of test file (os.environ.setdefault) for test module imports
-- Phase 6-03: Added setuptools to Dockerfile.build (python:3.12-slim no longer bundles it)
-- Phase 6-03: Used sed '/ENVIRONMENT/d' to strip comment lines -- zero-tolerance validation catches all references
-- Phase 6-03: embedsignature=False controls Cython signature annotation only, not docstring removal -- acceptable for .so
-
-- Phase 7-01: Middleware defined inside enforce() body via @app.middleware -- single entry point pattern
-- Phase 7-01: Empty _INTEGRITY_MANIFEST dict signals dev environment -- verify_integrity() returns success without checking
-- Phase 7-01: verify_integrity() uses hashlib.file_digest() (Python 3.11+) for clean SHA256 computation
-
-- Phase 7-02: Manifest injection uses sed pipe delimiters -- SHA256 hex only contains [0-9a-f], no special char risk
-- Phase 7-02: enforcement.py preserved as .py in tarball -- Cython cannot compile async def
-
-- Phase 8-01: _STATUS_SEVERITY ordering (VALID=0, GRACE=1, INVALID=2) enables one-way state guard
-- Phase 8-01: Counter resets to 0 after re-validation (not 1) -- exactly 500 requests between checks
-- Phase 8-01: Dev mode skip uses same `not _INTEGRITY_MANIFEST` pattern as verify_integrity() and enforce()
-- Phase 8-01: dataclasses.replace() preserves customer_id/fingerprint/expires_at during state transitions
-
-- Phase 8-02: maybe_revalidate() not wrapped in try/except -- SystemExit must propagate for graceful shutdown
-- Phase 8-02: maybe_revalidate() called for ALL requests including /health -- counter increments consistently
-- Phase 8-02: Status re-read placed immediately after maybe_revalidate() before any branching logic
-
-- Phase 9-01: Renewal check (Step 0) placed before validate_license() to avoid one-way state guard blocking INVALID->VALID
-- Phase 9-01: Post-renewal file handling is best-effort -- read-only Docker volumes log warning but don't crash
-- Phase 9-01: _LICENSE_KEY_PATHS and _RENEWAL_KEY_PATHS as module-level lists for testability (patchable in tests)
-
-- Phase 9-02: Days recalculated from expires_at at response time (not stale days_remaining) for header accuracy
-- Phase 9-02: No customer_id in /health license section (sensitive data per user decision)
-- Phase 9-02: License status purely informational in /health -- does not degrade overall /health status
-
-- Phase 10-01: REVALIDATION_INTERVAL as module-level constant (works identically in .py and .so)
-- Phase 10-01: Integrity tamper test uses test.skip() in dev mode (empty _INTEGRITY_MANIFEST)
-- Phase 10-01: Separate e2e-security CI job (different Docker lifecycle than regular e2e)
-- Phase 10-01: Dynamic license key generation in beforeAll via generate_license.py (machine-independent)
-
-- Phase 10-02: LICENSING.md written from scratch using codebase as source of truth (not edited from old content)
-- Phase 10-02: Kept dev+customer split audience for LICENSING.md (both audiences benefit from shared document)
-- Phase 10-02: Added What's New in v2.1 section to MIGRATION.md for feature overview alongside breaking changes
-
-See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase details per milestone.
+See PROJECT.md Key Decisions table and `.planning/milestones/` for full phase details per milestone.
 
 ### Pending Todos
 
@@ -106,12 +61,12 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 
 ### Blockers/Concerns
 
-- BREAKING CHANGE: Fingerprint formula change (Phase 5) invalidates all existing customer licenses. Must coordinate migration in Phase 10.
 - Cython async limitation: `async def` cannot be compiled by Cython (FastAPI#1921). Enforcement middleware must call synchronous compiled functions from an uncompiled async wrapper.
 - Physical Android device testing required for outdoor contrast validation.
 - Google Maps API key is currently invalid (REQUEST_DENIED) -- E2E tests must use pre-geocoded seed data.
+- X-License-Expires-In and X-License-Status missing from CORS expose_headers (LOW — same-origin unaffected).
 
-### Security Audit Findings (v2.1 trigger)
+### Security Audit Findings (v2.1 -- ALL CLOSED)
 
 | # | Loophole | Severity | Phase |
 |---|----------|----------|-------|
@@ -122,26 +77,8 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 | 5 | ~~License checked only at startup~~ | ~~LOW-MEDIUM~~ | ✓ Phase 8 (08-01) |
 | 6 | ~~No file integrity verification~~ | ~~LOW-MEDIUM~~ | ✓ Phase 7 (07-01, 07-02) |
 
-## Performance Metrics (v2.1)
-
-| Phase | Plan | Duration | Tasks | Files |
-|-------|------|----------|-------|-------|
-| 05-01 | Fingerprint formula | 5min | 3 | 3 |
-| 05-02 | Docker compose bind mount | 2min | 2 | 2 |
-| 06-02 | HMAC credential rotation | 5min | 3 | 4 |
-| 06-01 | ENVIRONMENT production-default | 6min | 2 | 2 |
-| 06-03 | Cython build pipeline | 6min | 2 | 3 |
-| 07-01 | Enforcement foundation | 4min | 2 | 5 |
-| 07-02 | Enforcement wiring & manifest | 3min | 2 | 2 |
-| 08-01 | Re-validation + state guard | 4min | 2 | 3 |
-| 08-02 | Middleware revalidation wiring | 3min | 1 | 2 |
-| 09-01 | License renewal mechanism | 5min | 2 | 7 |
-| 09-02 | Expiry header + health license | 4min | 2 | 3 |
-| 10-01 | Security pipeline E2E tests | 3min | 2 | 5 |
-| 10-02 | v2.1 documentation rewrite | 5min | 2 | 5 |
-
 ## Session Continuity
 
-Last session: 2026-03-11T11:20:57Z
-Stopped at: Completed 10-02-PLAN.md (v2.1 documentation rewrite) -- v2.1 milestone complete
-Resume file: N/A (milestone complete)
+Last session: 2026-03-11
+Stopped at: v2.1 milestone archived
+Resume file: N/A (use /gsd:new-milestone to start next)

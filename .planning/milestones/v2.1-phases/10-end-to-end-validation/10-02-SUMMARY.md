@@ -80,7 +80,7 @@ Each task was committed atomically:
 1. **Task 1: Rewrite LICENSING.md from scratch for v2.1** - `e844a56` (docs)
 2. **Task 2: Update ERROR-MAP.md, SETUP.md, MIGRATION.md, and INDEX.md for v2.1** - `17eaa64` (docs)
 
-**Plan metadata:** [pending] (docs: complete plan)
+**Plan metadata:** `0437e50` (docs: complete plan)
 
 ## Files Created/Modified
 - `docs/LICENSING.md` - Complete v2.1 licensing documentation (rewritten from scratch, 666 lines)
