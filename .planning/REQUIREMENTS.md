@@ -18,10 +18,10 @@ Requirements for v2.2 Address Preprocessing Pipeline. Each maps to roadmap phase
 
 ### Geocode Validation
 
-- [ ] **GVAL-01**: Geocoded coordinates validated against 30km radius from Vatakara depot via haversine distance check
-- [ ] **GVAL-02**: Out-of-zone geocode results trigger automatic retry with CDCMS area name only
-- [ ] **GVAL-03**: Failed area-name retry falls back to area centroid coordinates from place name dictionary
-- [ ] **GVAL-04**: Confidence score adjusted based on validation outcome (1.0 direct hit, 0.7 area retry, 0.3 centroid fallback)
+- [x] **GVAL-01**: Geocoded coordinates validated against 30km radius from Vatakara depot via haversine distance check
+- [x] **GVAL-02**: Out-of-zone geocode results trigger automatic retry with CDCMS area name only
+- [x] **GVAL-03**: Failed area-name retry falls back to area centroid coordinates from place name dictionary
+- [x] **GVAL-04**: Confidence score adjusted based on validation outcome (1.0 direct hit, 0.7 area retry, 0.3 centroid fallback)
 
 ### API & Driver UI
 
@@ -91,10 +91,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ADDR-04 | Phase 12 | Complete |
 | ADDR-05 | Phase 12 | Complete |
 | ADDR-06 | Phase 12 | Complete |
-| GVAL-01 | Phase 13 | Pending |
-| GVAL-02 | Phase 13 | Pending |
-| GVAL-03 | Phase 13 | Pending |
-| GVAL-04 | Phase 13 | Pending |
+| GVAL-01 | Phase 13 | Complete |
+| GVAL-02 | Phase 13 | Complete |
+| GVAL-03 | Phase 13 | Complete |
+| GVAL-04 | Phase 13 | Complete |
 | APUI-01 | Phase 14 | Pending |
 | APUI-02 | Phase 14 | Pending |
 | APUI-03 | Phase 14 | Pending |
