@@ -26,6 +26,10 @@ class GeocodingResult(BaseModel):
         confidence: 0.0–1.0 confidence score.
         formatted_address: Provider's cleaned-up address text.
         raw_response: Full provider response for debugging.
+        method: Which geocoding/fallback method produced this result.
+            Valid values: 'direct', 'area_retry', 'centroid', 'depot'.
+            Kept as a plain string (not an enum) to avoid import coupling
+            between the interfaces module and the validator.
     """
 
     location: Location | None = Field(
@@ -34,6 +38,7 @@ class GeocodingResult(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     formatted_address: str = Field(default="")
     raw_response: dict[str, Any] = Field(default_factory=dict)
+    method: str = Field(default="direct")
 
     @property
     def success(self) -> bool:

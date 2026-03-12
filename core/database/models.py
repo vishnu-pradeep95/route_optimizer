@@ -199,6 +199,7 @@ class OrderDB(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     geocode_confidence: Mapped[float | None] = mapped_column(Float)
+    geocode_method: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
