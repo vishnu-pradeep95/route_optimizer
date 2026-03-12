@@ -852,6 +852,13 @@ def route_db_to_pydantic(route_db: RouteDB) -> Route:
                 quantity=stop_db.quantity or 1,
                 notes=stop_db.notes or "",
                 status=stop_db.status or "pending",
+                # Phase 14: Propagate geocode fields from linked OrderDB
+                geocode_confidence=(
+                    stop_db.order.geocode_confidence if stop_db.order else None
+                ),
+                geocode_method=(
+                    stop_db.order.geocode_method if stop_db.order else None
+                ),
             )
         )
 

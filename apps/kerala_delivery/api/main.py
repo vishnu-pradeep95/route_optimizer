@@ -1570,6 +1570,13 @@ async def get_driver_route(vehicle_id: str, session: AsyncSession = SessionDep):
                 "distance_from_prev_km": round(stop.distance_from_prev_km, 2),
                 "duration_from_prev_minutes": round(stop.duration_from_prev_minutes, 1),
                 "status": stop.status,
+                # Phase 14: Geocode confidence for "Approx. location" badge
+                "geocode_confidence": stop.geocode_confidence,
+                "geocode_method": stop.geocode_method,
+                "location_approximate": (
+                    stop.geocode_confidence is not None
+                    and stop.geocode_confidence < 0.5
+                ),
             }
             for stop in route.stops
         ],
