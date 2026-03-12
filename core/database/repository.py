@@ -159,6 +159,10 @@ async def save_optimization_run(
             geocode_confidence=(
                 order.location.geocode_confidence if order.location else None
             ),
+            # Phase 13: Persist geocode fallback method for analytics and
+            # "approx. location" badge. Prefer order-level field (set during
+            # validation) over location-level confidence.
+            geocode_method=getattr(order, "geocode_method", None),
         )
         # Set PostGIS geometry if geocoded
         if order.location:

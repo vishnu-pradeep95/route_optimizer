@@ -962,6 +962,19 @@ async def upload_and_optimize(
             if order.address_original is None:
                 order.address_original = order.address_raw
 
+        # Phase 13: Build order_id -> area_name mapping for geocode validation.
+        # CDCMS exports have an area_name column; standard CSVs do not.
+        # This mapping is passed to the validator during geocoding so out-of-zone
+        # addresses can be retried with the area name.
+        area_name_map: dict[str, str] = {}
+        if is_cdcms and not preprocessed_df.empty:
+            area_name_map = dict(
+                zip(
+                    preprocessed_df["order_id"].astype(str).str.strip(),
+                    preprocessed_df["area_name"].str.strip(),
+                )
+            )
+
         # Step 1a: Convert ImportResult errors/warnings to ImportFailure lists.
         # These track validation-stage failures (bad CSV data caught before geocoding).
         # Geocoding failures are collected separately in step 2 below.
@@ -1078,17 +1091,38 @@ async def upload_and_optimize(
         free_tier_note = ""
         duplicate_warnings_list: list[DuplicateLocationWarning] = []
 
+        # Phase 13: Create zone validator for geocode validation + fallback chain.
+        # Every geocoded address is validated against a radius from the depot.
+        # Out-of-zone results trigger: area-name retry -> centroid -> depot fallback.
+        from core.geocoding.validator import GeocodeValidator
+        dictionary_path = str(
+            pathlib.Path(__file__).resolve().parents[3] / "data" / "place_names_vatakara.json"
+        )
+        validator = GeocodeValidator(
+            depot_lat=config.DEPOT_LOCATION.latitude,
+            depot_lon=config.DEPOT_LOCATION.longitude,
+            zone_radius_m=config.GEOCODE_ZONE_RADIUS_KM * 1000,
+            dictionary_path=dictionary_path if os.path.exists(dictionary_path) else None,
+            area_suffix=config.CDCMS_AREA_SUFFIX,
+        )
+
         # Use CachedGeocoder for unified cache-then-API flow
-        cached_geocoder = CachedGeocoder(upstream=geocoder, session=session) if geocoder else None
+        cached_geocoder = CachedGeocoder(
+            upstream=geocoder, session=session, validator=validator
+        ) if geocoder else None
 
         for order in orders:
             if not order.is_geocoded:
                 if cached_geocoder:
                     # GEO-04: Snapshot stats before geocoding to detect cache hit vs API call
                     hits_before = cached_geocoder.stats["hits"]
-                    result = await cached_geocoder.geocode(order.address_raw)
+                    area_name = area_name_map.get(order.order_id)
+                    result = await cached_geocoder.geocode(order.address_raw, area_name=area_name)
                     if result.success and result.location:
                         order.location = result.location
+                        # Phase 13: Store validation confidence and method on order
+                        order.geocode_confidence = result.confidence
+                        order.geocode_method = result.method
                         # Track per-order geocode source
                         if cached_geocoder.stats["hits"] > hits_before:
                             per_order_source[order.order_id] = "cached"
@@ -1140,10 +1174,56 @@ async def upload_and_optimize(
                             stage="geocoding",
                         ))
 
+        # Phase 13: Validate pre-geocoded orders (had coordinates in CSV).
+        # These orders skipped the geocoding loop above because is_geocoded was
+        # already True. We still need to zone-validate their coordinates.
+        if validator:
+            for order in orders:
+                if order.is_geocoded and order.geocode_method is None:
+                    # Order had coordinates from CSV but hasn't been validated yet
+                    vr = validator.validate(
+                        order.location.latitude, order.location.longitude,
+                        area_name=area_name_map.get(order.order_id),
+                        geocoder=geocoder,
+                    )
+                    order.location = Location(
+                        latitude=vr.latitude,
+                        longitude=vr.longitude,
+                        address_text=order.location.address_text,
+                        geocode_confidence=vr.confidence,
+                    )
+                    order.geocode_confidence = vr.confidence
+                    order.geocode_method = vr.method
+
+        # Phase 13: Log validation stats for observability
+        if validator:
+            logger.info(
+                "Geocode validation: %d direct, %d area-retry, %d centroid, %d depot fallback",
+                validator.stats.get("direct_count", 0),
+                validator.stats.get("area_retry_count", 0),
+                validator.stats.get("centroid_count", 0),
+                validator.stats.get("depot_count", 0),
+            )
+
         # Combine all failures and determine how many orders geocoded successfully
         all_failures = validation_failures + geocoding_failures
         all_warnings = validation_warnings
         geocoded_orders = [o for o in orders if o.is_geocoded]
+
+        # Phase 13: Circuit breaker warning -- surface API key issues to staff
+        if validator and validator.is_tripped:
+            circuit_breaker_count = sum(
+                1 for o in orders
+                if getattr(o, 'geocode_method', None) in ('centroid', 'depot')
+            )
+            all_warnings.append(
+                ImportFailure(
+                    row_number=0,
+                    address_snippet="",
+                    reason=f"Google Maps API key issue -- {circuit_breaker_count} stop(s) have approximate locations. Ask IT to check the API key.",
+                    stage="geocoding",
+                )
+            )
 
         # --- GEO-04: Collect geocoding cost stats ---
         if cached_geocoder:
