@@ -78,6 +78,10 @@ The `v1.4` argument sets the version in the output filename. Use semantic versio
 | `docs/DISTRIBUTION.md` | This document |
 | `docs/LICENSING.md` | License activation and lifecycle guide |
 | `docs/ATTRIBUTION.md` | Third-party license attributions |
+| `docs/GOOGLE-MAPS.md` | Google Maps API setup guide |
+| `docs/ERROR-MAP.md` | Error message traceability |
+| `docs/INDEX.md` | Documentation index |
+| `docs/ENV-COMPARISON.md` | Dev vs prod environment differences |
 | `.env.example` | Environment variable template |
 | `license.key` (if present) | Pre-generated license key file |
 
