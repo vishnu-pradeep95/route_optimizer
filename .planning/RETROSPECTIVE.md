@@ -2,6 +2,55 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v2.2 — Address Preprocessing Pipeline
+
+**Shipped:** 2026-03-12
+**Phases:** 5 | **Plans:** 13 | **Timeline:** 2 days
+
+### What Was Built
+- Fixed address_display to always show cleaned CDCMS original text; regex splits concatenated words at case transitions
+- 381-entry Kerala place name dictionary from OSM Overpass + manual seeds with 100% CDCMS area name coverage
+- AddressSplitter with RapidFuzz fuzzy matching splits concatenated text at known place name boundaries
+- GeocodeValidator with 30km zone check, area-name retry, centroid fallback from dictionary, and circuit breaker
+- API geocode_confidence/location_approximate per stop; Driver PWA "Approx. location" badges
+- Full pipeline integration tests; HDFC ERGO regression test; accuracy metrics with NER upgrade criteria
+
+### What Worked
+- TDD throughout: failing tests written before implementation in every phase (11-01, 12-02, 13-01, 13-02, 15-01)
+- Layered pipeline design: each phase built cleanly on the previous (word splitting → dictionary → validator → API → tests)
+- Protected word set pattern prevented false positive word splits in CDCMS text
+- Circuit breaker design handled invalid API key gracefully from the first upload
+- Mock geocoder strategy for integration tests avoided dependency on live Google API
+- Dictionary coverage gate (>80%) ensured the splitter had sufficient data before wiring into production
+
+### What Was Inefficient
+- Phase number collision: v2.2 reused phase numbers 11-15 which already existed from v1.2/v1.3 milestones — SUMMARY files were written to archived milestone directories instead of v2.2 directories
+- Phase 12 directory was deleted from working tree (unstaged deletion) while PLAN files remained in git index
+- summary-extract CLI returned null for one_liner fields — manual SUMMARY reading required for accomplishment extraction
+- Phase 15 marked as "0/2 plans" in ROADMAP progress table despite being complete — execution tracking didn't update plan checkboxes
+
+### Patterns Established
+- Trailing letter split heuristic for ALL-CAPS concatenated text (lowercase→uppercase boundary detection)
+- Two-pass abbreviation expansion: inline before split, standalone after split
+- Dictionary-powered fuzzy matching with length-dependent thresholds (prevents short-name false positives)
+- 4-tier confidence scoring (1.0 direct, 0.7 area retry, 0.3 centroid, 0.0 failed)
+- Computed API fields derived at serialization time (location_approximate not stored in DB)
+- Area-aware mock geocoder pattern for integration testing without live API
+
+### Key Lessons
+1. Phase numbering must be globally unique across milestones — reusing numbers causes file collisions in .planning/phases/
+2. Dictionary-based NLP (place name lookup + fuzzy matching) is sufficient for domain-specific address parsing — NER is overkill when the vocabulary is bounded
+3. Geocode validation should always run on both cache hits and API calls — stale cache entries can be out-of-zone too
+4. Circuit breakers should be stateless per batch (reset on new upload), not global — one bad batch shouldn't poison future uploads
+5. Integration tests with mock geocoders should document their limitations explicitly — mock metrics differ from production metrics
+
+### Cost Observations
+- Model mix: opus for all phases (quality profile)
+- Sessions: ~2 sessions across 2 days
+- Notable: 13 plans in 2 days (6.5 plans/day) — fastest plans/day rate due to well-scoped TDD phases and pipeline building pattern
+
+---
+
 ## Milestone: v2.0 — Documentation & Error Handling
 
 **Shipped:** 2026-03-10
@@ -281,6 +330,7 @@
 | v1.3 | 14 days | 8 | 10 | Milestone audit + gap closure; documentation-as-code traceability |
 | v1.4 | 2 days | 4 | 10 | E2E testing as quality gate; parallel doc plans; standalone compose for isolation |
 | v2.0 | 2 days | 4 | 9 | Audit-driven gap closure; error handling as dedicated milestone; version naming discipline |
+| v2.2 | 2 days | 5 | 13 | TDD throughout; layered pipeline design; dictionary-based NLP over NER; mock geocoder testing |
 
 ### Cumulative Quality
 
@@ -292,6 +342,7 @@
 | v1.3 | 2.7k | 3.7k | 2.0k | 1.6k | Bootstrap/startup scripts, CSV docs, humanized errors, dist build |
 | v1.4 | 17.9k | 5.0k | -- | 3.0k | E2E test suite, CI/CD pipeline, stop/verify scripts, 5 doc artifacts |
 | v2.0 | 19.5k | 6.0k | -- | 3.0k | ErrorResponse model, health gates, retry logic, frontend error UI, doc restructure |
+| v2.2 | ~20k | 6.0k | -- | 3.0k | Address splitter, geocode validator, place dictionary, confidence API fields, PWA badges |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -308,3 +359,6 @@
 11. Pre-existing test failure counts should be tracked with exact numbers, not estimates carried forward from stale context
 12. Error handling infrastructure is best added after MVP — stable API surface makes retrofitting manageable
 13. Audit → gap closure → re-audit is the right milestone completion flow — catches real integration issues before shipping
+14. Phase numbering must be globally unique across milestones — reusing numbers causes file collisions in .planning/phases/
+15. Dictionary-based NLP with fuzzy matching is sufficient for bounded-vocabulary address parsing — full NER is premature optimization
+16. Geocode validation should run on both cache hits and API calls — stale cache entries can be out-of-zone

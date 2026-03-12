@@ -1,5 +1,21 @@
 # Milestones
 
+## v2.2 Address Preprocessing Pipeline (Shipped: 2026-03-12)
+
+**Phases completed:** 5 phases (11-15), 13 plans
+**Timeline:** 2 days (2026-03-10 → 2026-03-12)
+**Git range:** 107 commits, 47 files changed (+10,602 / -287)
+
+**Key accomplishments:**
+- Fixed address_display to always show cleaned CDCMS original text; regex splits concatenated ALL-CAPS words at case transitions
+- Built 381-entry Kerala place name dictionary from OSM Overpass + manual seeds with 100% CDCMS area name coverage
+- AddressSplitter with RapidFuzz fuzzy matching splits concatenated text at known place name boundaries (e.g., MUTTUNGALPOBALAVADI → MUTTUNGAL P.O. BALAVADI)
+- GeocodeValidator with 30km zone check, area-name retry, centroid fallback from dictionary, and circuit breaker for API failures
+- API surfaces geocode_confidence/location_approximate per stop; Driver PWA shows "Approx. location" badges for low-confidence stops
+- Integration tests verify full pipeline end-to-end; HDFC ERGO regression test confirms wrong-location bug fixed; NER upgrade criteria documented
+
+---
+
 ## v2.0 Documentation & Error Handling (Shipped: 2026-03-10)
 
 **Phases completed:** 4 phases, 9 plans

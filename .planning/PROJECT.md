@@ -80,21 +80,20 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ Stable machine fingerprint using /etc/machine-id + CPU model (replaces hostname+MAC+container_id) — Phase 5
 - ✓ Docker bind mount for host-container fingerprint consistency — Phase 5
 - ✓ 13 new fingerprint unit tests with mocked filesystem (38 total fingerprint tests) — Phase 5
+- ✓ address_display always shows cleaned CDCMS original text (not Google's formatted_address) — v2.2
+- ✓ Regex word splitting at lowercase→uppercase transitions in concatenated CDCMS text — v2.2
+- ✓ Two-pass abbreviation expansion (inline then standalone) with protected word set — v2.2
+- ✓ 381-entry Kerala place name dictionary from OSM Overpass with 100% CDCMS coverage — v2.2
+- ✓ AddressSplitter with RapidFuzz fuzzy matching for transliteration variants — v2.2
+- ✓ GeocodeValidator with 30km zone check, area-name retry, centroid fallback, circuit breaker — v2.2
+- ✓ geocode_confidence and location_approximate fields in API route responses — v2.2
+- ✓ Driver PWA "Approx. location" badge (hero card) and orange dot indicator (compact cards) — v2.2
+- ✓ Full pipeline integration tests with HDFC ERGO regression verification — v2.2
+- ✓ Accuracy metrics documented with NER upgrade trigger criteria — v2.2
 
 ### Active
 
-## Current Milestone: v2.2 Address Preprocessing Pipeline
-
-**Goal:** Fix wrong route locations caused by concatenated CDCMS addresses and unvalidated geocoding results — every address must geocode within the delivery zone or be flagged as approximate.
-
-**Target features:**
-- Fix address_display source to always use cleaned original address (not Google's formatted_address)
-- Improve regex word splitting for lowercase→uppercase transitions in CDCMS text
-- Dictionary-powered word splitting using OSM + India Post place names (~200-300 entries)
-- Geocode validation with 30km zone check and fallback chain (area retry → centroid)
-- API confidence fields and Driver PWA "Approx. location" badge for low-confidence stops
-- Integration testing with accuracy metrics and Approach B (NER) upgrade trigger criteria
-
+(No active requirements — next milestone not yet defined)
 
 ### Out of Scope
 
@@ -118,8 +117,8 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v2.0 shipped (2026-03-10). ~19.5k Python LOC, ~6k TypeScript LOC, ~3k Shell LOC. 38 E2E tests + 426 unit tests. 6 milestones shipped (v1.0-v1.4, v2.0), 28 phases, 64 plans.
-- **Known tech debt**: Physical Android device testing for outdoor contrast; 8 GB laptop testing for install script OSRM OOM validation; 6 ErrorCode enum values reserved for future use.
+- **Current state**: v2.2 shipped (2026-03-12). ~20k Python LOC, ~6k TypeScript LOC, ~3k Shell LOC. 38 E2E tests + 435+ unit tests. 8 milestones shipped (v1.0-v1.4, v2.0, v2.2), 33 phases, 77 plans.
+- **Known tech debt**: Physical Android device testing for outdoor contrast; 8 GB laptop testing for install script OSRM OOM validation; 6 ErrorCode enum values reserved for future use; NER model upgrade path documented but not triggered (centroid fallback < 5%).
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
 ## Constraints
@@ -182,6 +181,15 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | FLEET_NO_VEHICLES → #step-11-cdcms-data-workflow | Closest relevant heading in SETUP.md (no Fleet Setup section) | ✓ Good — best available anchor |
 | Drop MAC from fingerprint formula | WSL2 generates random MAC on every reboot (microsoft/WSL#5352) | ✓ Good — fingerprint stable across reboots |
 | Read-only bind mount for /etc/machine-id | Prevent container writes to host identity file | ✓ Good — secure host-container identity sharing |
+| Trailing letter split heuristic | Split concatenated words at lowercase→uppercase transitions (e.g., ANANDAMANDIRAMK → ANANDAMANDIRAM K) | ✓ Good — handles common CDCMS concatenation pattern |
+| Two-pass abbreviation expansion | Inline expansion before split (NR→Nagar), standalone after split (PO→P.O.) | ✓ Good — catches abbreviations at both positions |
+| address_original field for raw CDCMS text | Preserve completely unprocessed ConsumerAddress alongside cleaned version | ✓ Good — audit trail for address transformations |
+| Coordinate-based navigation with address fallback | navigateTo(lat, lon, address) — coords primary, address for display | ✓ Good — avoids Google re-geocoding cleaned text |
+| OSM Overpass for dictionary build | Free, no API key, covers Kerala place names comprehensively | ✓ Good — 381 entries, 100% CDCMS coverage |
+| Flat 1.0 confidence for direct in-zone hits | 4-tier system (1.0/0.7/0.3/0.0) not 7-tier with Google granularity | ✓ Good — simpler, sufficient for approximate vs precise distinction |
+| Circuit breaker per batch, not global | Stateless per upload; resets on new CSV upload | ✓ Good — one bad batch doesn't poison future uploads |
+| location_approximate computed at serialization | Not stored in DB; derived from confidence < 0.5 at API response time | ✓ Good — single source of truth, threshold adjustable |
+| RapidFuzz for fuzzy matching | Length-dependent thresholds prevent false positives on short names | ✓ Good — handles VATAKARA/VADAKARA without matching EDAPPAL/EDAPALLI |
 
 ---
-*Last updated: 2026-03-10 after Milestone v2.2 start (Address Preprocessing Pipeline)*
+*Last updated: 2026-03-12 after v2.2 milestone (Address Preprocessing Pipeline shipped)*
