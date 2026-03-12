@@ -133,7 +133,7 @@ Plans:
   3. Running `python -c "from core.licensing.license_manager import get_machine_fingerprint"` inside a Docker container built from the tarball succeeds (no ImportError)
   4. The HMAC derivation seed in the compiled `.so` differs from the seed in any previously shipped `.pyc` file
   5. `build-dist.sh` completes without errors and produces a tarball with the correct pipeline ordering (strip -> hash -> compile -> validate -> package)
-**Plans**: TBD
+**Plans**: 2 plans
 
 ### Phase 7: Enforcement Module
 **Goal**: All enforcement logic lives in a compiled module with a single entry point; main.py contains no inline enforcement code
@@ -143,7 +143,7 @@ Plans:
   1. `main.py` calls `enforce(app)` (or equivalent single function) and contains zero lines of license validation, middleware registration, or enforcement logic
   2. A SHA256 integrity manifest of protected files is embedded in the compiled `.so` and verified at startup -- tampering with `main.py` causes the API to refuse to start with a clear error
   3. The enforcement module stores license state internally (not on `app.state` or any other Python-accessible object)
-**Plans**: TBD
+**Plans**: 2 plans
 
 ### Phase 8: Runtime Protection
 **Goal**: License validity and file integrity are continuously verified during operation, not just at startup
@@ -153,7 +153,7 @@ Plans:
   1. After the API has been running and served 500+ requests, modifying a protected file (e.g., `main.py`) causes the next request to fail with a license/integrity error
   2. After the API has been running and served 500+ requests with an expired license, the next periodic check causes requests to fail with a license expiry error
   3. Re-validation runs fully offline (no network calls) and does not block the event loop (response latency stays under 100ms during re-validation)
-**Plans**: TBD
+**Plans**: 2 plans
 
 ### Phase 9: License Management
 **Goal**: License renewal is a simple file drop without re-keying, and license expiry is visible to monitoring tools
@@ -163,7 +163,7 @@ Plans:
   1. Generating a renewal key with `generate_license.py --renew` and dropping it as `renewal.key` in the deployment extends the license expiry without requiring a new fingerprint exchange
   2. API responses include an `X-License-Expires-In` header showing remaining days (e.g., `X-License-Expires-In: 45d`)
   3. The `/health` endpoint body includes license status fields (valid/expired/grace period, expiry date, fingerprint match)
-**Plans**: TBD
+**Plans**: 2 plans
 
 ### Phase 10: End-to-End Validation
 **Goal**: The complete v2.1 security pipeline is tested end-to-end and customer migration is documented
@@ -174,7 +174,7 @@ Plans:
   2. `docs/LICENSING.md` documents the new fingerprint formula, renewal workflow, integrity checking, and periodic re-validation
   3. `docs/SETUP.md` and `docs/ERROR-MAP.md` are updated with all new error messages and configuration changes from v2.1
   4. A customer migration document exists with step-by-step instructions for transitioning from the old fingerprint/HMAC to the new one (covering the breaking change)
-**Plans**: TBD
+**Plans**: 2 plans
 
 </details>
 
@@ -238,11 +238,11 @@ Plans:
   2. The Driver PWA hero card displays an "Approx. location" warning badge (DaisyUI badge-warning) when the current stop has `location_approximate: true`
   3. The Driver PWA compact cards show an orange dot indicator next to stops with `location_approximate: true`
   4. Pre-upgrade routes with no confidence data (null) render without badges or errors (graceful null handling)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 14-01: TBD
-- [ ] 14-02: TBD
+- [ ] 14-01-PLAN.md -- API field additions: RouteStop model, repository propagation, stop serialization with geocode_confidence, geocode_method, location_approximate
+- [ ] 14-02-PLAN.md -- Driver PWA: hero card badge, compact card orange dot, map pin coloring, Tailwind CSS rebuild
 
 ### Phase 15: Integration Testing and Accuracy Metrics
 **Goal**: The complete address preprocessing pipeline is verified end-to-end with real CDCMS data, accuracy metrics are measured, and the upgrade path to NER is documented with measurable triggers
@@ -303,7 +303,7 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15
 | 11. Foundation Fixes | v2.2 | 3/3 | Complete | 2026-03-11 |
 | 12. Place Name Dictionary and Address Splitter | v2.2 | 3/3 | Complete | 2026-03-12 |
 | 13. Geocode Validation and Fallback Chain | v2.2 | 0/3 | Planned | - |
-| 14. API Confidence Fields and Driver PWA Badge | v2.2 | 0/? | Not started | - |
+| 14. API Confidence Fields and Driver PWA Badge | v2.2 | 0/2 | Planned | - |
 | 15. Integration Testing and Accuracy Metrics | v2.2 | 0/? | Not started | - |
 
 ---
