@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
-status: executing
-stopped_at: Completed 14-01-PLAN.md
-last_updated: "2026-03-12T03:10:27.154Z"
-last_activity: 2026-03-12 -- Completed Plan 14-01 (API confidence fields)
+status: completed
+stopped_at: Completed 14-02-PLAN.md
+last_updated: "2026-03-12T03:15:45.617Z"
+last_activity: 2026-03-12 -- Completed Plan 14-02 (Driver PWA approximate location badge)
 progress:
   total_phases: 11
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 8
-  completed_plans: 7
-  percent: 88
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 14 (4 of 5 in v2.2) -- API Confidence Fields and Driver PWA Badge
-Plan: 1 of 2
-Status: In Progress
-Last activity: 2026-03-12 -- Completed Plan 14-01 (API confidence fields)
+Plan: 2 of 2
+Status: Complete
+Last activity: 2026-03-12 -- Completed Plan 14-02 (Driver PWA approximate location badge)
 
-Progress: [█████████░] 88%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [█████████░] 88%
 | Phase 13 P02 | 4min | 2 tasks | 7 files |
 | Phase 13 P03 | 3min | 1 tasks | 3 files |
 | Phase 14 P01 | 1min | 2 tasks | 3 files |
+| Phase 14 P02 | 3min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,9 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 - [Phase 13]: Circuit breaker warning uses ImportFailure struct (matching all_warnings list type)
 - [Phase 14-01]: location_approximate computed inline in API serialization, not stored in Pydantic model
 - [Phase 14-01]: Null geocode_confidence (pre-Phase 13 orders) maps to location_approximate: false
+- [Phase 14]: Badge text is exactly 'warning-symbol Approx. location' using DaisyUI badge-warning badge-sm
+- [Phase 14]: Compact card dot is 8px orange circle at top-right of stop number, no text
+- [Phase 14]: Map pins: dashed orange border only for approximate delivered/failed stops (pending already orange)
 
 ### Pending Todos
 
@@ -107,6 +111,6 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 
 ## Session Continuity
 
-Last session: 2026-03-12T03:10:27.153Z
-Stopped at: Completed 14-01-PLAN.md
+Last session: 2026-03-12T03:15:45.616Z
+Stopped at: Completed 14-02-PLAN.md
 Resume file: None

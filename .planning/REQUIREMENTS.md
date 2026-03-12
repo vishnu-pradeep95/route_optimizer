@@ -27,8 +27,8 @@ Requirements for v2.2 Address Preprocessing Pipeline. Each maps to roadmap phase
 
 - [x] **APUI-01**: API route response includes geocode_confidence field for each delivery stop
 - [x] **APUI-02**: API route response includes location_approximate flag (true when confidence < 0.5)
-- [ ] **APUI-03**: Driver PWA hero card shows "Approx. location" warning badge for approximate stops
-- [ ] **APUI-04**: Driver PWA compact cards show orange dot indicator for approximate stops
+- [x] **APUI-03**: Driver PWA hero card shows "Approx. location" warning badge for approximate stops
+- [x] **APUI-04**: Driver PWA compact cards show orange dot indicator for approximate stops
 
 ### Testing & Metrics
 
@@ -97,8 +97,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GVAL-04 | Phase 13 | Complete |
 | APUI-01 | Phase 14 | Complete |
 | APUI-02 | Phase 14 | Complete |
-| APUI-03 | Phase 14 | Pending |
-| APUI-04 | Phase 14 | Pending |
+| APUI-03 | Phase 14 | Complete |
+| APUI-04 | Phase 14 | Complete |
 | TEST-01 | Phase 15 | Pending |
 | TEST-02 | Phase 15 | Pending |
 | TEST-03 | Phase 15 | Pending |
