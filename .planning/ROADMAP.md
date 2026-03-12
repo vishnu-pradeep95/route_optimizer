@@ -8,7 +8,7 @@
 - ✅ **v1.3 Office-Ready Deployment** -- Phases 13-20 (shipped 2026-03-07)
 - ✅ **v1.4 Ship-Ready QA** -- Phases 21-24 (shipped 2026-03-09)
 - ✅ **v2.0 Documentation & Error Handling** -- Phases 1-4 (shipped 2026-03-10)
-- 🚧 **v2.1 Licensing & Distribution Security** -- Phases 5-10 (in progress, main branch)
+- ✅ **v2.1 Licensing & Distribution Security** -- Phases 5-10 (shipped 2026-03-11)
 - ✅ **v2.2 Address Preprocessing Pipeline** -- Phases 11-15 (shipped 2026-03-12)
 
 ## Phases
@@ -82,14 +82,14 @@
 </details>
 
 <details>
-<summary>v2.1 Licensing & Distribution Security (Phases 5-10) -- IN PROGRESS (main branch)</summary>
+<summary>v2.1 Licensing & Distribution Security (Phases 5-10) -- SHIPPED 2026-03-11</summary>
 
-- [x] **Phase 5: Fingerprinting Overhaul** - Replace unstable Docker/MAC fingerprint with machine-id + CPU model signals
-- [ ] **Phase 6: Build Pipeline -- Dev-Mode Stripping and Cython Compilation** - Strip dev bypass from builds and compile licensing modules to native .so
-- [ ] **Phase 7: Enforcement Module** - Move enforcement logic and integrity manifest into compiled module with single entry point
-- [ ] **Phase 8: Runtime Protection** - Add periodic license and integrity re-validation during operation
-- [ ] **Phase 9: License Management** - Renewal mechanism and expiry visibility for monitoring
-- [ ] **Phase 10: End-to-End Validation** - E2E tests exercising the full security pipeline plus customer migration documentation
+- [x] Phase 5: Fingerprinting Overhaul (2/2 plans) -- completed 2026-03-10
+- [x] Phase 6: Build Pipeline -- Dev-Mode Stripping and Cython Compilation (3/3 plans) -- completed 2026-03-10
+- [x] Phase 7: Enforcement Module (2/2 plans) -- completed 2026-03-10
+- [x] Phase 8: Runtime Protection (2/2 plans) -- completed 2026-03-11
+- [x] Phase 9: License Management (2/2 plans) -- completed 2026-03-10
+- [x] Phase 10: End-to-End Validation (2/2 plans) -- completed 2026-03-11
 
 </details>
 
@@ -137,11 +137,11 @@
 | 3. Error Handling Polish | v2.0 | 1/1 | Complete | 2026-03-10 |
 | 4. Documentation Accuracy Refresh | v2.0 | 2/2 | Complete | 2026-03-10 |
 | 5. Fingerprinting Overhaul | v2.1 | 2/2 | Complete | 2026-03-10 |
-| 6. Build Pipeline -- Dev-Mode Stripping and Cython | v2.1 | 0/? | Not started | - |
-| 7. Enforcement Module | v2.1 | 0/? | Not started | - |
-| 8. Runtime Protection | v2.1 | 0/? | Not started | - |
-| 9. License Management | v2.1 | 0/? | Not started | - |
-| 10. End-to-End Validation | v2.1 | 0/? | Not started | - |
+| 6. Build Pipeline -- Dev-Mode Stripping and Cython | v2.1 | 3/3 | Complete | 2026-03-10 |
+| 7. Enforcement Module | v2.1 | 2/2 | Complete | 2026-03-10 |
+| 8. Runtime Protection | v2.1 | 2/2 | Complete | 2026-03-11 |
+| 9. License Management | v2.1 | 2/2 | Complete | 2026-03-10 |
+| 10. End-to-End Validation | v2.1 | 2/2 | Complete | 2026-03-11 |
 | 11. Foundation Fixes | v2.2 | 3/3 | Complete | 2026-03-11 |
 | 12. Place Name Dictionary and Address Splitter | v2.2 | 3/3 | Complete | 2026-03-12 |
 | 13. Geocode Validation and Fallback Chain | v2.2 | 3/3 | Complete | 2026-03-12 |

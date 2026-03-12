@@ -77,9 +77,18 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ Error handling infrastructure: ErrorResponse model, 22 ErrorCodes, request ID tracing, startup health gates, retry logic, frontend error UI — Phase 2
 - ✓ fetchHealth preserves 503 per-service JSON body for degraded health bar display — Phase 3
 - ✓ All 15 ERROR_HELP_URLS anchors match actual doc headings (Python + TypeScript in sync) — Phase 3
-- ✓ Stable machine fingerprint using /etc/machine-id + CPU model (replaces hostname+MAC+container_id) — Phase 5
-- ✓ Docker bind mount for host-container fingerprint consistency — Phase 5
-- ✓ 13 new fingerprint unit tests with mocked filesystem (38 total fingerprint tests) — Phase 5
+- ✓ Stable machine fingerprint using /etc/machine-id + CPU model (replaces hostname+MAC+container_id) — v2.1
+- ✓ Docker bind mount for host-container fingerprint consistency — v2.1
+- ✓ 13 new fingerprint unit tests with mocked filesystem (38 total fingerprint tests) — v2.1
+- ✓ Production-default ENVIRONMENT logic — dev conveniences only with explicit ENVIRONMENT=development — v2.1
+- ✓ HMAC credential rotation (random hex seed, 200K PBKDF2 iterations) with migration docs — v2.1
+- ✓ Cython build pipeline producing native .so licensing modules in distribution tarballs — v2.1
+- ✓ Enforcement module: enforce(app) entry point, SHA256 integrity manifest, compiled boundary — v2.1
+- ✓ Runtime re-validation every 500 requests checking integrity + license expiry — v2.1
+- ✓ License renewal via renewal.key drop-and-restart with X-License-Expires-In header — v2.1
+- ✓ /health endpoint license diagnostics section for monitoring — v2.1
+- ✓ Playwright E2E tests for 4 security scenarios (fingerprint, re-validation, integrity, renewal) — v2.1
+- ✓ LICENSING.md rewrite (666 lines) with v2.1 security architecture — v2.1
 - ✓ address_display always shows cleaned CDCMS original text (not Google's formatted_address) — v2.2
 - ✓ Regex word splitting at lowercase→uppercase transitions in concatenated CDCMS text — v2.2
 - ✓ Two-pass abbreviation expansion (inline then standalone) with protected word set — v2.2
@@ -117,7 +126,7 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v2.2 shipped (2026-03-12). ~20k Python LOC, ~6k TypeScript LOC, ~3k Shell LOC. 38 E2E tests + 435+ unit tests. 8 milestones shipped (v1.0-v1.4, v2.0, v2.2), 33 phases, 77 plans.
+- **Current state**: v2.2 shipped (2026-03-12). ~20k Python LOC, ~6k TypeScript LOC, ~3k Shell LOC. 38 E2E tests + 435+ unit tests. 9 milestones shipped (v1.0-v1.4, v2.0-v2.2), 39 phases, 90 plans.
 - **Known tech debt**: Physical Android device testing for outdoor contrast; 8 GB laptop testing for install script OSRM OOM validation; 6 ErrorCode enum values reserved for future use; NER model upgrade path documented but not triggered (centroid fallback < 5%).
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
@@ -192,4 +201,4 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | RapidFuzz for fuzzy matching | Length-dependent thresholds prevent false positives on short names | ✓ Good — handles VATAKARA/VADAKARA without matching EDAPPAL/EDAPALLI |
 
 ---
-*Last updated: 2026-03-12 after v2.2 milestone (Address Preprocessing Pipeline shipped)*
+*Last updated: 2026-03-12 after v2.1 + v2.2 milestones (Licensing & Distribution Security + Address Preprocessing Pipeline shipped)*

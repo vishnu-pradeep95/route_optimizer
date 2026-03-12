@@ -2,6 +2,55 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v2.1 — Licensing & Distribution Security
+
+**Shipped:** 2026-03-11
+**Phases:** 6 | **Plans:** 13 | **Timeline:** 2 days
+
+### What Was Built
+- Stable machine fingerprint using /etc/machine-id + CPU model with Docker bind mount for host-container consistency
+- Production-default ENVIRONMENT logic — dev conveniences only with explicit ENVIRONMENT=development
+- HMAC credential rotation (random hex seed, 200K PBKDF2 iterations) with customer migration documentation
+- Cython build pipeline producing distribution tarballs with native .so licensing modules
+- Enforcement module: enforce(app) entry point, SHA256 integrity manifest, compiled boundary replacing 99 inline lines
+- Runtime re-validation every 500 requests checking integrity + license expiry with one-way state transition guard
+- License renewal via renewal.key drop-and-restart with X-License-Expires-In header and /health license diagnostics
+- Playwright E2E tests for 4 security scenarios plus full LICENSING.md rewrite (666 lines)
+
+### What Worked
+- TDD throughout all phases — failing tests written before implementation
+- Single enforce(app) entry point replaced 99 lines of inline enforcement code in main.py
+- Stateless circuit breaker per batch prevented one bad upload from poisoning future operations
+- Docker bind mount pattern for host-container fingerprint consistency
+- E2E tests covering the full security pipeline (fingerprint mismatch, re-validation, integrity tamper, renewal)
+
+### What Was Inefficient
+- ROADMAP was not updated after execution — showed phases 6-10 as "Not started" despite all being complete and verified
+- Phase 8 directory named `08-api-dead-code-hygiene` but actual work was "Runtime Protection" — naming mismatch
+- Phase 11 (integration-gap-fixes) directory created but never executed — abandoned gap closure phase
+- Milestone ran in parallel with v2.2 (address preprocessing) which made state tracking complex
+
+### Patterns Established
+- Production-default pattern: dangerous features require explicit opt-in, not opt-out
+- enforce(app) single entry point for all licensing/integrity logic
+- Request-counter-based re-validation (every N requests) instead of time-based
+- One-way state transition guard preventing accidental state upgrades
+- renewal.key drop file pattern for license renewal without API access
+
+### Key Lessons
+1. ROADMAP updates must happen during execution, not after — stale roadmaps create confusion about project status
+2. Phase directory names should match the actual phase goal, not be reused from earlier naming
+3. Parallel milestone execution requires explicit state tracking discipline
+4. Security modules benefit from compiled boundary (Cython .so) — keeps enforcement logic out of readable source
+5. Customer migration documentation should be written alongside the breaking change, not deferred
+
+### Cost Observations
+- Model mix: opus for all phases (quality profile)
+- Sessions: ~2 sessions across 2 days
+- Notable: 13 plans in 2 days — matched v2.2's velocity due to well-scoped security phases
+
+---
+
 ## Milestone: v2.2 — Address Preprocessing Pipeline
 
 **Shipped:** 2026-03-12
@@ -330,6 +379,7 @@
 | v1.3 | 14 days | 8 | 10 | Milestone audit + gap closure; documentation-as-code traceability |
 | v1.4 | 2 days | 4 | 10 | E2E testing as quality gate; parallel doc plans; standalone compose for isolation |
 | v2.0 | 2 days | 4 | 9 | Audit-driven gap closure; error handling as dedicated milestone; version naming discipline |
+| v2.1 | 2 days | 6 | 13 | Production-default pattern; enforce(app) boundary; Cython .so compilation; request-counter re-validation |
 | v2.2 | 2 days | 5 | 13 | TDD throughout; layered pipeline design; dictionary-based NLP over NER; mock geocoder testing |
 
 ### Cumulative Quality
@@ -342,6 +392,7 @@
 | v1.3 | 2.7k | 3.7k | 2.0k | 1.6k | Bootstrap/startup scripts, CSV docs, humanized errors, dist build |
 | v1.4 | 17.9k | 5.0k | -- | 3.0k | E2E test suite, CI/CD pipeline, stop/verify scripts, 5 doc artifacts |
 | v2.0 | 19.5k | 6.0k | -- | 3.0k | ErrorResponse model, health gates, retry logic, frontend error UI, doc restructure |
+| v2.1 | ~20k | 6.0k | -- | 3.0k | Fingerprint overhaul, Cython pipeline, enforcement module, runtime re-validation, license renewal |
 | v2.2 | ~20k | 6.0k | -- | 3.0k | Address splitter, geocode validator, place dictionary, confidence API fields, PWA badges |
 
 ### Top Lessons (Verified Across Milestones)
@@ -362,3 +413,5 @@
 14. Phase numbering must be globally unique across milestones — reusing numbers causes file collisions in .planning/phases/
 15. Dictionary-based NLP with fuzzy matching is sufficient for bounded-vocabulary address parsing — full NER is premature optimization
 16. Geocode validation should run on both cache hits and API calls — stale cache entries can be out-of-zone
+17. ROADMAP updates must happen during execution — stale roadmaps create confusion and wasted investigation time
+18. Parallel milestone execution requires explicit state tracking discipline — v2.1/v2.2 ran concurrently and ROADMAP fell out of sync

@@ -1,5 +1,23 @@
 # Milestones
 
+## v2.1 Licensing & Distribution Security (Shipped: 2026-03-11)
+
+**Phases completed:** 6 phases (5-10), 13 plans
+**Timeline:** 2 days (2026-03-10 → 2026-03-11)
+
+**Key accomplishments:**
+- Stable machine fingerprint using /etc/machine-id + CPU model with Docker bind mount for host-container consistency
+- Production-default ENVIRONMENT logic — dev conveniences (Swagger, permissive CORS, license bypass) only activate with explicit ENVIRONMENT=development
+- HMAC credential rotation (random hex seed, 200K PBKDF2 iterations) with customer migration documentation
+- Cython build pipeline producing distribution tarballs with native .so licensing modules
+- Enforcement module: enforce(app) entry point, SHA256 integrity manifest, single compiled boundary replacing 99 inline lines
+- Runtime re-validation every 500 requests checking integrity manifest + license expiry with one-way state transition guard
+- License renewal via renewal.key drop-and-restart flow with X-License-Expires-In header and /health license diagnostics
+- Playwright E2E tests for 4 security scenarios (fingerprint mismatch, re-validation, integrity tamper, renewal lifecycle)
+- Full LICENSING.md rewrite (666 lines) with v2.1 security architecture plus ERROR-MAP, SETUP, MIGRATION updates
+
+---
+
 ## v2.2 Address Preprocessing Pipeline (Shipped: 2026-03-12)
 
 **Phases completed:** 5 phases (11-15), 13 plans

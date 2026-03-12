@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: Address Preprocessing Pipeline
 status: completed
-stopped_at: Milestone v2.2 completed
-last_updated: "2026-03-12T12:30:00.000Z"
-last_activity: 2026-03-12 -- Completed v2.2 milestone (Address Preprocessing Pipeline shipped)
+stopped_at: Both v2.1 and v2.2 milestones archived
+last_updated: "2026-03-12T22:00:00.000Z"
+last_activity: 2026-03-12 -- Completed v2.1 milestone (Licensing & Distribution Security shipped)
 progress:
-  total_phases: 5
-  completed_phases: 5
+  total_phases: 6
+  completed_phases: 6
   total_plans: 13
   completed_plans: 13
   percent: 100
@@ -21,19 +21,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Milestone v2.2 complete. v2.1 Licensing & Distribution Security in progress on main branch.
+**Current focus:** All milestones complete (v1.0-v1.4, v2.0-v2.2). Planning next milestone.
 
 ## Current Position
 
-Milestone: v2.2 Address Preprocessing Pipeline -- SHIPPED 2026-03-12
-All 5 phases (11-15), 13 plans complete.
+All milestones shipped through v2.2.
+
+Latest milestones:
+- v2.1 Licensing & Distribution Security -- SHIPPED 2026-03-11
+- v2.2 Address Preprocessing Pipeline -- SHIPPED 2026-03-12
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 77 (across v1.0-v2.0 + v2.1 Phase 5 + v2.2 Phases 11-15)
+- Total plans completed: 90 (across v1.0-v2.2)
 
 **By Milestone:**
 
@@ -45,7 +48,7 @@ Progress: [██████████] 100%
 | v1.3 Office-Ready Deployment | 8 (13-20) | 10 | 2026-02-21 -> 2026-03-07 |
 | v1.4 Ship-Ready QA | 4 (21-24) | 10 | 2026-03-08 -> 2026-03-09 |
 | v2.0 Doc & Error Handling | 4 (1-4) | 9 | 2026-03-09 -> 2026-03-10 |
-| v2.1 Licensing Security | 6 (5-10) | TBD | 2026-03-10 -> ... (parallel, main branch) |
+| v2.1 Licensing Security | 6 (5-10) | 13 | 2026-03-10 -> 2026-03-11 |
 | v2.2 Address Preprocessing | 5 (11-15) | 13 | 2026-03-10 -> 2026-03-12 |
 
 ## Accumulated Context
@@ -60,10 +63,10 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ### Blockers/Concerns
 
-(None -- v2.2 shipped. v2.1 continues on main branch.)
+(None -- all milestones shipped.)
 
 ## Session Continuity
 
 Last session: 2026-03-12
-Stopped at: Milestone v2.2 completed
+Stopped at: Both v2.1 and v2.2 milestones archived
 Resume file: None
