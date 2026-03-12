@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
 status: executing
-stopped_at: Completed 12-01-PLAN.md
-last_updated: "2026-03-12T00:28:52.351Z"
-last_activity: 2026-03-12 -- Completed Plan 12-01 (place name dictionary)
+stopped_at: Completed 12-02-PLAN.md
+last_updated: "2026-03-12T00:35:17Z"
+last_activity: 2026-03-12 -- Completed Plan 12-02 (AddressSplitter with fuzzy matching)
 progress:
   total_phases: 11
   completed_phases: 1
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 12 (2 of 5 in v2.2) -- Place Name Dictionary
-Plan: 1 of 3
+Plan: 2 of 3
 Status: In Progress
-Last activity: 2026-03-12 -- Completed Plan 12-01 (place name dictionary)
+Last activity: 2026-03-12 -- Completed Plan 12-02 (AddressSplitter with fuzzy matching)
 
-Progress: [███-------] 33%
+Progress: [██████▓---] 67%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [███-------] 33%
 | Phase 11 P02 | 10min | 2 tasks | 14 files |
 | Phase 11 P03 | 2min | 2 tasks | 1 file |
 | Phase 12 P01 | 3min | 2 tasks | 3 files |
+| Phase 12 P02 | 5min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,9 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 - Phase 11-03: Raw CDCMS text uses monospace font at reduced opacity to visually distinguish from cleaned address
 - [Phase 12]: India Post API unavailable at build time; script continued with OSM + manual seeds (381 entries, 100% coverage)
 - [Phase 12]: 21 manual seed entries cover all 9 CDCMS area names including compound names (CHORODE EAST, MUTTUNGAL WEST)
+- Phase 12-02: Per-token processing (not character-level scanning) to prevent false positives on already-spaced text
+- Phase 12-02: Aliases indexed alongside primary names for fuzzy matching (VATAKARA indexed as alias of VADAKARA)
+- Phase 12-02: Compound names output with spaces restored; simple names preserve original input case
 
 ### Pending Todos
 
@@ -88,6 +92,6 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 
 ## Session Continuity
 
-Last session: 2026-03-12T00:28:52.349Z
-Stopped at: Completed 12-01-PLAN.md
+Last session: 2026-03-12T00:35:17Z
+Stopped at: Completed 12-02-PLAN.md
 Resume file: None

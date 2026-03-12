@@ -13,8 +13,8 @@ Requirements for v2.2 Address Preprocessing Pipeline. Each maps to roadmap phase
 - [x] **ADDR-02**: Regex splits lowercase-to-uppercase transitions in concatenated CDCMS text (e.g., `ANANDAMANDIRAMK` -> `ANANDAMANDIRAM K`)
 - [x] **ADDR-03**: Abbreviation expansion (NR, PO) runs after word splitting so patterns are detected at word boundaries
 - [x] **ADDR-04**: Place name dictionary (~285 entries) built from OSM Overpass + India Post APIs and committed to repo
-- [ ] **ADDR-05**: Dictionary-aware word splitter splits concatenated text at known place name boundaries (e.g., `MUTTUNGALPOBALAVADI` -> `MUTTUNGAL P.O. BALAVADI`)
-- [ ] **ADDR-06**: Fuzzy matching (RapidFuzz) handles transliteration variants of Kerala place names with length-dependent thresholds
+- [x] **ADDR-05**: Dictionary-aware word splitter splits concatenated text at known place name boundaries (e.g., `MUTTUNGALPOBALAVADI` -> `MUTTUNGAL P.O. BALAVADI`)
+- [x] **ADDR-06**: Fuzzy matching (RapidFuzz) handles transliteration variants of Kerala place names with length-dependent thresholds
 
 ### Geocode Validation
 
@@ -89,8 +89,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ADDR-02 | Phase 11 | Complete |
 | ADDR-03 | Phase 11 | Complete |
 | ADDR-04 | Phase 12 | Complete |
-| ADDR-05 | Phase 12 | Pending |
-| ADDR-06 | Phase 12 | Pending |
+| ADDR-05 | Phase 12 | Complete |
+| ADDR-06 | Phase 12 | Complete |
 | GVAL-01 | Phase 13 | Pending |
 | GVAL-02 | Phase 13 | Pending |
 | GVAL-03 | Phase 13 | Pending |

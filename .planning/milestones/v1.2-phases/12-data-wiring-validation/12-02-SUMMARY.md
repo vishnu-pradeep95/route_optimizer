@@ -1,104 +1,122 @@
 ---
-phase: 12-data-wiring-validation
+phase: 12-place-name-dictionary
 plan: 02
-subsystem: database
-tags: [geocoding, duplicate-detection, postgresql, data-analysis, thresholds]
+subsystem: data-import
+tags: [rapidfuzz, fuzzy-matching, address-splitting, dictionary, tdd]
 
 # Dependency graph
 requires:
-  - phase: 04-geocoding-cache
-    provides: geocode_cache table and cached_geocoder.py
-  - phase: 05-geocoding-enhancements
-    provides: duplicate_detector.py with confidence-weighted thresholds
+  - phase: 12-01
+    provides: "place_names_vatakara.json dictionary with 381 entries"
 provides:
-  - Evidence-based validation of DUPLICATE_THRESHOLDS in config.py
-  - Analysis script for re-running threshold validation (scripts/analyze_geocache_thresholds.py)
-  - Threshold validation report with production data tables
-affects: [duplicate-detection, geocoding, config]
+  - "AddressSplitter class with split() and fuzzy matching"
+  - "17 unit tests covering splitting, fuzzy matching, compound names, edge cases"
+affects: [12-03, cdcms-preprocessor-integration]
 
 # Tech tracking
 tech-stack:
   added: []
-  patterns: [data-driven-threshold-validation, schema-mapping-documentation]
+  patterns: [per-token-scanning, longest-match-first, length-dependent-fuzzy-thresholds]
 
 key-files:
   created:
-    - scripts/analyze_geocache_thresholds.py
-    - .planning/phases/12-data-wiring-validation/12-THRESHOLD-REPORT.md
+    - core/data_import/address_splitter.py
+    - tests/core/data_import/test_address_splitter.py
   modified: []
 
 key-decisions:
-  - "All four DUPLICATE_THRESHOLDS validated against production data -- no adjustments needed (10m/20m/50m/100m)"
-  - "70.4% of geocache entries are GEOMETRIC_CENTER tier, confirming Kerala addresses mostly resolve to area centroids"
+  - "Per-token processing instead of character-level scanning to prevent false positives on already-spaced text"
+  - "Aliases indexed alongside primary names for fuzzy matching (VATAKARA indexed as alias of VADAKARA entry)"
+  - "Compound names output with spaces restored; simple names preserve original input case"
 
 patterns-established:
-  - "Data-driven threshold validation: query production DB, document distribution, justify thresholds with evidence"
+  - "Per-token splitting: split input on whitespace first, then dictionary-match each token individually to avoid cross-token false positives"
+  - "Compound name matching: entry names with spaces have compact form (spaces stripped) for matching concatenated text"
 
-requirements-completed: [DATA-01]
+requirements-completed: [ADDR-05, ADDR-06]
 
 # Metrics
-duration: 2min
-completed: 2026-03-04
+duration: 5min
+completed: 2026-03-12
 ---
 
-# Phase 12 Plan 02: Threshold Validation Summary
+# Phase 12 Plan 02: AddressSplitter Summary
 
-**Validated all 4 duplicate detection distance thresholds (10m/20m/50m/100m) against 54 production geocode_cache entries -- no adjustments needed**
+**Dictionary-powered word splitter using RapidFuzz with longest-match-first scanning and length-dependent fuzzy thresholds (95/90/85)**
 
 ## Performance
 
-- **Duration:** 2 min
-- **Started:** 2026-03-04T16:03:48Z
-- **Completed:** 2026-03-04T16:06:37Z
-- **Tasks:** 1
+- **Duration:** 5 min
+- **Started:** 2026-03-12T00:30:16Z
+- **Completed:** 2026-03-12T00:35:17Z
+- **Tasks:** 2 (TDD RED + GREEN; REFACTOR skipped -- no cleanup needed)
 - **Files created:** 2
 
 ## Accomplishments
-- Queried production geocode_cache (54 entries): 70.4% GEOMETRIC_CENTER, 24.1% APPROXIMATE, 5.6% ROOFTOP, 0% RANGE_INTERPOLATED
-- Documented that Kerala rural addresses predominantly geocode to area centroids (confidence 0.60), validating the 50m threshold as the most critical value
-- Created reusable analysis script with all SQL queries for future re-validation
-- Wrote comprehensive threshold report with schema mapping note explaining how Google location_type translates through confidence scores to tier names to distance thresholds
+- AddressSplitter class loads 381-entry dictionary and splits concatenated CDCMS text at place name boundaries
+- Fuzzy matching with RapidFuzz fuzz.ratio accepts transliteration variants (VATAKARA/VADAKARA at 87.5%, MUTUNGAL/MUTTUNGAL at 94.1%)
+- Length-dependent thresholds prevent false positives: 95% for <=4 chars, 90% for 5-6 chars, 85% for 7+ chars
+- Compound name support: "CHORODEEAST" matches "CHORODE EAST" entry over shorter "CHORODE" entry
+- PO/NR abbreviation gap detection between consecutive place names
+- 17 comprehensive tests covering all specified behaviors pass
 
 ## Task Commits
 
 Each task was committed atomically:
 
-1. **Task 1: Analyze geocode_cache confidence distribution and write threshold report** - `b3630e9` (feat)
+1. **Task 1: RED -- Failing tests** - `fe42c6c` (test)
+2. **Task 2: GREEN -- Implementation** - `d655736` (feat)
 
-**Plan metadata:** committed with state updates below
+_Note: REFACTOR phase skipped -- code style already consistent with cdcms_preprocessor.py, no cleanup needed._
 
 ## Files Created/Modified
-- `scripts/analyze_geocache_thresholds.py` - SQL analysis script for geocode_cache confidence distribution; runnable via psycopg2 or as reference for docker exec queries
-- `.planning/phases/12-data-wiring-validation/12-THRESHOLD-REPORT.md` - Evidence-based threshold validation report with production data tables, schema mapping documentation, and per-tier justification
+- `core/data_import/address_splitter.py` - AddressSplitter class (238 lines) with split(), _split_token(), _find_match(), _get_threshold()
+- `tests/core/data_import/test_address_splitter.py` - 17 unit tests (159 lines) covering splitting, fuzzy matching, longest-match-first, edge cases
 
 ## Decisions Made
-- All four threshold values validated as-is; no config.py changes needed
-- Kerala address landscape produces 94.5% GEOMETRIC_CENTER + APPROXIMATE results, confirming wider thresholds for low-accuracy geocodes are appropriate
-- RANGE_INTERPOLATED tier (20m) validated theoretically -- zero entries exist because Kerala lacks numbered street addresses
+- **Per-token processing over character-level scanning:** Splitting input on whitespace before dictionary matching prevents false positives where spaces in already-spaced text get included in fuzzy match candidates (e.g., " PALLIVATAKAR" falsely matching "PALLIVATAKARA" at 92.3%)
+- **Aliases indexed alongside primary names:** Dictionary aliases (e.g., VATAKARA as alias of VADAKARA) are added to the entry list so both exact and fuzzy matching work against them
+- **Compound name output preserves entry spacing:** When a compound entry like "CHORODE EAST" matches concatenated text "CHORODEEAST", the output uses the entry name (with space) rather than the input text
 
 ## Deviations from Plan
 
-None -- plan executed exactly as written.
+### Auto-fixed Issues
+
+**1. [Rule 1 - Bug] Fixed false positive fuzzy matching on already-spaced text**
+- **Found during:** Task 2 (GREEN -- implementation)
+- **Issue:** Character-level scanning included spaces in candidate substrings, causing fuzzy match false positives (e.g., " PALLIVATAKAR" matching "PALLIVATAKARA" at 92.3% when scanning "VALLIKKADU SARAMBI PALLIVATAKARA")
+- **Fix:** Redesigned split() to process tokens individually -- split input on whitespace first, then apply dictionary matching per-token
+- **Files modified:** core/data_import/address_splitter.py
+- **Verification:** test_already_spaced passes; all 17 tests pass; full 88-test suite green
+- **Committed in:** d655736 (Task 2 commit)
+
+---
+
+**Total deviations:** 1 auto-fixed (1 bug)
+**Impact on plan:** Algorithm redesign necessary for correctness. The per-token approach is simpler and more robust than character-level scanning. No scope creep.
 
 ## Issues Encountered
-- Docker Compose postgres service is named `db` not `postgres`; adjusted query command accordingly (trivial)
+None beyond the deviation documented above.
 
 ## User Setup Required
-
 None - no external service configuration required.
 
 ## Next Phase Readiness
-- DATA-01 blocker resolved: thresholds are evidence-based, documented with production data
-- Future re-validation script available for quarterly checks as cache grows
-- Driver-verified entries (source='driver_verified') will provide higher-confidence data when they accumulate
+- AddressSplitter class ready for integration into clean_cdcms_address() pipeline (Plan 12-03)
+- Integration point: between Step 6 (trailing letter split) and Step 7 (second-pass abbreviation expansion)
+- Lazy initialization pattern documented in 12-RESEARCH.md for module-level _splitter singleton
 
 ## Self-Check: PASSED
 
-- FOUND: scripts/analyze_geocache_thresholds.py
-- FOUND: .planning/phases/12-data-wiring-validation/12-THRESHOLD-REPORT.md
-- FOUND: .planning/phases/12-data-wiring-validation/12-02-SUMMARY.md
-- FOUND: commit b3630e9
+- [x] core/data_import/address_splitter.py exists (238 lines, min 80)
+- [x] tests/core/data_import/test_address_splitter.py exists (159 lines, min 60)
+- [x] Commit fe42c6c (RED) exists
+- [x] Commit d655736 (GREEN) exists
+- [x] json.load pattern found in address_splitter.py
+- [x] fuzz.ratio pattern found in address_splitter.py
+- [x] All 17 tests pass
+- [x] Full 88-test data_import suite passes (no regressions)
 
 ---
-*Phase: 12-data-wiring-validation*
-*Completed: 2026-03-04*
+*Phase: 12-place-name-dictionary*
+*Completed: 2026-03-12*
