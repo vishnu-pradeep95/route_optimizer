@@ -225,9 +225,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 13-01-PLAN.md -- TDD: GeocodeValidator class with zone check, fallback chain, and circuit breaker
-- [ ] 13-02-PLAN.md -- GeocodingResult method field, OrderDB migration, CachedGeocoder validator integration
-- [ ] 13-03-PLAN.md -- Wire validator into upload pipeline with area_name mapping and confidence propagation
+- [x] 13-01-PLAN.md -- TDD: GeocodeValidator class with zone check, fallback chain, and circuit breaker
+- [x] 13-02-PLAN.md -- GeocodingResult method field, OrderDB migration, CachedGeocoder validator integration
+- [x] 13-03-PLAN.md -- Wire validator into upload pipeline with area_name mapping and confidence propagation
 
 ### Phase 14: API Confidence Fields and Driver PWA Badge
 **Goal**: Drivers can see at a glance which delivery stops have approximate locations, so they know when to expect navigation imprecision
@@ -241,8 +241,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 14-01-PLAN.md -- API field additions: RouteStop model, repository propagation, stop serialization with geocode_confidence, geocode_method, location_approximate
-- [ ] 14-02-PLAN.md -- Driver PWA: hero card badge, compact card orange dot, map pin coloring, Tailwind CSS rebuild
+- [x] 14-01-PLAN.md -- API field additions: RouteStop model, repository propagation, stop serialization with geocode_confidence, geocode_method, location_approximate
+- [x] 14-02-PLAN.md -- Driver PWA: hero card badge, compact card orange dot, map pin coloring, Tailwind CSS rebuild
 
 ### Phase 15: Integration Testing and Accuracy Metrics
 **Goal**: The complete address preprocessing pipeline is verified end-to-end with real CDCMS data, accuracy metrics are measured, and the upgrade path to NER is documented with measurable triggers
@@ -253,11 +253,11 @@ Plans:
   2. The known "HDFC ERGO" wrong-location bug is verified fixed -- the address that previously geocoded 40+ km away now either geocodes correctly or is flagged approximate with area-level coordinates
   3. Measured accuracy metrics meet targets: geocode success rate >90%, centroid fallback rate <10%, dictionary coverage >80% of area names
   4. A documented upgrade criteria section specifies that Approach B (NER model) is triggered when validation failures exceed 10% or centroid fallback exceeds 5% over a 30-day window
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 15-01: TBD
-- [ ] 15-02: TBD
+- [ ] 15-01-PLAN.md -- Integration tests: full pipeline verification with 28 CDCMS addresses and HDFC ERGO regression test
+- [ ] 15-02-PLAN.md -- METRICS.md: accuracy snapshot, per-method breakdown, address cleaning examples, NER upgrade criteria
 
 ## Progress
 
@@ -302,9 +302,9 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15
 | 10. End-to-End Validation | v2.1 | 0/? | Not started | - |
 | 11. Foundation Fixes | v2.2 | 3/3 | Complete | 2026-03-11 |
 | 12. Place Name Dictionary and Address Splitter | v2.2 | 3/3 | Complete | 2026-03-12 |
-| 13. Geocode Validation and Fallback Chain | v2.2 | 0/3 | Planned | - |
-| 14. API Confidence Fields and Driver PWA Badge | v2.2 | 0/2 | Planned | - |
-| 15. Integration Testing and Accuracy Metrics | v2.2 | 0/? | Not started | - |
+| 13. Geocode Validation and Fallback Chain | v2.2 | 3/3 | Complete | 2026-03-12 |
+| 14. API Confidence Fields and Driver PWA Badge | v2.2 | 2/2 | Complete | 2026-03-12 |
+| 15. Integration Testing and Accuracy Metrics | v2.2 | 0/2 | Planned | - |
 
 ---
 *Full phase details archived in `.planning/milestones/`*
