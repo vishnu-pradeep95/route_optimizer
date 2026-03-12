@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
-status: completed
-stopped_at: Phase 14 context gathered
-last_updated: "2026-03-12T02:55:45.424Z"
-last_activity: 2026-03-12 -- Completed Plan 13-03 (Upload pipeline integration)
+status: executing
+stopped_at: Completed 14-01-PLAN.md
+last_updated: "2026-03-12T03:10:27.154Z"
+last_activity: 2026-03-12 -- Completed Plan 14-01 (API confidence fields)
 progress:
   total_phases: 11
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 100
+  total_plans: 8
+  completed_plans: 7
+  percent: 88
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Phase 13 -- Geocode Validation and Fallback Chain (v2.2 Address Preprocessing Pipeline)
+**Current focus:** Phase 14 -- API Confidence Fields and Driver PWA Badge (v2.2 Address Preprocessing Pipeline)
 
 ## Current Position
 
-Phase: 13 (3 of 5 in v2.2) -- Geocode Validation and Fallback Chain
-Plan: 3 of 3
-Status: Complete
-Last activity: 2026-03-12 -- Completed Plan 13-03 (Upload pipeline integration)
+Phase: 14 (4 of 5 in v2.2) -- API Confidence Fields and Driver PWA Badge
+Plan: 1 of 2
+Status: In Progress
+Last activity: 2026-03-12 -- Completed Plan 14-01 (API confidence fields)
 
-Progress: [██████████] 100%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [██████████] 100%
 | Phase 13 P01 | 3min | 3 tasks | 2 files |
 | Phase 13 P02 | 4min | 2 tasks | 7 files |
 | Phase 13 P03 | 3min | 1 tasks | 3 files |
+| Phase 14 P01 | 1min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,8 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 - Phase 13-02: REQUEST_DENIED tracking only on upstream API calls (not cache hits)
 - [Phase 13]: Validator stats use actual keys (direct_count, area_retry_count) not plan-specified shorthand
 - [Phase 13]: Circuit breaker warning uses ImportFailure struct (matching all_warnings list type)
+- [Phase 14-01]: location_approximate computed inline in API serialization, not stored in Pydantic model
+- [Phase 14-01]: Null geocode_confidence (pre-Phase 13 orders) maps to location_approximate: false
 
 ### Pending Todos
 
@@ -104,6 +107,6 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 
 ## Session Continuity
 
-Last session: 2026-03-12T02:55:45.421Z
-Stopped at: Phase 14 context gathered
-Resume file: .planning/phases/14-api-confidence-fields-and-driver-pwa-badge/14-CONTEXT.md
+Last session: 2026-03-12T03:10:27.153Z
+Stopped at: Completed 14-01-PLAN.md
+Resume file: None
