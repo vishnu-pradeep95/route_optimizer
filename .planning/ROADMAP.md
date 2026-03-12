@@ -98,7 +98,7 @@
 **Milestone Goal:** Fix wrong route locations caused by concatenated CDCMS addresses and unvalidated geocoding results -- every address must geocode within the delivery zone or be flagged as approximate.
 
 - [x] **Phase 11: Foundation Fixes** - Fix address_display source and improve regex word splitting for CDCMS concatenation patterns (completed 2026-03-11)
-- [ ] **Phase 12: Place Name Dictionary and Address Splitter** - Build domain-specific dictionary from OSM/India Post and implement dictionary-powered word splitting
+- [x] **Phase 12: Place Name Dictionary and Address Splitter** - Build domain-specific dictionary from OSM/India Post and implement dictionary-powered word splitting (completed 2026-03-12)
 - [ ] **Phase 13: Geocode Validation and Fallback Chain** - Validate geocoded coordinates against delivery zone with automatic retry and centroid fallback
 - [ ] **Phase 14: API Confidence Fields and Driver PWA Badge** - Surface geocode confidence through the API and display approximate location warnings to drivers
 - [ ] **Phase 15: Integration Testing and Accuracy Metrics** - End-to-end pipeline verification with accuracy measurements and NER upgrade criteria
@@ -276,7 +276,7 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15
 | 9. Config Consolidation | v1.2 | 1/1 | Complete | 2026-03-04 |
 | 10. Driver PWA Hardening | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 11. Dashboard Cleanup | v1.2 | 2/2 | Complete | 2026-03-04 |
-| 12. Data Wiring & Validation | 2/3 | In Progress|  | 2026-03-04 |
+| 12. Data Wiring & Validation | 3/3 | Complete   | 2026-03-12 | 2026-03-04 |
 | 13. Bootstrap Installation | v1.3 | 1/1 | Complete | 2026-03-05 |
 | 14. Daily Startup | v1.3 | 2/2 | Complete | 2026-03-05 |
 | 15. CSV Documentation | v1.3 | 1/1 | Complete | 2026-03-05 |

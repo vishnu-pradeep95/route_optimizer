@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
 status: executing
-stopped_at: Completed 12-02-PLAN.md
-last_updated: "2026-03-12T00:35:17Z"
-last_activity: 2026-03-12 -- Completed Plan 12-02 (AddressSplitter with fuzzy matching)
+stopped_at: Completed 12-03-PLAN.md
+last_updated: "2026-03-12T00:41:50Z"
+last_activity: 2026-03-12 -- Completed Plan 12-03 (Pipeline integration & coverage validation)
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 3
   completed_plans: 3
-  percent: 33
+  percent: 100
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 12 (2 of 5 in v2.2) -- Place Name Dictionary
-Plan: 2 of 3
-Status: In Progress
-Last activity: 2026-03-12 -- Completed Plan 12-02 (AddressSplitter with fuzzy matching)
+Plan: 3 of 3
+Status: Complete
+Last activity: 2026-03-12 -- Completed Plan 12-03 (Pipeline integration & coverage validation)
 
-Progress: [██████▓---] 67%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [██████▓---] 67%
 | Phase 11 P03 | 2min | 2 tasks | 1 file |
 | Phase 12 P01 | 3min | 2 tasks | 3 files |
 | Phase 12 P02 | 5min | 2 tasks | 2 files |
+| Phase 12 P03 | 3min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,7 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 - Phase 12-02: Per-token processing (not character-level scanning) to prevent false positives on already-spaced text
 - Phase 12-02: Aliases indexed alongside primary names for fuzzy matching (VATAKARA indexed as alias of VADAKARA)
 - Phase 12-02: Compound names output with spaces restored; simple names preserve original input case
+- Phase 12-03: Dictionary splitter runs as Step 5.5 (before trailing letter split), not Step 6.5 -- prevents Step 6 from damaging known place names before dictionary lookup
 
 ### Pending Todos
 
@@ -92,6 +94,6 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 
 ## Session Continuity
 
-Last session: 2026-03-12T00:35:17Z
-Stopped at: Completed 12-02-PLAN.md
+Last session: 2026-03-12T00:41:50Z
+Stopped at: Completed 12-03-PLAN.md (Phase 12 complete)
 Resume file: None
