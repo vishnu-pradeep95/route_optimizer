@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
 status: completed
-stopped_at: Phase 15 context gathered
-last_updated: "2026-03-12T03:37:23.246Z"
-last_activity: 2026-03-12 -- Completed Plan 14-02 (Driver PWA approximate location badge)
+stopped_at: Completed 15-02-PLAN.md
+last_updated: "2026-03-12T04:00:12.935Z"
+last_activity: 2026-03-12 -- Completed Plan 15-02 (Accuracy metrics and NER upgrade criteria)
 progress:
   total_phases: 11
   completed_phases: 3
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Phase 14 -- API Confidence Fields and Driver PWA Badge (v2.2 Address Preprocessing Pipeline)
+**Current focus:** Phase 15 -- Integration Testing and Accuracy Metrics (v2.2 Address Preprocessing Pipeline)
 
 ## Current Position
 
-Phase: 14 (4 of 5 in v2.2) -- API Confidence Fields and Driver PWA Badge
+Phase: 15 (5 of 5 in v2.2) -- Integration Testing and Accuracy Metrics
 Plan: 2 of 2
 Status: Complete
-Last activity: 2026-03-12 -- Completed Plan 14-02 (Driver PWA approximate location badge)
+Last activity: 2026-03-12 -- Completed Plan 15-02 (Accuracy metrics and NER upgrade criteria)
 
 Progress: [██████████] 100%
 
@@ -60,6 +60,8 @@ Progress: [██████████] 100%
 | Phase 13 P03 | 3min | 1 tasks | 3 files |
 | Phase 14 P01 | 1min | 2 tasks | 3 files |
 | Phase 14 P02 | 3min | 2 tasks | 2 files |
+| Phase 15 P01 | 3min | 2 tasks | 1 files |
+| Phase 15 P02 | 3min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -98,6 +100,12 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 - [Phase 14]: Badge text is exactly 'warning-symbol Approx. location' using DaisyUI badge-warning badge-sm
 - [Phase 14]: Compact card dot is 8px orange circle at top-right of stop number, no text
 - [Phase 14]: Map pins: dashed orange border only for approximate delivered/failed stops (pending already orange)
+- [Phase 15]: Phase 15-01: Sample CSV has 27 rows (not 28 as noted in plan); all have Allocated-Printed status
+- [Phase 15]: Phase 15-01: Mock geocoder uses dictionary centroids for realistic simulation
+- [Phase 15]: Mock geocoding metrics transparent about limitations -- methodology explains what real geocoding would show
+- [Phase 15]: Phase 15-01: Both test classes (TestFullPipeline + TestHdfcErgoBug) in single file per plan spec
+- [Phase 15]: NER trigger thresholds: >10% depot fallback or >5% centroid fallback over 30-day window
+- [Phase 15]: spaCy v3 recommended for production NER (15-50MB model, CPU inference) over HuggingFace (400MB, GPU training)
 
 ### Pending Todos
 
@@ -111,6 +119,6 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 
 ## Session Continuity
 
-Last session: 2026-03-12T03:37:23.243Z
-Stopped at: Phase 15 context gathered
-Resume file: .planning/milestones/v2.2-phases/15-csv-documentation/15-CONTEXT.md
+Last session: 2026-03-12T04:00:12.933Z
+Stopped at: Completed 15-02-PLAN.md
+Resume file: None

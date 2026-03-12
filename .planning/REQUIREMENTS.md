@@ -32,10 +32,10 @@ Requirements for v2.2 Address Preprocessing Pipeline. Each maps to roadmap phase
 
 ### Testing & Metrics
 
-- [ ] **TEST-01**: Full pipeline tested with sample CDCMS CSV -- all addresses geocode within 30km zone or are flagged approximate
-- [ ] **TEST-02**: Original "HDFC ERGO" bug verified fixed (wrong-location address handled correctly by validation)
-- [ ] **TEST-03**: Accuracy metrics measured and documented: geocode success rate (>90%), fallback rate (<10%), dictionary coverage (>80% of area names)
-- [ ] **TEST-04**: Approach B (NER model) upgrade criteria documented with measurable thresholds
+- [x] **TEST-01**: Full pipeline tested with sample CDCMS CSV -- all addresses geocode within 30km zone or are flagged approximate
+- [x] **TEST-02**: Original "HDFC ERGO" bug verified fixed (wrong-location address handled correctly by validation)
+- [x] **TEST-03**: Accuracy metrics measured and documented: geocode success rate (>90%), fallback rate (<10%), dictionary coverage (>80% of area names)
+- [x] **TEST-04**: Approach B (NER model) upgrade criteria documented with measurable thresholds
 
 ## v2.1 Requirements (Parallel -- Main Branch)
 
@@ -99,10 +99,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | APUI-02 | Phase 14 | Complete |
 | APUI-03 | Phase 14 | Complete |
 | APUI-04 | Phase 14 | Complete |
-| TEST-01 | Phase 15 | Pending |
-| TEST-02 | Phase 15 | Pending |
-| TEST-03 | Phase 15 | Pending |
-| TEST-04 | Phase 15 | Pending |
+| TEST-01 | Phase 15 | Complete |
+| TEST-02 | Phase 15 | Complete |
+| TEST-03 | Phase 15 | Complete |
+| TEST-04 | Phase 15 | Complete |
 
 **Coverage:**
 - v2.2 requirements: 18 total
