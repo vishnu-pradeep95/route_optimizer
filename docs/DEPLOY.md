@@ -169,8 +169,11 @@ Each driver:
 
 ```bash
 # Stop all services (optional -- saves laptop battery)
-docker compose down
+cd ~/routing_opt
+./scripts/stop.sh
 ```
+
+> To also clean up disk space: `./scripts/stop.sh --gc`
 
 ---
 
@@ -331,7 +334,7 @@ Print this and keep it near the computer.
 |  5. PRINT QR codes for drivers          |
 |                                         |
 |  6. END OF DAY (optional):              |
-|     docker compose down                 |
+|     ./scripts/stop.sh                   |
 |                                         |
 +-----------------------------------------+
 ```

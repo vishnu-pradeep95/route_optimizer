@@ -148,13 +148,13 @@ docker run --rm hello-world  # Should print "Hello from Docker!"
 
 ```bash
 # Using NodeSource for latest LTS
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ```
 
 Verify:
 ```bash
-node --version    # Should show v22.x or v24.x
+node --version    # Should show v24.x
 npm --version     # Should show 10.x+
 ```
 
@@ -247,7 +247,12 @@ You should see version numbers for Python, Docker, and Git with no errors.
 | Stop all services | `docker compose down` |
 | Reset database (delete data) | `docker compose down -v` then `docker compose up -d db` |
 | View service logs | `docker compose logs -f api` |
-| Run backend server | `uvicorn apps.kerala_delivery.api.main:app --reload` |
+| Run backend server (without Docker) | `uvicorn apps.kerala_delivery.api.main:app --reload` |
+| **Start system (daily)** | `./scripts/start.sh` |
+| **Stop system** | `./scripts/stop.sh` |
+| **Stop + cleanup** | `./scripts/stop.sh --gc` |
+| **Reset for fresh deploy** | `./scripts/reset.sh` |
+| **Backup database** | `./scripts/backup_db.sh` |
 | Run tests | `pytest tests/ -v` |
 | Run tests (quick) | `pytest tests/ -q` |
 | **Alembic: apply migrations** | `alembic upgrade head` |
@@ -292,6 +297,8 @@ OSError: [Errno 98] Address already in use
 ---
 
 ## Step 9: OSRM Data Preparation
+
+**Quick option:** Run `./scripts/osrm_setup.sh` to automate all OSRM steps below.
 
 OSRM needs preprocessed Kerala map data before it can calculate routes.
 
@@ -395,8 +402,9 @@ Quick checklist to get the system running on a fresh laptop:
 3. **Run Step 9** — OSRM data prep (takes ~10 minutes, one-time only)
 4. **Run Step 10** — Database migrations
 5. **Start all services:** `docker compose up -d`
-6. **Verify:** `curl http://localhost:8000/health`
-7. **Open browser:** `http://localhost:8000/driver/`
+6. **Activate license:** See [LICENSING.md](LICENSING.md) for license key setup
+7. **Verify:** `curl http://localhost:8000/health`
+8. **Open browser:** `http://localhost:8000/driver/`
 
 Common new-laptop issues:
 - **WSL2 memory limit:** If Docker is slow, increase WSL memory in `%UserProfile%\.wslconfig`:

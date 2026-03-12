@@ -240,7 +240,7 @@ routing_opt/
 │   ├── driver_app/            ← What drivers see on their phones
 │   └── dashboard/             ← What the ops manager sees on their computer
 │
-├── tests/                     ← Automated tests (420 of them!)
+├── tests/                     ← Automated tests (560+ of them!)
 │   ├── core/                  ← Tests for each core module
 │   ├── apps/                  ← Tests for API endpoints
 │   └── integration/           ← End-to-end tests (whole pipeline)
@@ -512,9 +512,9 @@ quality, test coverage, and design-doc alignment.
 
 ## 12. Project Status
 
-The platform is fully functional through 24 development phases (milestones v1.0 through v1.4). All core features are complete: CDCMS/CSV upload, geocoding with PostGIS caching, VROOM+OSRM route optimization, driver PWA, operations dashboard, GPS telemetry, fleet management, hardware-bound licensing, and production deployment with Caddy reverse proxy.
+The platform is fully functional through 35 development phases across milestones v1.0 through v2.2. All core features are complete: CDCMS/CSV upload, geocoding with PostGIS caching, VROOM+OSRM route optimization, driver PWA, operations dashboard, GPS telemetry, fleet management, hardware-bound licensing, address preprocessing pipeline, and production deployment with Caddy reverse proxy.
 
-For current project status and future plans, see [ROADMAP.md](../README.md) (the Development Phases section) or `.planning/PROJECT.md`.
+For current project status and future plans, see `.planning/PROJECT.md` and `.planning/ROADMAP.md`.
 
 ---
 
