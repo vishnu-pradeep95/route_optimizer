@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Licensing & Distribution Security
-status: completed
-stopped_at: Completed 11-03-PLAN.md (Phase 11 complete)
-last_updated: "2026-03-11T23:52:46.488Z"
-last_activity: 2026-03-11 -- Completed Plan 11-03 (dual-address display + coordinate navigation)
+status: executing
+stopped_at: Completed 12-01-PLAN.md
+last_updated: "2026-03-12T00:28:52.351Z"
+last_activity: 2026-03-12 -- Completed Plan 12-01 (place name dictionary)
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 3
   completed_plans: 3
-  percent: 100
+  percent: 33
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** Phase 11 -- Foundation Fixes (v2.2 Address Preprocessing Pipeline)
+**Current focus:** Phase 12 -- Place Name Dictionary (v2.2 Address Preprocessing Pipeline)
 
 ## Current Position
 
-Phase: 11 (1 of 5 in v2.2) -- Foundation Fixes (COMPLETE)
-Plan: 3 of 3 (all complete)
-Status: Phase Complete
-Last activity: 2026-03-11 -- Completed Plan 11-03 (dual-address display + coordinate navigation)
+Phase: 12 (2 of 5 in v2.2) -- Place Name Dictionary
+Plan: 1 of 3
+Status: In Progress
+Last activity: 2026-03-12 -- Completed Plan 12-01 (place name dictionary)
 
-Progress: [██████████] 100%
+Progress: [███-------] 33%
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [██████████] 100%
 | Phase 11 P01 | 11min | 3 tasks | 2 files |
 | Phase 11 P02 | 10min | 2 tasks | 14 files |
 | Phase 11 P03 | 2min | 2 tasks | 1 file |
+| Phase 12 P01 | 3min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 - Phase 11-03: Used encodeURIComponent/decodeURIComponent for safe address passing in onclick attributes
 - Phase 11-03: Coordinates are primary navigation destination; address text used only as fallback when coords missing/zero
 - Phase 11-03: Raw CDCMS text uses monospace font at reduced opacity to visually distinguish from cleaned address
+- [Phase 12]: India Post API unavailable at build time; script continued with OSM + manual seeds (381 entries, 100% coverage)
+- [Phase 12]: 21 manual seed entries cover all 9 CDCMS area names including compound names (CHORODE EAST, MUTTUNGAL WEST)
 
 ### Pending Todos
 
@@ -85,6 +88,6 @@ See also: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase
 
 ## Session Continuity
 
-Last session: 2026-03-11T11:17:55Z
-Stopped at: Completed 11-03-PLAN.md (Phase 11 complete)
+Last session: 2026-03-12T00:28:52.349Z
+Stopped at: Completed 12-01-PLAN.md
 Resume file: None
