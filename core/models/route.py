@@ -59,6 +59,18 @@ class RouteStop(BaseModel):
     notes: str = ""
     status: str = "pending"
 
+    # Phase 14: Geocode confidence for "Approx. location" badge
+    geocode_confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Geocode confidence score (1.0=direct, 0.7=area retry, 0.3=centroid, 0.1=depot). None for pre-Phase 13 orders.",
+    )
+    geocode_method: str | None = Field(
+        default=None,
+        description="Geocoding method used: 'direct', 'area_retry', 'centroid', 'depot'. None for pre-Phase 13 orders.",
+    )
+
 
 class Route(BaseModel):
     """A complete delivery route for a single vehicle.
