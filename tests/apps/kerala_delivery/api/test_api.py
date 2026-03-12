@@ -260,6 +260,8 @@ class TestRoutesEndpoints:
         mock_stop = MagicMock()
         mock_stop.order = MagicMock()
         mock_stop.order.order_id = "ORD-001"
+        mock_stop.order.geocode_confidence = None
+        mock_stop.order.geocode_method = None
         mock_stop.location = from_shape(Point(75.5700, 11.5950), srid=4326)
         mock_stop.address_display = "Vatakara Bus Stand"
         mock_stop.address_original = None
@@ -2430,6 +2432,8 @@ class TestGoogleMapsRouteEndpoint:
             mock_stop = MagicMock()
             mock_stop.order = MagicMock()
             mock_stop.order.order_id = f"ORD-{i:03d}"
+            mock_stop.order.geocode_confidence = None
+            mock_stop.order.geocode_method = None
             mock_stop.location = from_shape(Point(75.58 + i * 0.01, 11.62 + i * 0.01), srid=4326)
             mock_stop.address_display = f"Stop {i + 1}"
             mock_stop.address_original = None
@@ -2515,6 +2519,8 @@ class TestQrSheetEndpoint:
             mock_stop = MagicMock()
             mock_stop.order = MagicMock()
             mock_stop.order.order_id = f"ORD-{i:03d}"
+            mock_stop.order.geocode_confidence = None
+            mock_stop.order.geocode_method = None
             mock_stop.location = from_shape(Point(75.58 + i * 0.01, 11.62 + i * 0.01), srid=4326)
             mock_stop.address_display = f"Stop {i + 1}"
             mock_stop.address_original = None
@@ -2585,6 +2591,8 @@ class TestQrSheetEndpoint:
         mock_stop = MagicMock()
         mock_stop.order = MagicMock()
         mock_stop.order.order_id = "ORD-XSS"
+        mock_stop.order.geocode_confidence = None
+        mock_stop.order.geocode_method = None
         mock_stop.location = from_shape(Point(75.58, 11.62), srid=4326)
         mock_stop.address_display = "Test Stop"
         mock_stop.address_original = None
@@ -2702,6 +2710,8 @@ class TestAddressRawApiField:
         mock_stop = MagicMock()
         mock_stop.order = MagicMock()
         mock_stop.order.order_id = "ORD-ADDR01-001"
+        mock_stop.order.geocode_confidence = None
+        mock_stop.order.geocode_method = None
         mock_stop.location = from_shape(Point(75.5700, 11.5950), srid=4326)
         mock_stop.address_display = "Kuniyil K, Near Vallikkadu"
         mock_stop.address_original = "KUNIYILK, NR.VALLIKKADU"
@@ -2753,6 +2763,8 @@ class TestAddressRawApiField:
         mock_stop = MagicMock()
         mock_stop.order = MagicMock()
         mock_stop.order.order_id = "ORD-ADDR01-002"
+        mock_stop.order.geocode_confidence = None
+        mock_stop.order.geocode_method = None
         mock_stop.location = from_shape(Point(75.5700, 11.5950), srid=4326)
         mock_stop.address_display = "Kuniyil K, Near Vallikkadu"
         mock_stop.address_original = "KUNIYILK, NR.VALLIKKADU"
@@ -2802,6 +2814,8 @@ class TestAddressRawApiField:
         mock_stop = MagicMock()
         mock_stop.order = MagicMock()
         mock_stop.order.order_id = "ORD-ADDR01-003"
+        mock_stop.order.geocode_confidence = None
+        mock_stop.order.geocode_method = None
         mock_stop.location = from_shape(Point(75.5700, 11.5950), srid=4326)
         mock_stop.address_display = "Kuniyil K, Near Vallikkadu"
         mock_stop.address_original = None  # Pre-v2.2: no original text stored

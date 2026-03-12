@@ -26,10 +26,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # --- 1. Add address_original column to orders table ---
-    op.add_column("orders", sa.Column("address_original", sa.Text(), nullable=True))
+    # Use IF NOT EXISTS for idempotency: init.sql may already define this column
+    # on fresh databases, while Alembic still needs to run for existing databases.
+    op.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS address_original TEXT")
 
     # --- 2. Add address_original column to route_stops table ---
-    op.add_column("route_stops", sa.Column("address_original", sa.Text(), nullable=True))
+    op.execute("ALTER TABLE route_stops ADD COLUMN IF NOT EXISTS address_original TEXT")
 
     # --- 3. Backfill address_display from address_raw for all existing orders ---
     # This fixes the ADDR-01 bug: existing orders have address_display set to

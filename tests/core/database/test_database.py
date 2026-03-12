@@ -286,6 +286,8 @@ class TestRouteConversion:
         stop_db = MagicMock(spec=RouteStopDB)
         stop_db.order = MagicMock()
         stop_db.order.order_id = "ORD-001"
+        stop_db.order.geocode_confidence = None
+        stop_db.order.geocode_method = None
         stop_db.location = from_shape(Point(75.5796, 11.6244), srid=4326)
         stop_db.address_display = "Test Stop"
         stop_db.address_original = None

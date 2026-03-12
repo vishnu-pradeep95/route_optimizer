@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS orders (
     notes               TEXT,
     status              VARCHAR(20) DEFAULT 'pending',  -- pending, assigned, delivered, failed
     geocode_confidence  REAL,                           -- 0.0-1.0 from geocoder
+    geocode_method      VARCHAR(20),                    -- direct, area_retry, centroid, depot
     created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 

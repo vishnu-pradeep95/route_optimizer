@@ -28,8 +28,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "orders", sa.Column("geocode_method", sa.String(20), nullable=True)
+    # Use IF NOT EXISTS for idempotency: init.sql may already define this column
+    # on fresh databases, while Alembic still needs to run for existing databases.
+    op.execute(
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS geocode_method VARCHAR(20)"
     )
 
 
