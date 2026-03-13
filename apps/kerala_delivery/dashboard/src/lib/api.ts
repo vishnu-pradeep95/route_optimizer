@@ -28,6 +28,7 @@ import type {
   DriverCheckResponse,
   ImportFailure,
   DuplicateLocationWarning,
+  ParsePreviewResponse,
 } from "../types";
 import { isApiError, type ApiError } from "./errors";
 
@@ -401,6 +402,54 @@ export async function uploadAndOptimize(file: File): Promise<UploadResponse> {
   }
 
   return (await response.json()) as UploadResponse;
+}
+
+// --- Parse Upload (Phase 17: two-step upload flow) ---
+
+/**
+ * Parse an uploaded CDCMS file and return driver preview data.
+ *
+ * This is step 1 of the two-step upload flow (Phase 17):
+ * 1. parseUpload() -- fast parse, returns driver list for selection
+ * 2. processSelected() -- runs geocoding + optimization for selected drivers
+ *
+ * The server stores the parsed file temporarily (30-min TTL) and returns
+ * an upload_token. The client sends this token to processSelected() to
+ * avoid re-uploading the file.
+ */
+export async function parseUpload(file: File): Promise<ParsePreviewResponse> {
+  const url = `${BASE_URL}/api/parse-upload`;
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const headers: Record<string, string> = {};
+  const apiKey = import.meta.env.VITE_API_KEY;
+  if (apiKey) {
+    headers["X-API-Key"] = apiKey;
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    try {
+      const parsed = JSON.parse(errorBody);
+      if (isApiError(parsed)) {
+        throw new ApiUploadError(parsed);
+      }
+    } catch (parseErr) {
+      if (parseErr instanceof ApiUploadError) throw parseErr;
+    }
+    throw new Error(
+      `Parse failed (${response.status}): ${errorBody || response.statusText}`
+    );
+  }
+
+  return (await response.json()) as ParsePreviewResponse;
 }
 
 // --- QR Code / Google Maps URLs ---

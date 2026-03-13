@@ -128,6 +128,27 @@ export interface DriverCheckResponse {
   }>;
 }
 
+// --- Driver Preview types (Phase 17: parse-upload flow) ---
+
+/** A driver found in a parsed upload file, before processing. */
+export interface DriverPreview {
+  csv_name: string;
+  display_name: string;
+  order_count: number;
+  status: "existing" | "new" | "matched" | "reactivated";
+  matched_to?: string;
+  match_score?: number;
+}
+
+/** Response from POST /api/parse-upload. */
+export interface ParsePreviewResponse {
+  upload_token: string;
+  filename: string;
+  total_rows: number;
+  filtered_rows: number;
+  drivers: DriverPreview[];
+}
+
 // --- Vehicle / Fleet types ---
 
 /** A vehicle in the fleet. Mirrors _vehicle_to_dict() response from the API. */
