@@ -4278,8 +4278,12 @@ class TestUploadTokenBasedProcessing:
 
         geocode_calls = []
 
+        # Mock _get_geocoder to return a non-None geocoder so CachedGeocoder is created
+        mock_upstream_geocoder = MagicMock()
+
         with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
              patch("core.optimizer.vroom_adapter.httpx.post") as mock_vroom_post, \
+             patch("apps.kerala_delivery.api.main._get_geocoder", return_value=mock_upstream_geocoder), \
              patch("apps.kerala_delivery.api.main.CachedGeocoder") as mock_cached_cls:
             mock_repo.get_all_drivers = AsyncMock(return_value=[])
             mock_repo.find_similar_drivers = AsyncMock(return_value=[])
@@ -4327,7 +4331,8 @@ class TestUploadTokenBasedProcessing:
                         "vehicle": 0, "cost": 100, "duration": 600, "distance": 5000,
                         "steps": [
                             {"type": "start", "location": [75.78, 11.25], "arrival": 0, "duration": 0, "distance": 0},
-                            {"type": "job", "job": 0, "location": [75.79, 11.26], "arrival": 300, "duration": 300, "distance": 2500, "service": 120},
+                            {"type": "job", "id": 0, "location": [75.79, 11.26], "arrival": 300, "duration": 300, "distance": 2500, "service": 120},
+                            {"type": "job", "id": 1, "location": [75.79, 11.26], "arrival": 500, "duration": 500, "distance": 4000, "service": 120},
                             {"type": "end", "location": [75.78, 11.25], "arrival": 600, "duration": 600, "distance": 5000},
                         ],
                     }],

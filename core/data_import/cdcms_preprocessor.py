@@ -83,6 +83,10 @@ _PROTECTED_WORDS = frozenset({
 # defaulting to a single trailing letter.
 _MEANINGFUL_SUFFIXES = frozenset({"PO", "NR", "KB", "NKB"})
 
+# Known CDCMS placeholder values in DeliveryMan column.
+# These are not real drivers -- they indicate unassigned orders.
+PLACEHOLDER_DRIVER_NAMES = {"ALLOCATION PENDING", ""}
+
 # ---------------------------------------------------------------------------
 # Lazy-loaded dictionary splitter (ADDR-05)
 # ---------------------------------------------------------------------------
@@ -242,6 +246,21 @@ def preprocess_cdcms(
             before,
             len(df),
         )
+
+    # Step 3b: Filter out placeholder driver names (not real drivers).
+    # CDCMS uses values like "Allocation Pending" for unassigned orders.
+    # These are not real drivers and should never appear in previews or be geocoded.
+    if CDCMS_COL_DELIVERY_MAN in df.columns:
+        before = len(df)
+        df = df[
+            ~df[CDCMS_COL_DELIVERY_MAN].str.strip().str.upper().isin(PLACEHOLDER_DRIVER_NAMES)
+        ]
+        filtered_count = before - len(df)
+        if filtered_count > 0:
+            logger.info(
+                "Filtered %d placeholder driver entries (Allocation Pending, blank)",
+                filtered_count,
+            )
 
     # Step 4: Filter by delivery man (optional — for single-driver route sheets)
     if filter_delivery_man:

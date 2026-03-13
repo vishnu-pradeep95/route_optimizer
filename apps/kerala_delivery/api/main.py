@@ -1580,6 +1580,31 @@ async def upload_and_optimize(
                 min_window,
             )
 
+        # Phase 17 gap closure: Filter orders by selected drivers BEFORE geocoding.
+        # Previously this filter was after geocoding (wasting API calls on deselected
+        # drivers' orders). Now only selected drivers' orders are geocoded.
+        if selected_driver_list is not None and is_cdcms and not preprocessed_df.empty:
+            order_driver_map: dict[str, str] = {}
+            if "delivery_man" in preprocessed_df.columns:
+                for _, row in preprocessed_df.iterrows():
+                    oid = str(row.get("order_id", "")).strip()
+                    dm = str(row.get("delivery_man", "")).strip()
+                    if oid and dm:
+                        order_driver_map[oid] = dm
+
+            selected_set = set(selected_driver_list)
+            before_filter = len(orders)
+            orders = [
+                o for o in orders
+                if order_driver_map.get(o.order_id, "") in selected_set
+            ]
+            # Also filter area_name_map to only selected orders
+            area_name_map = {k: v for k, v in area_name_map.items() if k in {o.order_id for o in orders}}
+            logger.info(
+                "Driver selection: %d of %d orders selected for geocoding (%d drivers selected)",
+                len(orders), before_filter, len(selected_set),
+            )
+
         # Step 2: Geocode orders that don't have coordinates
         # CachedGeocoder handles DB cache lookup + API fallback in one call.
         geocoder = _get_geocoder()
@@ -1845,30 +1870,10 @@ async def upload_and_optimize(
         # Permanent errors (HTTP 400 = bad input) are NOT retried.
         optimizer.optimize = optimizer_retry(optimizer.optimize)
 
-        # Phase 17: Filter geocoded orders by selected drivers (if specified).
-        # All orders are geocoded regardless (deselected drivers' orders are
-        # geocoded but NOT optimized). The delivery_man mapping comes from
-        # the preprocessed DataFrame, which has delivery_man per order_id.
+        # Driver selection filtering now happens BEFORE geocoding (see
+        # "Phase 17 gap closure" block above). By this point, `geocoded_orders`
+        # already contains only the selected drivers' orders.
         orders_for_optimization = geocoded_orders
-        if selected_driver_list is not None and is_cdcms and not preprocessed_df.empty:
-            # Build order_id -> delivery_man mapping from preprocessed DataFrame
-            order_driver_map: dict[str, str] = {}
-            if "delivery_man" in preprocessed_df.columns:
-                for _, row in preprocessed_df.iterrows():
-                    oid = str(row.get("order_id", "")).strip()
-                    dm = str(row.get("delivery_man", "")).strip()
-                    if oid and dm:
-                        order_driver_map[oid] = dm
-
-            selected_set = set(selected_driver_list)
-            orders_for_optimization = [
-                o for o in geocoded_orders
-                if order_driver_map.get(o.order_id, "") in selected_set
-            ]
-            logger.info(
-                "Driver selection: %d of %d geocoded orders selected for optimization (%d drivers selected)",
-                len(orders_for_optimization), len(geocoded_orders), len(selected_set),
-            )
 
         assignment = optimizer.optimize(orders_for_optimization, fleet)
 
