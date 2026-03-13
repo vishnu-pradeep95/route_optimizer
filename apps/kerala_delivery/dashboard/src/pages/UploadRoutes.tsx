@@ -14,7 +14,6 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import {
-  uploadAndOptimize,
   parseUpload,
   processSelected,
   fetchRoutes,
