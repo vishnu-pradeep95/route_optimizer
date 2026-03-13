@@ -99,6 +99,13 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ Driver PWA "Approx. location" badge (hero card) and orange dot indicator (compact cards) — v2.2
 - ✓ Full pipeline integration tests with HDFC ERGO regression verification — v2.2
 - ✓ Accuracy metrics documented with NER upgrade trigger criteria — v2.2
+- ✓ CDCMS .xlsx detection and parsing (not rejected as invalid format) — v3.0
+- ✓ Driver preview with order counts before processing begins — v3.0
+- ✓ Selective driver processing from multi-driver CSV/XLSX — v3.0
+- ✓ Column-order-independent CDCMS parsing — v3.0
+- ✓ Placeholder driver names (Allocation Pending) filtered at preprocessor level — v3.0
+- ✓ Pre-geocoding driver filter (only selected drivers' orders geocoded) — v3.0
+- ✓ Zero-start driver management with fuzzy matching auto-creation from CSV — v3.0
 
 ### Active
 
@@ -211,6 +218,9 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | Circuit breaker per batch, not global | Stateless per upload; resets on new CSV upload | ✓ Good — one bad batch doesn't poison future uploads |
 | location_approximate computed at serialization | Not stored in DB; derived from confidence < 0.5 at API response time | ✓ Good — single source of truth, threshold adjustable |
 | RapidFuzz for fuzzy matching | Length-dependent thresholds prevent false positives on short names | ✓ Good — handles VATAKARA/VADAKARA without matching EDAPPAL/EDAPALLI |
+| Placeholder filtering at preprocessor level | Both parse-upload and upload-and-optimize benefit from single filter | ✓ Good — Allocation Pending never reaches driver preview or geocoding |
+| Pre-geocoding driver filter | Filter orders by selected drivers before geocoding loop, not after | ✓ Good — saves Google Maps API costs by not geocoding deselected drivers |
+| DaisyUI btn for Process Selected | Replace custom upload-btn class with tw:btn tw:btn-warning | ✓ Good — consistent component styling, native disabled state |
 
 ---
-*Last updated: 2026-03-12 after v3.0 milestone started (Driver-Centric Model)*
+*Last updated: 2026-03-13 after Phase 17 (CSV Upload and XLSX Detection)*

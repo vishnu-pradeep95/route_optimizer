@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** v3.0 Driver-Centric Model -- Phase 17: CSV Upload and XLSX Detection
+**Current focus:** v3.0 Driver-Centric Model -- Phase 18: Address Preprocessing Fixes
 
 ## Current Position
 
@@ -96,6 +96,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last activity: 2026-03-13 - Completed 17-03 (fix matched driver status bug)
-Stopped at: Completed 17-04-PLAN.md
+Last session: 2026-03-13
+Stopped at: Phase 17 complete, ready to plan Phase 18
 Resume file: None
