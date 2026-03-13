@@ -109,7 +109,7 @@
 
 **Milestone Goal:** Replace the vehicle-fleet model with a driver-centric model where drivers are created from CDCMS CSV uploads, optimization runs per-driver (TSP), and the dashboard becomes the primary interface for office staff.
 
-- [ ] **Phase 16: Driver Database Foundation** - Driver entity with CRUD, fuzzy name matching, auto-creation from CSV, and driver management page
+- [x] **Phase 16: Driver Database Foundation** - Driver entity with CRUD, fuzzy name matching, auto-creation from CSV, and driver management page (completed 2026-03-13)
 - [ ] **Phase 17: CSV Upload and XLSX Detection** - Fix .xlsx detection bug, add driver preview step, driver selection before processing
 - [ ] **Phase 18: Address Preprocessing Fixes** - Fix trailing-letter split garbling, (H) expansion, PO concatenation, and tighten geocode validation
 - [ ] **Phase 19: Per-Driver TSP Optimization** - Group orders by driver, run VROOM TSP per driver, store all routes under single optimization run
@@ -128,7 +128,7 @@
   2. User can add a new driver by name, edit an existing driver's name, and deactivate a driver -- all from the dashboard
   3. When a CSV with a DeliveryMan column is uploaded, any new driver names are auto-created in the database without duplicates (fuzzy matching catches "SURESH K" vs "SURESH KUMAR")
   4. The system starts with zero drivers -- no pre-loaded fleet data -- and the driver list grows organically from CSV uploads and manual additions
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [ ] 16-01-PLAN.md -- Schema reshape, repository CRUD, fuzzy matching with RapidFuzz
 - [ ] 16-02-PLAN.md -- Driver API endpoints, DriverManagement dashboard page, sidebar wiring
@@ -221,7 +221,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 13. Bootstrap Installation | v1.3 | 1/1 | Complete | 2026-03-05 |
 | 14. Daily Startup | v1.3 | 2/2 | Complete | 2026-03-05 |
 | 15. CSV Documentation | v1.3 | 1/1 | Complete | 2026-03-05 |
-| 16. Documentation Corrections | 2/3 | In Progress|  | 2026-03-05 |
+| 16. Documentation Corrections | 3/3 | Complete   | 2026-03-13 | 2026-03-05 |
 | 17. Error Message Humanization | v1.3 | 1/1 | Complete | 2026-03-06 |
 | 18. Distribution Build | v1.3 | 1/1 | Complete | 2026-03-06 |
 | 19. Pin OSRM Docker Image | v1.3 | 1/1 | Complete | 2026-03-07 |
