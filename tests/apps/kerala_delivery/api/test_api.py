@@ -3854,11 +3854,11 @@ class TestParseUploadEndpoint:
         drivers = data["drivers"]
         statuses = {d["csv_name"]: d["status"] for d in drivers}
 
-        # One should be "new", one should be "existing" (matched to active)
+        # One should be "new", one should be "matched" (fuzzy-matched to active)
         new_found = any(d["status"] == "new" for d in drivers)
-        existing_found = any(d["status"] == "existing" for d in drivers)
+        matched_found = any(d["status"] == "matched" for d in drivers)
         assert new_found, f"Expected a 'new' driver status, got: {statuses}"
-        assert existing_found, f"Expected an 'existing' driver status, got: {statuses}"
+        assert matched_found, f"Expected a 'matched' driver status, got: {statuses}"
 
     def test_upload_token_cleanup(self):
         """Expired upload tokens are cleaned up."""
