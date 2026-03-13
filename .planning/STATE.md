@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Driver-Centric Model
 status: executing
-stopped_at: Completed 17-01-PLAN.md
-last_updated: "2026-03-13T15:19:51.170Z"
-last_activity: 2026-03-13 -- Completed 17-01 (XLSX detection fix and parse-upload endpoint)
+stopped_at: Completed 17-02-PLAN.md (Phase 17 COMPLETE)
+last_updated: "2026-03-13T15:28:40Z"
+last_activity: 2026-03-13 -- Completed 17-02 (driver preview UI and upload flow wiring)
 progress:
   total_phases: 7
   completed_phases: 0
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 17 of 22 (CSV Upload and XLSX Detection) -- second of 7 phases in v3.0
-Plan: 1 of 2 (COMPLETE)
-Status: Phase 17 in progress
-Last activity: 2026-03-13 -- Completed 17-01 (XLSX detection fix and parse-upload endpoint)
+Plan: 2 of 2 (COMPLETE)
+Status: Phase 17 COMPLETE
+Last activity: 2026-03-13 -- Completed 17-02 (driver preview UI and upload flow wiring)
 
-Progress: [▓▓░░░░░░░░] 15%
+Progress: [▓▓▓░░░░░░░] 28%
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [▓▓░░░░░░░░] 15%
 | v3.0 Driver-Centric Model | 7 (16-22) | 4/5+ (phases 16-17) | In progress |
 | Phase 16 P03 | 9min | 1 tasks | 2 files |
 | Phase 17 P01 | 7min | 2 tasks | 5 files |
+| Phase 17 P02 | 7min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,9 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 - **Phase 17-01:** pandas import moved to module level in main.py (was local in auto_create_drivers_from_csv)
 - **Phase 17-01:** Upload token TTL set to 30 minutes for parse-upload flow
 - **Phase 17-01:** Parse endpoint runs driver auto-creation to provide accurate status categories in preview
+- **Phase 17-02:** Driver filtering at DataFrame level (order_id -> delivery_man map) since Order model has no delivery_man field
+- **Phase 17-02:** Upload token consumed immediately on lookup (before processing) to prevent replay
+- **Phase 17-02:** Upload button renamed to "Upload & Preview" for two-step flow clarity
 
 ### Pending Todos
 
@@ -87,6 +91,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last activity: 2026-03-13 - Completed 17-01 (XLSX detection fix and parse-upload endpoint)
-Stopped at: Completed 17-01-PLAN.md
-Resume file: .planning/milestones/v3.0-phases/17-csv-upload-and-xlsx-detection/17-02-PLAN.md
+Last activity: 2026-03-13 - Completed 17-02 (driver preview UI and upload flow wiring)
+Stopped at: Completed 17-02-PLAN.md (Phase 17 COMPLETE)
+Resume file: Next phase in v3.0 milestone

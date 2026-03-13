@@ -29,7 +29,7 @@ Requirements for v3.0 Driver-Centric Model. Each maps to roadmap phases.
 
 - [x] **CSV-01**: System correctly detects CDCMS format in .xlsx Excel files (not just tab-separated .csv)
 - [x] **CSV-02**: User can see which drivers are found in the uploaded CSV before processing
-- [ ] **CSV-03**: User can select which drivers' routes to generate from a multi-driver CSV
+- [x] **CSV-03**: User can select which drivers' routes to generate from a multi-driver CSV
 - [x] **CSV-04**: System filters to "Allocated-Printed" OrderStatus by default
 - [x] **CSV-05**: Column order in CSV/XLSX does not affect parsing (column name matching only)
 
@@ -114,7 +114,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OPT-05 | Phase 19 | Pending |
 | CSV-01 | Phase 17 | Complete |
 | CSV-02 | Phase 17 | Complete |
-| CSV-03 | Phase 17 | Pending |
+| CSV-03 | Phase 17 | Complete |
 | CSV-04 | Phase 17 | Complete |
 | CSV-05 | Phase 17 | Complete |
 | ADDR-01 | Phase 18 | Pending |
