@@ -12,6 +12,7 @@ The driver app (PWA) calls this API to get today's route.
 """
 
 import hmac  # For timing-safe API key comparison (prevents timing attacks)
+import json
 import html as html_module  # For escaping user data in server-rendered HTML (XSS prevention)
 import logging
 import os
@@ -21,7 +22,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, time as dt_time, timedelta, timezone
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.security import APIKeyHeader
@@ -1240,56 +1241,142 @@ async def parse_upload(
 @limiter.limit("10/minute")
 async def upload_and_optimize(
     request: Request,
-    file: UploadFile = File(...),
+    file: UploadFile = File(None),
+    upload_token: str = Form(None),
+    selected_drivers: str = Form(None),
     session: AsyncSession = SessionDep,
 ):
     """Upload a CSV/Excel from CDCMS and get optimized routes.
 
-    This is the main workflow endpoint:
-    1. Parse the uploaded file into Orders
+    Supports two modes:
+    A. Direct upload (backward compatible): Send file in multipart form.
+    B. Two-step flow (Phase 17): Send upload_token from parse-upload plus
+       optional selected_drivers JSON array. The token references a file
+       already on the server, avoiding re-upload.
+
+    The endpoint:
+    1. Parse the uploaded/stored file into Orders
     2. Geocode any addresses without coordinates (cache results in DB)
     3. Run VROOM optimizer to assign orders to vehicles
     4. Persist everything to PostgreSQL (orders, routes, stops)
+
+    Args:
+        file: CSV/Excel file (required if upload_token not provided).
+        upload_token: UUID from parse-upload (skips file upload/save).
+        selected_drivers: JSON array of csv_name strings to generate routes for.
+            When provided, only these drivers' orders are optimized.
+            All orders are still geocoded regardless.
 
     Returns a summary with a run_id. Drivers then call
     GET /api/routes/{vehicle_id} to get their specific route.
     Requires X-API-Key header when API_KEY env var is set.
     """
-    # --- File validation (BEFORE any processing) ---
-    # SECURITY: validate file extension, content-type, and size before
-    # any CSV parsing, geocoding, or optimization begins.
-    filename = file.filename or ""
-    ext = pathlib.Path(filename).suffix.lower()
-
-    # Extension check with descriptive error
-    if ext not in ALLOWED_EXTENSIONS:
-        return error_response(
-            status_code=400,
-            error_code=ErrorCode.UPLOAD_INVALID_FORMAT,
-            user_message=f"Unsupported file type ({ext or 'none'}) -- use .csv, .xlsx, or .xls",
-            technical_message=f"Expected one of {sorted(ALLOWED_EXTENSIONS)}, got '{ext}'",
-            request_id=request_id_var.get(""),
-        )
-
-    # Content-type check (some browsers send odd types, so be lenient but block obvious mismatches)
-    content_type = file.content_type or ""
-    if content_type and content_type not in ALLOWED_CONTENT_TYPES:
-        return error_response(
-            status_code=400,
-            error_code=ErrorCode.UPLOAD_INVALID_FORMAT,
-            user_message=f"Unexpected content type ({content_type}) -- upload a CSV or Excel file",
-            technical_message=f"Allowed types: {sorted(ALLOWED_CONTENT_TYPES)}",
-            request_id=request_id_var.get(""),
-        )
-
-    suffix = ".csv" if ext == ".csv" else ".xlsx"
+    # --- Determine input mode: token-based or file-based ---
     tmp_path: str | None = None
     preprocessed_path: str | None = None
-    try:
+    filename: str = ""
+    token_based = False
+
+    # Parse selected_drivers JSON if provided
+    selected_driver_list: list[str] | None = None
+    if selected_drivers:
+        try:
+            selected_driver_list = json.loads(selected_drivers)
+            if not isinstance(selected_driver_list, list):
+                return error_response(
+                    status_code=400,
+                    error_code=ErrorCode.INVALID_REQUEST,
+                    user_message="selected_drivers must be a JSON array of driver names",
+                    technical_message=f"selected_drivers parsed to {type(selected_driver_list).__name__}, expected list",
+                    request_id=request_id_var.get(""),
+                )
+        except json.JSONDecodeError as e:
+            return error_response(
+                status_code=400,
+                error_code=ErrorCode.INVALID_REQUEST,
+                user_message="Invalid selected_drivers format -- expected a JSON array",
+                technical_message=f"json.JSONDecodeError: {e}",
+                request_id=request_id_var.get(""),
+            )
+
+    if upload_token:
+        # --- Token-based mode: load file from parse-upload step ---
+        token_data = _upload_tokens.get(upload_token)
+        if not token_data:
+            return error_response(
+                status_code=400,
+                error_code=ErrorCode.INVALID_REQUEST,
+                user_message="Upload session expired -- please re-upload the file",
+                technical_message=f"Upload token '{upload_token[:8]}...' not found in token store",
+                request_id=request_id_var.get(""),
+            )
+
+        # Check TTL
+        now = datetime.now(timezone.utc)
+        if now - token_data["created_at"] > _TOKEN_TTL:
+            # Clean up expired token
+            path = token_data.get("path")
+            if path and os.path.exists(path):
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+            del _upload_tokens[upload_token]
+            return error_response(
+                status_code=400,
+                error_code=ErrorCode.INVALID_REQUEST,
+                user_message="Upload session expired -- please re-upload the file",
+                technical_message=f"Token created at {token_data['created_at']} exceeded {_TOKEN_TTL} TTL",
+                request_id=request_id_var.get(""),
+            )
+
+        # Consume the token (one-time use)
+        tmp_path = token_data["path"]
+        filename = token_data["filename"]
+        del _upload_tokens[upload_token]
+        token_based = True
+
+        # Verify the file still exists on disk
+        if not tmp_path or not os.path.exists(tmp_path):
+            return error_response(
+                status_code=400,
+                error_code=ErrorCode.INVALID_REQUEST,
+                user_message="Upload session expired -- please re-upload the file",
+                technical_message=f"Token file '{tmp_path}' no longer exists on disk",
+                request_id=request_id_var.get(""),
+            )
+
+        logger.info("Token-based upload: loading stored file %s (token=%s)", filename, upload_token[:8])
+
+    elif file and file.filename:
+        # --- File-based mode (backward compatible) ---
+        filename = file.filename or ""
+        ext = pathlib.Path(filename).suffix.lower()
+
+        # Extension check with descriptive error
+        if ext not in ALLOWED_EXTENSIONS:
+            return error_response(
+                status_code=400,
+                error_code=ErrorCode.UPLOAD_INVALID_FORMAT,
+                user_message=f"Unsupported file type ({ext or 'none'}) -- use .csv, .xlsx, or .xls",
+                technical_message=f"Expected one of {sorted(ALLOWED_EXTENSIONS)}, got '{ext}'",
+                request_id=request_id_var.get(""),
+            )
+
+        # Content-type check
+        content_type = file.content_type or ""
+        if content_type and content_type not in ALLOWED_CONTENT_TYPES:
+            return error_response(
+                status_code=400,
+                error_code=ErrorCode.UPLOAD_INVALID_FORMAT,
+                user_message=f"Unexpected content type ({content_type}) -- upload a CSV or Excel file",
+                technical_message=f"Allowed types: {sorted(ALLOWED_CONTENT_TYPES)}",
+                request_id=request_id_var.get(""),
+            )
+
+        suffix = ".csv" if ext == ".csv" else ".xlsx"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             content = await file.read()
-            # SECURITY: enforce max upload size to prevent memory exhaustion.
-            # 10 MB is generous for CSV/Excel with 40-50 orders per day.
             if len(content) > MAX_UPLOAD_SIZE_BYTES:
                 size_mb = len(content) / (1024 * 1024)
                 max_mb = MAX_UPLOAD_SIZE_BYTES / (1024 * 1024)
@@ -1302,6 +1389,17 @@ async def upload_and_optimize(
                 )
             tmp.write(content)
             tmp_path = tmp.name
+    else:
+        # Neither token nor file provided
+        return error_response(
+            status_code=400,
+            error_code=ErrorCode.INVALID_REQUEST,
+            user_message="No file or upload token provided -- upload a CDCMS export file or provide an upload_token from a previous parse",
+            technical_message="Both file and upload_token are None/empty",
+            request_id=request_id_var.get(""),
+        )
+
+    try:
         # Step 1: Import orders from CSV/Excel
         # Auto-detect CDCMS format: if the file is tab-separated with CDCMS
         # column names (OrderNo, ConsumerAddress), run the preprocessor first
@@ -1309,7 +1407,7 @@ async def upload_and_optimize(
         # as a standard CSV with our expected column names.
         #
         # Why auto-detect instead of a separate endpoint?
-        # The employee workflow is: export from CDCMS → upload here. Adding
+        # The employee workflow is: export from CDCMS -> upload here. Adding
         # a preprocessing step would confuse non-technical users. The system
         # should "just work" with whatever file they upload.
         is_cdcms = _is_cdcms_format(tmp_path)
@@ -1746,7 +1844,33 @@ async def upload_and_optimize(
         # failures (ConnectError, TimeoutException) are retried automatically.
         # Permanent errors (HTTP 400 = bad input) are NOT retried.
         optimizer.optimize = optimizer_retry(optimizer.optimize)
-        assignment = optimizer.optimize(geocoded_orders, fleet)
+
+        # Phase 17: Filter geocoded orders by selected drivers (if specified).
+        # All orders are geocoded regardless (deselected drivers' orders are
+        # geocoded but NOT optimized). The delivery_man mapping comes from
+        # the preprocessed DataFrame, which has delivery_man per order_id.
+        orders_for_optimization = geocoded_orders
+        if selected_driver_list is not None and is_cdcms and not preprocessed_df.empty:
+            # Build order_id -> delivery_man mapping from preprocessed DataFrame
+            order_driver_map: dict[str, str] = {}
+            if "delivery_man" in preprocessed_df.columns:
+                for _, row in preprocessed_df.iterrows():
+                    oid = str(row.get("order_id", "")).strip()
+                    dm = str(row.get("delivery_man", "")).strip()
+                    if oid and dm:
+                        order_driver_map[oid] = dm
+
+            selected_set = set(selected_driver_list)
+            orders_for_optimization = [
+                o for o in geocoded_orders
+                if order_driver_map.get(o.order_id, "") in selected_set
+            ]
+            logger.info(
+                "Driver selection: %d of %d geocoded orders selected for optimization (%d drivers selected)",
+                len(orders_for_optimization), len(geocoded_orders), len(selected_set),
+            )
+
+        assignment = optimizer.optimize(orders_for_optimization, fleet)
 
         # Step 4: Persist to database
         run_id = await repo.save_optimization_run(
