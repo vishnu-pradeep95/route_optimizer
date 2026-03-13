@@ -491,9 +491,46 @@
   word-break: break-word;
 }
 
+.stop-address-raw {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  word-break: break-word;
+  letter-spacing: 0.02em;
+}
+
 .stop-meta {
   font-size: 12px;
   color: var(--color-text-muted);
+}
+
+/* ---- Driver Preview (Phase 17) ---- */
+
+.driver-preview {
+  animation: fadeIn 0.3s ease;
+}
+
+.driver-preview-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.driver-preview-header h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: 4px;
+}
+
+/* Reactivated badge purple color override */
+.tw\:badge-reactivated {
+  background-color: oklch(55% 0.2 310);
+  color: white;
+}
+
+/* Compact stats bar on mobile */
+.driver-preview-stats {
+  overflow-x: auto;
 }
 
 /* ---- Responsive ---- */
@@ -518,4 +555,9 @@
   }
 
   /* Route cards and stats now use DaisyUI responsive classes */
+
+  /* Driver preview responsive */
+  .driver-preview-stats .tw\:stat {
+    padding: 0.375rem 0.5rem;
+  }
 }

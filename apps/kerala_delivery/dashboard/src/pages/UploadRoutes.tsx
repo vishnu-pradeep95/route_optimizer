@@ -15,6 +15,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import {
   uploadAndOptimize,
+  parseUpload,
+  processSelected,
   fetchRoutes,
   fetchRouteDetail,
   fetchGoogleMapsRoute,
@@ -23,13 +25,13 @@ import {
   type UploadResponse,
   type GoogleMapsRouteResponse,
 } from "../lib/api";
-import type { RouteSummary, RouteDetail, ImportFailure, DuplicateLocationWarning } from "../types";
+import type { RouteSummary, RouteDetail, ImportFailure, DuplicateLocationWarning, ParsePreviewResponse, DriverPreview } from "../types";
 import type { ApiError } from "../lib/errors";
 import { isApiError } from "../lib/errors";
 import { StatusBadge, deriveRouteStatus } from "../components/StatusBadge";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ErrorTable } from "../components/ErrorTable";
-import { FileText, Printer, CheckCircle } from "lucide-react";
+import { FileText, Printer, CheckCircle, ArrowLeft, ArrowRight } from "lucide-react";
 import "./UploadRoutes.css";
 
 // --- Import Summary Component ---
@@ -268,11 +270,28 @@ function DuplicateWarnings({ warnings }: { warnings: DuplicateLocationWarning[] 
 
 /** Workflow states — drives the UI transitions. */
 type WorkflowState =
-  | "idle"        // No file selected, show drop zone
-  | "selected"    // File chosen, ready to upload
-  | "uploading"   // Upload + optimization in progress
-  | "success"     // Routes generated, showing results
-  | "error";      // Something went wrong
+  | "idle"            // No file selected, show drop zone
+  | "selected"        // File chosen, ready to parse
+  | "parsing"         // Parsing file (fast)
+  | "driver-preview"  // Show driver checkbox table
+  | "uploading"       // Geocoding + optimization in progress
+  | "success"         // Routes generated, showing results
+  | "error";          // Something went wrong
+
+/** Status badge visual mapping for driver preview. */
+const STATUS_BADGE_CLASS: Record<DriverPreview["status"], string> = {
+  existing: "tw:badge-success",
+  new: "tw:badge-info",
+  matched: "tw:badge-warning",
+  reactivated: "tw:badge-secondary",
+};
+
+const STATUS_BADGE_LABEL: Record<DriverPreview["status"], string> = {
+  existing: "Existing",
+  new: "New",
+  matched: "Matched",
+  reactivated: "Reactivated",
+};
 
 export function UploadRoutes() {
   // --- File upload state ---
@@ -282,6 +301,10 @@ export function UploadRoutes() {
   const [apiError, setApiError] = useState<ApiError | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- Driver preview state (Phase 17) ---
+  const [parseResult, setParseResult] = useState<ParsePreviewResponse | null>(null);
+  const [selectedDrivers, setSelectedDrivers] = useState<Set<string>>(new Set());
 
   // --- Results state ---
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
@@ -357,17 +380,46 @@ export function UploadRoutes() {
     setWorkflowState("selected");
   };
 
-  // --- Upload & Optimize ---
+  // --- Upload & Parse (Step 1: parse file, show driver preview) ---
   const handleUpload = useCallback(async () => {
     if (!selectedFile) return;
 
-    setWorkflowState("uploading");
-    setUploadProgress("Uploading file...");
+    setWorkflowState("parsing");
+    setUploadProgress("Parsing file...");
 
     try {
-      // Step 1: Upload and optimize
-      setUploadProgress("Processing orders & optimizing routes...");
-      const result = await uploadAndOptimize(selectedFile);
+      const result = await parseUpload(selectedFile);
+      setParseResult(result);
+      // Select all drivers by default (per CONTEXT.md decision)
+      setSelectedDrivers(new Set(result.drivers.map(d => d.csv_name)));
+      setWorkflowState("driver-preview");
+      setUploadProgress("");
+    } catch (err) {
+      if (err instanceof ApiUploadError) {
+        setApiError(err.apiError);
+      } else if (isApiError(err)) {
+        setApiError(err as ApiError);
+      } else {
+        setApiError(makeSyntheticError(
+          "PARSE_FAILED",
+          err instanceof Error ? err.message : "Failed to parse file. Please try again."
+        ));
+      }
+      setWorkflowState("error");
+      setUploadProgress("");
+    }
+  }, [selectedFile]);
+
+  // --- Process Selected Drivers (Step 2: geocode + optimize selected) ---
+  const handleProcessSelected = useCallback(async () => {
+    if (!parseResult) return;
+
+    setWorkflowState("uploading");
+    setUploadProgress("Processing orders & optimizing routes...");
+
+    try {
+      const driverList = Array.from(selectedDrivers);
+      const result = await processSelected(parseResult.upload_token, driverList);
       setUploadResult(result);
 
       // Derive geocoded count with backward-compat fallback
@@ -375,12 +427,12 @@ export function UploadRoutes() {
 
       // Only fetch routes if some orders were geocoded successfully
       if (geocodedCount > 0) {
-        // Step 2: Fetch route summaries
+        // Fetch route summaries
         setUploadProgress("Loading route details...");
         const routesRes = await fetchRoutes();
         setRoutes(routesRes.routes);
 
-        // Step 3: Fetch details for all vehicles in parallel
+        // Fetch details for all vehicles in parallel
         const detailResults = await Promise.allSettled(
           routesRes.routes.map((r) => fetchRouteDetail(r.vehicle_id))
         );
@@ -392,7 +444,7 @@ export function UploadRoutes() {
         });
         setRouteDetails(detailsMap);
 
-        // Step 4: Fetch QR codes for all vehicles in parallel
+        // Fetch QR codes for all vehicles in parallel
         setUploadProgress("Generating QR codes...");
         const qrResults = await Promise.allSettled(
           routesRes.routes.map((r) => fetchGoogleMapsRoute(r.vehicle_id))
@@ -416,13 +468,42 @@ export function UploadRoutes() {
       } else {
         setApiError(makeSyntheticError(
           "INTERNAL_ERROR",
-          err instanceof Error ? err.message : "Upload failed. Please try again."
+          err instanceof Error ? err.message : "Processing failed. Please try again."
         ));
       }
       setWorkflowState("error");
       setUploadProgress("");
     }
-  }, [selectedFile]);
+  }, [parseResult, selectedDrivers]);
+
+  // --- Back to upload (clean reset) ---
+  const handleBackToUpload = useCallback(() => {
+    setWorkflowState("idle");
+    setSelectedFile(null);
+    setParseResult(null);
+    setSelectedDrivers(new Set());
+    setApiError(null);
+    setUploadProgress("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
+
+  // --- Driver selection handlers ---
+  const toggleDriver = useCallback((csvName: string) => {
+    setSelectedDrivers(prev => {
+      const next = new Set(prev);
+      if (next.has(csvName)) next.delete(csvName);
+      else next.add(csvName);
+      return next;
+    });
+  }, []);
+
+  const toggleAll = useCallback(() => {
+    if (!parseResult) return;
+    setSelectedDrivers(prev => {
+      if (prev.size === parseResult.drivers.length) return new Set();
+      return new Set(parseResult.drivers.map(d => d.csv_name));
+    });
+  }, [parseResult]);
 
   // --- Load existing routes on mount (if any) ---
   useEffect(() => {
@@ -471,12 +552,15 @@ export function UploadRoutes() {
   const handleReset = () => {
     setWorkflowState("idle");
     setSelectedFile(null);
+    setParseResult(null);
+    setSelectedDrivers(new Set());
     setUploadResult(null);
     setRoutes([]);
     setRouteDetails(new Map());
     setQrData(new Map());
     setApiError(null);
     setExpandedVehicle(null);
+    setUploadProgress("");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -490,8 +574,8 @@ export function UploadRoutes() {
   // --- Render ---
   return (
     <div className="upload-routes">
-      {/* Upload Section — always visible unless showing results */}
-      {workflowState !== "success" && (
+      {/* Upload Section — visible in idle, selected, parsing, and error states */}
+      {(workflowState === "idle" || workflowState === "selected" || workflowState === "parsing" || workflowState === "error") && (
         <div className="upload-section">
           <div className="upload-header">
             <h2>Upload CDCMS Orders</h2>
@@ -504,11 +588,11 @@ export function UploadRoutes() {
           <div
             className={`drop-zone ${isDragOver ? "drag-over" : ""} ${
               workflowState === "selected" ? "has-file" : ""
-            } ${workflowState === "uploading" ? "uploading" : ""}`}
+            } ${workflowState === "parsing" ? "uploading" : ""}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            onClick={() => workflowState !== "uploading" && fileInputRef.current?.click()}
+            onClick={() => workflowState !== "parsing" && fileInputRef.current?.click()}
           >
             <input
               ref={fileInputRef}
@@ -518,7 +602,7 @@ export function UploadRoutes() {
               className="file-input-hidden"
             />
 
-            {workflowState === "uploading" ? (
+            {workflowState === "parsing" ? (
               <div className="upload-progress">
                 <div className="spinner" />
                 <span className="progress-text">{uploadProgress}</span>
@@ -554,15 +638,15 @@ export function UploadRoutes() {
                 <span className="drop-text">
                   Drop CDCMS export file here or click to browse
                 </span>
-                <span className="drop-hint">.csv, .xlsx, or .xls — max 10 MB</span>
+                <span className="drop-hint">.csv, .xlsx, or .xls -- max 10 MB</span>
               </div>
             )}
           </div>
 
-          {/* Upload Button */}
+          {/* Upload & Preview Button */}
           {workflowState === "selected" && (
             <button className="upload-btn" onClick={handleUpload}>
-              Generate Routes & QR Codes
+              Upload & Preview
             </button>
           )}
 
@@ -577,6 +661,164 @@ export function UploadRoutes() {
               }}
             />
           )}
+        </div>
+      )}
+
+      {/* Driver Preview Section — shown after parse, before processing */}
+      {workflowState === "driver-preview" && parseResult && (
+        <div className="upload-section driver-preview">
+          <div className="driver-preview-header">
+            <h2>Driver Preview</h2>
+            <p className="tw:text-sm" style={{ color: "var(--color-text-muted)" }}>
+              {parseResult.filename}
+            </p>
+          </div>
+
+          {/* Stats Bar */}
+          <div className="tw:stats tw:stats-horizontal tw:shadow tw:w-full tw:mb-4 driver-preview-stats">
+            <div className="tw:stat tw:py-2 tw:px-4">
+              <div className="tw:stat-title tw:text-xs">Drivers</div>
+              <div className="tw:stat-value tw:text-lg numeric">{parseResult.drivers.length}</div>
+            </div>
+            <div className="tw:stat tw:py-2 tw:px-4">
+              <div className="tw:stat-title tw:text-xs">Orders</div>
+              <div className="tw:stat-value tw:text-lg numeric">{parseResult.filtered_rows}</div>
+            </div>
+            {parseResult.drivers.filter(d => d.status === "new").length > 0 && (
+              <div className="tw:stat tw:py-2 tw:px-4">
+                <div className="tw:stat-title tw:text-xs">New</div>
+                <div className="tw:stat-value tw:text-lg tw:text-info numeric">
+                  {parseResult.drivers.filter(d => d.status === "new").length}
+                </div>
+              </div>
+            )}
+            {parseResult.drivers.filter(d => d.status === "matched").length > 0 && (
+              <div className="tw:stat tw:py-2 tw:px-4">
+                <div className="tw:stat-title tw:text-xs">Matched</div>
+                <div className="tw:stat-value tw:text-lg tw:text-warning numeric">
+                  {parseResult.drivers.filter(d => d.status === "matched").length}
+                </div>
+              </div>
+            )}
+            {parseResult.drivers.filter(d => d.status === "reactivated").length > 0 && (
+              <div className="tw:stat tw:py-2 tw:px-4">
+                <div className="tw:stat-title tw:text-xs">Reactivated</div>
+                <div className="tw:stat-value tw:text-lg numeric" style={{ color: "oklch(55% 0.2 310)" }}>
+                  {parseResult.drivers.filter(d => d.status === "reactivated").length}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Select All / Deselect All toggle */}
+          <div className="tw:flex tw:items-center tw:justify-between tw:mb-3">
+            <label className="tw:flex tw:items-center tw:gap-2 tw:cursor-pointer">
+              <input
+                type="checkbox"
+                className="tw:checkbox tw:checkbox-sm"
+                checked={selectedDrivers.size === parseResult.drivers.length}
+                ref={(el) => {
+                  if (el) el.indeterminate = selectedDrivers.size > 0 && selectedDrivers.size < parseResult.drivers.length;
+                }}
+                onChange={toggleAll}
+              />
+              <span className="tw:text-sm tw:font-semibold">
+                {selectedDrivers.size === parseResult.drivers.length
+                  ? "Deselect All"
+                  : `Select All (${parseResult.drivers.length})`}
+              </span>
+            </label>
+            <span className="tw:text-sm" style={{ color: "var(--color-text-muted)" }}>
+              {selectedDrivers.size} of {parseResult.drivers.length} selected
+            </span>
+          </div>
+
+          {/* Driver Checkbox Table */}
+          <div className="tw:overflow-x-auto tw:rounded-lg tw:border tw:border-base-300">
+            <table className="tw:table tw:table-sm">
+              <thead>
+                <tr>
+                  <th className="tw:w-10"></th>
+                  <th>Driver</th>
+                  <th className="tw:text-right">Orders</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {parseResult.drivers.map(d => (
+                  <tr key={d.csv_name} className={selectedDrivers.has(d.csv_name) ? "" : "tw:opacity-50"}>
+                    <th>
+                      <label>
+                        <input
+                          type="checkbox"
+                          className="tw:checkbox tw:checkbox-sm"
+                          checked={selectedDrivers.has(d.csv_name)}
+                          onChange={() => toggleDriver(d.csv_name)}
+                        />
+                      </label>
+                    </th>
+                    <td>
+                      <div className="tw:font-medium">{d.display_name}</div>
+                      {d.status === "matched" && d.matched_to && d.match_score != null && (
+                        <div className="tw:text-xs tw:pl-4 tw:mt-0.5" style={{ color: "var(--color-warning, #d97706)" }}>
+                          &ldquo;{d.csv_name}&rdquo; &rarr; {d.matched_to} ({d.match_score}%)
+                        </div>
+                      )}
+                      {d.status === "reactivated" && d.matched_to && (
+                        <div className="tw:text-xs tw:pl-4 tw:mt-0.5" style={{ color: "oklch(55% 0.2 310)" }}>
+                          Reactivated: was deactivated
+                        </div>
+                      )}
+                    </td>
+                    <td className="tw:text-right numeric tw:font-semibold">{d.order_count}</td>
+                    <td>
+                      <span className={`tw:badge tw:badge-sm ${STATUS_BADGE_CLASS[d.status]}`}
+                        style={d.status === "reactivated" ? { backgroundColor: "oklch(55% 0.2 310)", color: "white" } : undefined}
+                      >
+                        {STATUS_BADGE_LABEL[d.status]}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="tw:flex tw:justify-between tw:mt-4 tw:gap-3">
+            <button
+              className="tw:btn tw:btn-ghost tw:gap-1"
+              onClick={handleBackToUpload}
+            >
+              <ArrowLeft size={16} /> Back
+            </button>
+            <button
+              className="upload-btn tw:flex-1 tw:flex tw:items-center tw:justify-center tw:gap-2"
+              onClick={handleProcessSelected}
+              disabled={selectedDrivers.size === 0}
+              style={selectedDrivers.size === 0 ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+            >
+              Process Selected ({selectedDrivers.size}) <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Progress Section — shown during geocoding/optimization */}
+      {workflowState === "uploading" && (
+        <div className="upload-section">
+          <div className="upload-header">
+            <h2>Processing Orders</h2>
+            <p className="upload-subtitle">
+              Geocoding addresses and optimizing routes for {selectedDrivers.size} driver{selectedDrivers.size !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <div className="drop-zone uploading">
+            <div className="upload-progress">
+              <div className="spinner" />
+              <span className="progress-text">{uploadProgress}</span>
+            </div>
+          </div>
         </div>
       )}
 
@@ -752,6 +994,9 @@ export function UploadRoutes() {
                                   <span className="stop-seq">{stop.sequence}</span>
                                   <div className="stop-info">
                                     <span className="stop-address">{stop.address}</span>
+                                    {stop.address_raw && stop.address_raw !== stop.address && (
+                                      <span className="stop-address-raw">{stop.address_raw}</span>
+                                    )}
                                     <span className="stop-meta">
                                       <span className="numeric">{stop.weight_kg} kg</span> ·{" "}
                                       <span className="numeric">{stop.quantity} cyl</span> ·{" "}

@@ -452,6 +452,55 @@ export async function parseUpload(file: File): Promise<ParsePreviewResponse> {
   return (await response.json()) as ParsePreviewResponse;
 }
 
+/**
+ * Process selected drivers from a previously parsed upload.
+ *
+ * Step 2 of the two-step upload flow (Phase 17):
+ * Uses the upload_token from parseUpload() to reference the file
+ * already on the server, avoiding re-upload.
+ *
+ * @param uploadToken - Token from parseUpload() response
+ * @param selectedDrivers - Array of csv_name values to generate routes for
+ */
+export async function processSelected(
+  uploadToken: string,
+  selectedDrivers: string[],
+): Promise<UploadResponse> {
+  const url = `${BASE_URL}/api/upload-orders`;
+  const formData = new FormData();
+  formData.append("upload_token", uploadToken);
+  formData.append("selected_drivers", JSON.stringify(selectedDrivers));
+
+  const headers: Record<string, string> = {};
+  const apiKey = import.meta.env.VITE_API_KEY;
+  if (apiKey) {
+    headers["X-API-Key"] = apiKey;
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    try {
+      const parsed = JSON.parse(errorBody);
+      if (isApiError(parsed)) {
+        throw new ApiUploadError(parsed);
+      }
+    } catch (parseErr) {
+      if (parseErr instanceof ApiUploadError) throw parseErr;
+    }
+    throw new Error(
+      `Processing failed (${response.status}): ${errorBody || response.statusText}`
+    );
+  }
+
+  return (await response.json()) as UploadResponse;
+}
+
 // --- QR Code / Google Maps URLs ---
 
 /** A segment of a route (one Google Maps URL, max 11 stops). */
