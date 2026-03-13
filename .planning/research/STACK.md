@@ -1,253 +1,331 @@
-# Stack Research: Address Preprocessing Pipeline
+# Technology Stack: v3.0 Driver-Centric Model
 
-**Domain:** Dictionary-powered address splitting, geocode validation, confidence UI
-**Researched:** 2026-03-10
-**Confidence:** HIGH
+**Project:** Kerala LPG Delivery Route Optimizer
+**Researched:** 2026-03-12
+**Milestone:** v3.0 Driver-Centric Model
+**Overall Confidence:** HIGH
 
-## Recommended Stack Additions
+## Guiding Principle: Minimal Additions
 
-This project already has a mature Python/FastAPI + React/TypeScript stack. The address preprocessing pipeline requires **one new runtime dependency** (RapidFuzz) and **zero new build-time dependencies**. Everything else uses stdlib, existing packages, or free external APIs called only at dictionary build time.
+This milestone adds significant features (driver model, per-driver TSP, Google Maps route validation, geocode cache management, dashboard settings) but requires **zero new Python dependencies** and **zero new npm packages**. Every capability can be built with what already exists in the stack. The v3.0 changes are architectural and data-model level, not technology-level.
 
-### New Runtime Dependency
+---
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| RapidFuzz | 3.14.3 | Fuzzy string matching for place name dictionary lookup | C++ core with Python bindings -- 10-100x faster than pure-Python alternatives (thefuzz/fuzzywuzzy). MIT license. Supports Python 3.10-3.14. Wheel size ~1-4MB depending on platform. Used for matching CDCMS transliteration variants (e.g., "RAYANRANGOTH" against dictionary entry "RAYARANGOTH") at 85% threshold. The `fuzz.ratio()` and `process.extractOne()` functions are the primary APIs needed. |
+## Recommended Stack (What to Use for Each Feature)
 
-### Existing Dependencies (No Changes Needed)
+### 1. Driver-Centric Model (Vehicle-to-Driver Rename)
 
-| Technology | Current Version | Purpose in New Feature | Notes |
-|------------|-----------------|------------------------|-------|
-| Python stdlib `math` | 3.12 | Haversine distance calculation (30km zone check) | `math.radians`, `math.sin`, `math.cos`, `math.atan2` -- ~10 lines. Accuracy within 0.5% for distances under 100km. No external library needed. |
-| Python stdlib `re` | 3.12 | Improved regex for lowercase-to-uppercase word splitting | Adding `re.sub(r"([a-z])([A-Z])", ...)` alongside existing digit-to-uppercase pattern at `cdcms_preprocessor.py:269`. |
-| Python stdlib `json` | 3.12 | Loading static place name dictionary from `data/place_names_vatakara.json` | One-time load on first use, cached in memory. ~200-300 entries, <50KB file. |
-| `requests` | 2.32.5 | HTTP calls in dictionary build script (OSM Overpass + PostalPinCode APIs) | Already in requirements.txt. Only used in `scripts/build_place_dictionary.py` (offline, not at runtime). |
-| Pydantic | 2.12.5 | `Location` model already has `geocode_confidence` field | No model changes needed. Just expose existing field in API response JSON. |
-| FastAPI | 0.129.1 | Adding `geocode_confidence` and `location_approximate` to route stop response | Two new fields in existing dict comprehension in `api/main.py`. |
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| SQLAlchemy 2.0 | 2.0.46 (existing) | New `DriverDB` model + schema evolution | Already has a `DriverDB` model in `core/database/models.py` with `name`, `phone`, `vehicle_id` FK, `is_active`. Extend it rather than replace. |
+| Alembic | 1.18.4 (existing) | Migration: add columns to `drivers` table, add `driver_id` FK to `routes`, update `optimization_runs` | Async migration infrastructure already proven across 6 migrations. |
+| Pydantic | 2.12.5 (existing) | New `Driver` Pydantic model in `core/models/` | Follow existing pattern: DB model (`DriverDB`) + Pydantic model (`Driver`) + repository functions. |
 
-### External APIs (Build-Time Only, Not Runtime)
+**What to change, not add:**
+- The existing `DriverDB` ORM model already exists with the right fields (`name`, `phone`, `vehicle_id`, `is_active`). No new table -- just add columns and make it a first-class entity.
+- The `RouteDB` model already has `driver_name: str`. Evolve it to `driver_id: UUID` FK referencing `drivers.id`, keeping `driver_name` as a denormalized display field.
+- The `VehicleDB` model stays. Vehicles are still physical assets. The conceptual shift is: routes belong to **drivers**, not vehicles. Drivers may or may not have an assigned vehicle.
+- CDCMS `DeliveryMan` column is already parsed by `cdcms_preprocessor.py` (line 58: `CDCMS_COL_DELIVERY_MAN = "DeliveryMan"`). Currently stored as `delivery_man` in preprocessed DataFrame. Wire this to auto-create/lookup `DriverDB` records.
 
-These are called only by `scripts/build_place_dictionary.py` to generate the static JSON dictionary. The dictionary is committed to the repo. Runtime never calls these APIs.
+**Confidence:** HIGH -- all components exist in the codebase. This is a wiring change, not a technology change.
 
-| API | Endpoint | Purpose | Auth | Rate Limit | Cost |
-|-----|----------|---------|------|------------|------|
-| OSM Overpass | `https://overpass-api.de/api/interpreter` | Fetch hamlet/village/neighbourhood/town nodes within 30km of depot | None | 10,000 queries/day, 1GB/day | Free (ODbL license) |
-| PostalPinCode | `https://api.postalpincode.in/pincode/{pincode}` | Fetch post office names for PIN codes 673101-673110 | None | 1,000 req/hour/IP | Free |
+### 2. Per-Driver TSP Optimization
 
-#### Overpass Query (for reference)
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| VROOM | Docker `vroomvrp/vroom-docker` (existing) | TSP optimization per driver | VROOM handles single-vehicle optimization natively. Submit 1 vehicle + N jobs = TSP solve. Already proven with the multi-vehicle CVRP flow. |
+| OSRM | v5.27.1 Docker (existing) | Distance matrix computation for VROOM | No changes needed. VROOM talks to OSRM internally. |
+
+**Architecture decision: VROOM TSP, not a custom TSP solver.**
+
+VROOM already solves TSP as a special case of VRP. When you submit a VROOM request with exactly 1 vehicle and N jobs, VROOM solves the Travelling Salesman Problem for that vehicle. The existing `VroomAdapter._build_request()` builds the vehicles/jobs arrays -- calling it N times (once per driver) with a single vehicle each time produces N independent TSP solutions.
+
+**Why NOT add OR-Tools or a custom nearest-neighbor solver:**
+- VROOM already handles this exact case in milliseconds
+- The existing `VroomAdapter` code, error handling, safety multiplier, and response parsing all work unchanged
+- Adding OR-Tools would introduce a 200+ MB dependency (google-ortools) for no benefit
+- A custom nearest-neighbor heuristic would give worse route quality than VROOM's meta-heuristics
+
+**Implementation approach:**
+1. Group orders by driver (from CDCMS `DeliveryMan` column)
+2. For each driver's order set, create a single `Vehicle` with the driver's depot
+3. Call `VroomAdapter.optimize(driver_orders, [driver_vehicle])` per driver
+4. Merge results into a combined `RouteAssignment`
+
+This is a ~50-line wrapper around the existing optimizer, not a new optimization engine.
+
+**Confidence:** HIGH -- tested the concept by reading VROOM API docs. Single-vehicle requests are explicitly supported. The existing adapter handles this without modification.
+
+### 3. Google Maps Route Validation
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| httpx | 0.28.1 (existing) | HTTP POST to Google Routes API `computeRoutes` endpoint | Already used for OSRM and VROOM API calls throughout the codebase. No new HTTP library needed. |
+| Google Routes API | v2 (Compute Routes) | Compare OSRM route distance/duration with Google's estimate | Replaces the deprecated Directions API. POST-based with field masking for efficient responses. |
+
+**Why Google Routes API, not Directions API:**
+- Directions API and Distance Matrix API were deprecated (moved to Legacy status) on March 1, 2025
+- Routes API supports 25 intermediate waypoints (vs 10 for legacy Directions)
+- Routes API uses POST with JSON body (cleaner than GET with URL params)
+- Same pricing tier for basic use: $5 per 1,000 requests (Essentials SKU)
+- $200/month free credit covers 40,000 geocoding requests OR separate Compute Routes budget
+
+**API integration details:**
 
 ```
-[out:json][timeout:30];
-(
-  node["place"~"hamlet|village|neighbourhood|town|suburb"](around:30000,11.6244,75.5796);
-);
-out body;
+Endpoint: POST https://routes.googleapis.com/directions/v2:computeRoutes
+Headers:
+  X-Goog-Api-Key: {GOOGLE_MAPS_API_KEY}  # Same key as geocoding
+  X-Goog-FieldMask: routes.distanceMeters,routes.duration
+  Content-Type: application/json
+Body:
+  {
+    "origin": {"location": {"latLng": {"latitude": N, "longitude": N}}},
+    "destination": {"location": {"latLng": {"latitude": N, "longitude": N}}},
+    "intermediates": [  # waypoints
+      {"location": {"latLng": {"latitude": N, "longitude": N}}}
+    ],
+    "travelMode": "DRIVE",
+    "units": "METRIC"
+  }
 ```
 
-This returns place name nodes with lat/lon and optional `name:ml` (Malayalam) tags. Single query, returns ~200-300 results for the Vatakara delivery zone.
+**Pricing impact:**
+- Essentials (basic routing, up to 10 waypoints): $5 per 1,000 requests
+- Pro (11-25 waypoints or traffic-aware): $10 per 1,000 requests
+- Most driver routes have <10 stops, so Essentials tier applies
+- At 13 drivers/day = 13 validation requests/day = ~390/month = well within free tier
+- Do NOT request `TRAFFIC_AWARE` routing preference -- it bumps to Pro tier ($10/1000) and is unnecessary for validation
 
-#### PostalPinCode Query (for reference)
+**Implementation approach:**
+- New module: `core/routing/google_routes_adapter.py` implementing the `RoutingEngine` protocol
+- Call after VROOM optimization completes, for each route
+- Compare OSRM distance/duration with Google distance/duration
+- Flag routes where Google's estimate diverges by >20% as "needs review"
+- This is a confidence metric, not a blocker -- OSRM routes are used regardless
+- Store comparison results in the route response for dashboard display
 
-```
-GET https://api.postalpincode.in/pincode/673101
-GET https://api.postalpincode.in/pincode/673102
-... (10 PIN codes total, ~15 requests including retries)
-```
+**What NOT to do:**
+- Do NOT install `googlemaps` Python package. It wraps the legacy Directions API. Use raw httpx POST to the Routes API endpoint directly. This matches the existing pattern (GoogleGeocoder uses httpx, VroomAdapter uses httpx, OsrmAdapter uses httpx).
+- Do NOT use `TRAFFIC_AWARE` or `TRAFFIC_AWARE_OPTIMAL` routing preferences. They double the cost ($10/1000) and add latency. For validation purposes, basic routing is sufficient.
+- Do NOT request polyline geometry. We only need `distanceMeters` and `duration` for comparison. Polylines would waste bandwidth and processing.
 
-Returns JSON array with `PostOffice` objects containing `Name`, `Pincode`, `District`, `State` fields. No coordinates provided -- geocode post office names via OSM results or the existing Google geocoding cache.
+**Confidence:** HIGH -- verified endpoint URL, request format, pricing tiers, and field mask headers via official Google documentation.
 
-### Driver PWA (No New Dependencies)
+### 4. Geocode Cache Export/Import
 
-| Technology | Purpose | Notes |
-|------------|---------|-------|
-| Existing DaisyUI `tw:badge` | "Approx. location" warning badge on hero card | `tw:badge-warning tw:badge-sm` -- already in the design system |
-| Existing vanilla JS | Conditional rendering based on `location_approximate` boolean from API | Simple `style="display: ${stop.location_approximate ? 'inline-flex' : 'none'}"` |
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Python stdlib `json` | 3.12 (existing) | JSON export/import format for geocode cache | Human-readable, inspectable, and the cache is small (~400 entries currently). |
+| Python stdlib `csv` | 3.12 (existing) | CSV export format (alternative to JSON) | For users who want to open the cache in Excel for inspection. |
+| SQLAlchemy 2.0 | 2.0.46 (existing) | Bulk read/write of `geocode_cache` table | Repository already has `get_cached_geocode()` and `save_geocode_cache()`. Add `export_all_geocodes()` and `import_geocodes_batch()`. |
+| GeoAlchemy2 | 0.18.1 (existing) | Point geometry serialization for export | `to_shape()` already used throughout the codebase. |
 
-No new CSS, no new JS libraries, no build step changes.
-
-### Dashboard (No Changes in This Milestone)
-
-The React dashboard does not need changes for this feature. Confidence data flows through the API to the Driver PWA only.
-
-## Optional Future Dependency (Approach B -- NER Model)
-
-Only install if Approach A (dictionary + regex) fails to meet accuracy targets (>10% geocode validation failures or >5% centroid fallbacks).
-
-| Technology | Version | Purpose | Why Optional |
-|------------|---------|---------|--------------|
-| transformers | >=4.40 | Hugging Face model loading and tokenization | ~200MB installed. Only needed if dictionary approach proves insufficient. |
-| torch (CPU-only) | >=2.0 | PyTorch inference runtime for IndicBERT NER model | ~200MB for CPU-only wheel. Adds significant Docker image size (~400MB+). |
-| shiprocket-ai/open-indicbert-indian-address-ner | latest | Indian address NER: 32.9M params, 11 entity types (building_name, city, locality, landmarks, road, state, pincode, sub_locality, floor, house_details, country), Apache 2.0 | ~396MB model download on first use. 23 labels (BIO tagging scheme). CPU inference ~50ms/address. |
-
-**Smaller alternative considered:** `shiprocket-ai/open-tinybert-indian-address-ner` -- 66.4M params, TinyBERT-based (6 layers vs 12). F1=0.94 micro. Same entity types. ~761MB on disk (F32 tensors -- larger despite fewer layers).
-
-**Recommendation if NER is needed:** Use the IndicBERT variant (smaller disk footprint at 396MB vs 761MB, 32.9M vs 66.4M params). Install as optional dependency group:
-
-```toml
-# In pyproject.toml (not requirements.txt)
-[project.optional-dependencies]
-ner = ["transformers>=4.40", "torch>=2.0"]
-```
-
-Code must gracefully handle `ImportError` when these are not installed. The NER path should only be invoked when the dictionary-based splitter finds no known place names (slow path, ~50ms) while dictionary matching handles the common case (fast path, ~1ms).
-
-## Installation
-
-```bash
-# Single new runtime dependency
-pip install rapidfuzz==3.14.3
-
-# Add to requirements.txt (one line):
-# rapidfuzz==3.14.3
+**Export format (JSON):**
+```json
+{
+  "version": 1,
+  "exported_at": "2026-03-12T10:30:00Z",
+  "count": 387,
+  "entries": [
+    {
+      "address_raw": "...",
+      "address_norm": "...",
+      "latitude": 11.624,
+      "longitude": 75.579,
+      "source": "google",
+      "confidence": 0.95,
+      "hit_count": 12,
+      "created_at": "2026-01-15T...",
+      "last_used_at": "2026-03-10T..."
+    }
+  ]
+}
 ```
 
-### Docker Impact
+**Why JSON, not pg_dump:**
+- pg_dump requires PostgreSQL client tools and knowledge of connection strings
+- JSON is portable -- can be loaded into a fresh system, a different PostgreSQL instance, or even a different database entirely
+- The office user can email the file or copy it on a USB drive
+- Human-inspectable for debugging
 
-- **Image size increase:** ~1-4MB (RapidFuzz wheel). Negligible against current image size.
-- **Build time increase:** ~2-3 seconds for pip install. Negligible.
-- **No new system packages** needed in Dockerfile. RapidFuzz ships pre-built wheels for `python:3.12-slim` (linux/amd64). No gcc, no C headers needed at install time.
-- **No Dockerfile changes needed.** The dictionary file at `data/place_names_vatakara.json` is accessible inside the container via the existing `./data:/app/data` bind mount in `docker-compose.yml`.
+**API endpoints:**
+- `GET /api/geocode-cache/export` -- returns JSON file download
+- `POST /api/geocode-cache/import` -- accepts JSON file upload, merges with existing cache
+- `GET /api/geocode-cache/stats` -- returns cache statistics (total entries, source breakdown, oldest/newest, total hit count)
+
+**Confidence:** HIGH -- no new technology. Standard repository pattern with JSON serialization.
+
+### 5. Dashboard Settings Management
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| React 19 | 19.2.0 (existing) | Settings page component | New page in the dashboard sidebar. |
+| DaisyUI 5 | 5.5.19 (existing) | Form inputs (text, toggle), cards, tabs | Existing component library already used throughout the dashboard. |
+| FastAPI | 0.129.1 (existing) | Settings API endpoints | `GET /api/settings`, `PUT /api/settings` |
+| PostgreSQL | 15 (existing) | `settings` table for key-value pairs | Simple table: `key VARCHAR PRIMARY KEY, value TEXT, updated_at TIMESTAMPTZ`. |
+
+**API key management approach: Server-side storage with masked display.**
+
+The Google Maps API key is currently read from `GOOGLE_MAPS_API_KEY` environment variable at API startup. For the dashboard settings feature:
+
+1. Add a `settings` table to PostgreSQL (key-value store)
+2. The dashboard sends the API key to `PUT /api/settings` with key `google_maps_api_key`
+3. The API stores it in the database (NOT encrypted -- it's a server-side secret that the API itself needs in cleartext to call Google)
+4. The API reads the key from database on each request, falling back to the environment variable
+5. `GET /api/settings` returns the key masked (e.g., `AIza...****1234`) -- never the full key
+6. The dashboard shows a text input with the masked value and a "Save" button
+
+**Why NOT encrypt the API key in the database:**
+- The API server needs the key in cleartext to make Google API calls
+- Encryption with Fernet/AES would require a separate encryption key, stored... where? On the same server. This is security theater.
+- The threat model here is an office employee accidentally exposing the key in the dashboard UI, which masking handles
+- The PostgreSQL database is on the same Docker network as the API, behind the same auth layer
+
+**Why NOT use localStorage/sessionStorage for the API key:**
+- The key is a server-side secret used by the FastAPI backend, not the browser
+- Storing it in the browser would require sending it with every upload request, exposing it to XSS
+- The backend-for-frontend pattern is correct: browser sends to our API, our API uses the key
+
+**What NOT to add:**
+- Do NOT add the `cryptography` package (Fernet) for API key encryption. Overhead without security benefit in this deployment model.
+- Do NOT add a separate auth system for settings. The existing `X-API-Key` header auth protects write endpoints.
+- Do NOT add react-hook-form or formik. The settings page has ~3-4 fields. Native React state is sufficient.
+
+**Confidence:** HIGH -- follows established patterns in the codebase. The dashboard already has a similar pattern with `VITE_API_KEY` for dashboard-to-API auth.
+
+### 6. Upload History
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| SQLAlchemy 2.0 | 2.0.46 (existing) | Query `optimization_runs` table with filters | Table already exists with `source_filename`, `created_at`, `total_orders`, `status`. |
+| React 19 | 19.2.0 (existing) | Enhanced Run History page | The `RunHistory.tsx` page already exists. Extend it with filters and detail view. |
+
+**The upload history feature requires zero new storage.** The `optimization_runs` table already captures everything needed:
+- `source_filename`: Original CSV filename
+- `created_at`: When the upload happened
+- `total_orders`, `orders_assigned`, `orders_unassigned`: Import stats
+- `vehicles_used`: Fleet utilization
+- `optimization_time_ms`: Performance metric
+- `status`: completed/failed/running
+
+The existing `GET /api/runs` endpoint already returns this data. Enhance it with:
+- Pagination (`?page=1&per_page=10`)
+- Date range filter (`?from=2026-03-01&to=2026-03-12`)
+- Status filter (`?status=completed`)
+
+**Confidence:** HIGH -- purely UI enhancement on existing data.
+
+---
 
 ## Alternatives Considered
 
-| Recommended | Alternative | Why Not Alternative |
-|-------------|-------------|---------------------|
-| RapidFuzz 3.14.3 | thefuzz (formerly fuzzywuzzy) | thefuzz is pure Python, 10-100x slower. Uses python-Levenshtein C extension for speed, but RapidFuzz does the same natively with a better API. thefuzz had GPL dependency concerns historically (python-Levenshtein was GPL). RapidFuzz is the modern replacement -- same algorithms, MIT license, C++ implementation. |
-| RapidFuzz 3.14.3 | jellyfish | jellyfish provides phonetic algorithms (Soundex, Metaphone) suited for English names. Kerala place names are transliterated from Malayalam -- character-level edit distance (Levenshtein via RapidFuzz) is more appropriate than phonetic matching for transliteration variants. |
-| Haversine via stdlib `math` | haversine package (v2.9.0, MIT) | Adding a dependency for 10 lines of well-known math is unnecessary. The project convention is "no unnecessary dependencies" (e.g., pure Python PNG generation instead of Pillow for icons). The stdlib `math` module suffices -- accuracy within 0.5% at 30km distances. |
-| Haversine via stdlib `math` | shapely/geopandas `.distance()` | Already in requirements.txt but semantically wrong for this use case. Shapely uses Cartesian distance by default, not great-circle distance. Would need CRS projection first. More complexity for less accuracy at this scale. |
-| Static JSON dictionary | SQLite table or PostgreSQL table | The dictionary is ~200-300 entries (<50KB). Loading into memory on first use is instant. A database table adds schema migration complexity and a runtime DB dependency for no benefit. The JSON file is human-readable, diffable in git, and trivially editable by hand. |
-| Static JSON dictionary | Redis or in-memory cache layer | Same reasoning. 50KB of data does not warrant a caching layer. Python dict lookup is O(1). The dictionary is immutable during process lifetime. |
-| OSM Overpass API | Nominatim API | Nominatim is for geocoding (address-to-coordinates), not for extracting place name inventories within a radius. Overpass is purpose-built for spatial queries on OSM data. Nominatim has strict rate limits (1 req/sec) and usage policy restrictions against bulk extraction. |
-| PostalPinCode API | India Post official website scraping | The API is the official machine-readable interface. Scraping would be fragile and potentially violate ToS. The API is free, stable, and returns structured JSON. |
-| PostalPinCode API | data.gov.in Pincode CSV dataset | The data.gov.in dataset is a bulk CSV download (~150MB) covering all of India. We need ~10 PIN codes. API calls for 10 specific pincodes are far more targeted and lighter. |
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| TSP Solver | VROOM (existing) | Google OR-Tools | 200+ MB dependency, slower solve times, no benefit for single-vehicle TSP. VROOM already does this. |
+| TSP Solver | VROOM (existing) | Custom nearest-neighbor | Worse route quality than VROOM's meta-heuristics. Reinventing the wheel. |
+| Route Validation API | Google Routes API v2 | Google Directions API (Legacy) | Deprecated March 2025. Still functional but no longer recommended. Routes API has better pricing and more waypoints. |
+| Route Validation API | Google Routes API v2 | `googlemaps` Python package | Wraps the legacy Directions API. Not updated for Routes API v2. Use raw httpx instead. |
+| Settings Storage | PostgreSQL key-value table | .env file editing | Not accessible from dashboard UI. Requires server restart. |
+| Settings Storage | PostgreSQL key-value table | Redis | Adds a new service to Docker Compose for ~5 key-value pairs. Massive overkill. |
+| Settings Storage | PostgreSQL key-value table | SQLite | Adds a second database to the stack. PostgreSQL is already running and has ample capacity. |
+| Cache Export Format | JSON | pg_dump | Requires PostgreSQL CLI knowledge. Not portable. Not human-readable. |
+| Cache Export Format | JSON | GeoJSON | Adds unnecessary GeoJSON wrapper structure. Plain JSON with lat/lon fields is simpler and sufficient. |
+| API Key Encryption | None (masked display) | Fernet symmetric encryption | Security theater -- the decryption key would be on the same server. Masking in UI responses is sufficient. |
+| Form Library | Native React state | react-hook-form | Adds a dependency for 3-4 form fields. Overkill. |
+| HTTP Client | httpx (existing) | `googlemaps` pip package | Legacy API wrapper. Does not support Routes API v2. Adds dependency for no benefit. |
+| Driver Management | Extend existing DriverDB | New Driver microservice | This is a monolith with 4 Docker services. Adding a microservice for driver CRUD would be absurd at this scale. |
 
-## What NOT to Use
+---
 
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| fuzzywuzzy | Deprecated -- renamed to thefuzz. Historical GPL licensing concerns. Slower than RapidFuzz. | RapidFuzz 3.14.3 |
-| haversine PyPI package | Adds a dependency for trivial, well-known math. 10 lines of stdlib `math` is simpler, has zero dependency risk, and matches the project convention. | `math.radians`, `math.sin`, `math.cos`, `math.atan2` |
-| geopy.distance | Geopy is a geocoding client library. Its distance module is accurate but pulls in the entire geopy package with its own dependencies. Overkill for one distance function. | Stdlib haversine implementation |
-| spaCy for NER | 200MB+ model, English-centric NER pipeline. Indian address NER requires India-specific training data. spaCy's `en_core_web` models don't recognize Indian address components (P.O., locality patterns, Kerala place names). | If NER needed: shiprocket-ai/open-indicbert-indian-address-ner (trained on Indian address data) |
-| transformers + torch in Approach A | Adds ~600MB+ to Docker image. CPU inference at 50ms/address is 50x slower than dictionary lookup at ~1ms. Only justified if dictionary approach fails measurable accuracy targets. | RapidFuzz dictionary matching (Approach A). Upgrade to NER (Approach B) only if >10% validation failures measured in Phase 5 integration testing. |
-| Google Places Autocomplete for splitting | Costs $2.83 per session. Would require API calls during preprocessing (currently zero API calls in the splitting stage). Doesn't handle concatenated CDCMS text well. | Static dictionary + RapidFuzz fuzzy match |
-| Nominatim for place name inventory | Rate-limited to 1 req/sec, requires email identification, intended for individual geocoding not bulk extraction. ToS prohibits bulk downloads. | OSM Overpass API (purpose-built for spatial data extraction, generous limits) |
-| Any geocoding API at preprocessing time | Preprocessing must be zero-API-call (constraint from design spec). Dictionary is pre-built and committed. | Static JSON dictionary loaded from filesystem |
+## Stack Summary: What Changes
 
-## Version Compatibility
+### Python Backend (zero new packages)
 
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| rapidfuzz==3.14.3 | Python 3.10-3.14 | Project uses Python 3.12. Pre-built wheels available for `python:3.12-slim` (linux/amd64). No compilation needed at install time. |
-| rapidfuzz==3.14.3 | All existing requirements.txt packages | Zero Python dependencies. No shared C extensions or conflicting transitive dependencies. |
-| requests==2.32.5 (existing) | Overpass API + PostalPinCode API | Used in build script only. Already tested and stable in the project. |
-| Python 3.12 stdlib `math` | Haversine implementation | `math.radians()`, `math.sin()`, `math.cos()`, `math.atan2()` -- standard since Python 2. No compatibility concerns. |
+| Existing Package | Current Use | New Use in v3.0 |
+|-----------------|-------------|------------------|
+| SQLAlchemy 2.0 | ORM for all tables | New `settings` table, extended `drivers` queries, driver-grouped optimization |
+| Alembic | Schema migrations | Add `settings` table, add `driver_id` to `routes`, add columns to `drivers` |
+| httpx | Google Geocoding, OSRM, VROOM API calls | Google Routes API validation calls (same pattern) |
+| Pydantic | API request/response models | New `Driver`, `Settings`, `CacheExport` models |
+| FastAPI | All API endpoints | New endpoints: settings CRUD, cache export/import, driver CRUD |
 
-## Integration Points Summary
+### Dashboard (zero new packages)
 
-### Where New Code Touches Existing Code
+| Existing Package | Current Use | New Use in v3.0 |
+|-----------------|-------------|------------------|
+| React 19 | All pages | New Settings page, enhanced Upload/Run History pages |
+| DaisyUI 5 | UI components | Form inputs for settings, driver badges in route cards |
+| lucide-react | Navigation icons | Settings icon (wrench/gear) in sidebar |
+| Tailwind v4 | Styling | Same patterns, no changes |
 
-| Integration Point | Existing File | Change Type | Risk |
-|--------------------|---------------|-------------|------|
-| Word splitting | `core/data_import/cdcms_preprocessor.py` line 269 | Add `([a-z])([A-Z])` regex + call to `AddressSplitter.split()` between Stage 1 cleanup and Stage 3 title case | LOW -- additive, splitter is `None`-safe (graceful degradation if dictionary file missing) |
-| address_display source | `core/optimizer/vroom_adapter.py` line 278 | One-line change: use `order.address_raw` instead of `order.location.address_text or order.address_raw` | LOW -- fixes existing bug, simpler expression |
-| Geocode validation | `core/geocoding/cache.py` `CachedGeocoder.geocode()` | Add validation check + fallback chain after upstream call, before cache save | MEDIUM -- touches the critical geocoding path. Must preserve existing behavior for in-zone results. |
-| API response fields | `apps/kerala_delivery/api/main.py` stops dict comprehension | Add `geocode_confidence` and `location_approximate` (2 new fields) | LOW -- additive, backward compatible |
-| Driver PWA UI | `apps/kerala_delivery/driver_app/index.html` | Add conditional badge rendering for hero card + compact cards | LOW -- display-only, no logic changes |
+### Infrastructure (zero new services)
 
-### New Files
+| Existing Service | Current Use | New Use in v3.0 |
+|-----------------|-------------|------------------|
+| PostgreSQL + PostGIS | All persistence | New `settings` table, extended driver queries |
+| OSRM | Distance matrices | Same (VROOM uses internally for TSP) |
+| VROOM | Multi-vehicle CVRP | Per-driver TSP (single-vehicle requests) |
+| Docker Compose | Orchestration | Same services, no additions |
 
-| File | Purpose | Dependencies |
-|------|---------|--------------|
-| `data/place_names_vatakara.json` | Static place name dictionary (~200-300 entries) | None (static data) |
-| `scripts/build_place_dictionary.py` | One-time script to build dictionary from OSM + India Post | `requests` (existing) |
-| `core/data_import/address_splitter.py` | Dictionary-aware word splitter using RapidFuzz | `rapidfuzz` (NEW), `json` (stdlib) |
-| `core/geocoding/validator.py` | Geocode validation against 30km delivery zone | `math` (stdlib) |
-| `tests/core/data_import/test_address_splitter.py` | Splitter unit tests | `pytest` (existing) |
-| `tests/core/geocoding/test_validator.py` | Validator unit tests | `pytest` (existing) |
-| `core/data_import/address_ner.py` | NER model wrapper (Approach B only, created later if needed) | `transformers`, `torch` (OPTIONAL) |
+---
 
-### What Does NOT Change
+## Installation
 
-| Component | Why Unchanged |
-|-----------|---------------|
-| `core/geocoding/normalize.py` | Cache key normalization is orthogonal to address splitting |
-| `core/geocoding/google_adapter.py` | Pure API caller -- no validation logic belongs here |
-| `core/geocoding/interfaces.py` | `GeocodingResult` model already has `confidence` field |
-| `core/models/location.py` | `geocode_confidence` field already exists on `Location` |
-| `core/database/models.py` | No schema migration needed -- confidence stored on existing columns |
-| `core/database/repository.py` | No new DB operations needed |
-| Dashboard (React/TypeScript) | Confidence UI is Driver PWA only for this milestone |
-| `docker-compose.yml` | `./data:/app/data` bind mount already exists |
-| `infra/Dockerfile` | RapidFuzz ships pre-built wheels -- no new system packages |
-| `requirements.txt` structure | Only one line added (`rapidfuzz==3.14.3`) |
+No installation needed. Zero new dependencies.
 
-## RapidFuzz API Usage Pattern
+```bash
+# Existing setup works for v3.0
+docker compose up -d
 
-The two primary functions needed:
-
-```python
-from rapidfuzz import fuzz, process
-
-# 1. Direct comparison for validating a candidate match
-score = fuzz.ratio("RAYARANGOTH", "RAYANRANGOTH")  # Returns ~91.3
-# Use score >= 85 as threshold
-
-# 2. Find best match from dictionary list
-match = process.extractOne(
-    "RAYANRANGOTH",
-    ["RAYARANGOTH", "MUTTUNGAL", "BALAVADI", ...],
-    scorer=fuzz.ratio,
-    score_cutoff=85,
-)
-# Returns: ("RAYARANGOTH", 91.3, 0) or None if no match >= 85
+# Database migration (auto-runs on docker compose up via db-init)
+# Manual if needed:
+alembic upgrade head
 ```
 
-**Why `fuzz.ratio` over `fuzz.partial_ratio` or `fuzz.token_sort_ratio`?**
-Place names are single tokens (e.g., "RAYARANGOTH") not multi-word phrases. `fuzz.ratio` computes the Levenshtein-based similarity between two full strings, which is exactly what we need for detecting character-level transliteration differences. `partial_ratio` would allow false positives where short names match inside longer ones. `token_sort_ratio` is for reordered multi-word strings.
+---
 
-## Haversine Implementation Reference
+## Version Compatibility Notes
 
-No library needed. Stdlib implementation for the 30km zone check:
+| Technology | Pinned Version | Latest Available | Action |
+|------------|---------------|------------------|--------|
+| VROOM Docker | vroomvrp/vroom-docker (latest) | Tracked upstream | No pin needed -- VROOM API is stable |
+| OSRM Docker | v5.27.1 (pinned) | v5.27.1 | Already pinned per v1.3 decision |
+| Google Routes API | v2 | v2 | Current version, no migration needed |
+| Python | 3.12 | 3.13 | Stay on 3.12 (stable, all deps compatible) |
+| Node.js | v24 | v24 | Current LTS-adjacent, no change needed |
 
-```python
-import math
+---
 
-def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance between two points in kilometers."""
-    R = 6371.0  # Earth radius in km
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (math.sin(dlat / 2) ** 2 +
-         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
-         math.sin(dlon / 2) ** 2)
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-```
+## Pricing Impact Assessment
 
-Accuracy: within 0.5% for distances under 100km. For our 30km zone check, the error is ~150m at worst -- irrelevant for a 30,000m threshold.
+### Google Maps API Cost for Route Validation
+
+| Metric | Value |
+|--------|-------|
+| Validation requests per day | ~13 (one per driver route) |
+| Requests per month | ~390 |
+| SKU | Compute Routes Essentials ($5/1000) |
+| Monthly cost | ~$1.95 |
+| Free tier coverage | 10,000 free events/month (Essentials) |
+| Net cost | $0 (well within free tier) |
+
+### Existing Google Maps Costs (unchanged)
+
+| API | Usage | Monthly Cost |
+|-----|-------|-------------|
+| Geocoding | ~40-50 orders/day, ~80% cache hit rate | ~$1.50 (within $200 free credit) |
+| Route Validation (new) | ~13 routes/day | $0 (within free tier) |
+
+**Total incremental cost: $0/month.** Route validation fits entirely within Google's free tier.
+
+---
 
 ## Sources
 
-- [RapidFuzz PyPI](https://pypi.org/project/RapidFuzz/) -- version 3.14.3 (Nov 2025), MIT license, Python 3.10+ (HIGH confidence)
-- [RapidFuzz GitHub](https://github.com/rapidfuzz/RapidFuzz) -- API overview, comparison with fuzzywuzzy (HIGH confidence)
-- [RapidFuzz fuzz module docs](https://rapidfuzz.github.io/RapidFuzz/Usage/fuzz.html) -- `fuzz.ratio()` usage and semantics (HIGH confidence)
-- [RapidFuzz process module docs](https://rapidfuzz.github.io/RapidFuzz/Usage/process.html) -- `extractOne()` with `score_cutoff` parameter (HIGH confidence)
-- [Overpass API wiki](https://wiki.openstreetmap.org/wiki/Overpass_API) -- endpoint `overpass-api.de`, 10K queries/day limit, free public service (HIGH confidence)
-- [Overpass API by Example](https://wiki.openstreetmap.org/wiki/Overpass_API/Overpass_API_by_Example) -- `around` filter for radius-based queries (HIGH confidence)
-- [OSM radius search tutorial](https://osm-queries.ldodds.com/tutorial/12-radius-search.osm.html) -- `around:30000,lat,lon` syntax (HIGH confidence)
-- [PostalPinCode API docs](https://publicapi.dev/postal-pin-code-api) -- `/pincode/{code}` endpoint, 1000 req/hr limit, JSON response (MEDIUM confidence -- official site at postalpincode.in was unresponsive, verified via third-party documentation)
-- [haversine package source](https://github.com/mapado/haversine/blob/main/haversine/haversine.py) -- reference implementation confirming stdlib `math` sufficiency (HIGH confidence)
-- [shiprocket-ai/open-indicbert-indian-address-ner](https://huggingface.co/shiprocket-ai/open-indicbert-indian-address-ner) -- 32.9M params, 11 entity types, Apache 2.0 (HIGH confidence)
-- [shiprocket-ai/open-tinybert-indian-address-ner](https://huggingface.co/shiprocket-ai/open-tinybert-indian-address-ner) -- 66.4M params, F1=0.94, Apache 2.0 (HIGH confidence)
-- Project `requirements.txt` -- verified `requests==2.32.5` exists, confirmed no conflicting packages (HIGH confidence)
-- Project `infra/Dockerfile` -- verified `python:3.12-slim`, multi-stage build, no `COPY data/` (HIGH confidence)
-- Project `docker-compose.yml` -- verified `./data:/app/data` bind mount on API service (HIGH confidence)
-- Project `core/models/location.py` -- confirmed `geocode_confidence: float | None` field exists (HIGH confidence)
-- Project `core/geocoding/interfaces.py` -- confirmed `GeocodingResult.confidence` field exists (HIGH confidence)
-- Project `core/geocoding/cache.py` -- verified integration point in `CachedGeocoder.geocode()` (HIGH confidence)
-- Project design spec `docs/superpowers/specs/2026-03-10-address-preprocessing-design.md` -- feature requirements and architecture (HIGH confidence)
-
----
-*Stack research for: Kerala LPG Delivery Route Optimizer v2.2 -- Address Preprocessing Pipeline*
-*Researched: 2026-03-10*
+- [Google Maps Routes API Usage and Billing](https://developers.google.com/maps/documentation/routes/usage-and-billing) -- pricing tiers, free tier limits
+- [Google Maps Routes API Compute Routes](https://developers.google.com/maps/documentation/routes/compute_route_directions) -- POST endpoint, request/response format
+- [Google Maps Directions API Migration Guide](https://developers.google.com/maps/documentation/routes/migrate-routes) -- legacy API deprecation, parameter renaming
+- [Google Maps Platform Pricing](https://developers.google.com/maps/billing-and-pricing/pricing) -- $5/1000 Essentials, $10/1000 Pro, $15/1000 Enterprise
+- [VROOM Project GitHub](https://github.com/VROOM-Project/vroom) -- single-vehicle TSP as VRP special case
+- [VROOM API Documentation](https://github.com/VROOM-Project/vroom/blob/master/docs/API.md) -- request format, vehicles/jobs arrays

@@ -1,512 +1,476 @@
-# Architecture Research: v2.2 Address Preprocessing Pipeline Integration
+# Architecture Research: v3.0 Driver-Centric Model Integration
 
-**Domain:** Dictionary-powered address splitting and geocode validation for Kerala LPG delivery route optimizer
-**Researched:** 2026-03-10
-**Confidence:** HIGH (existing codebase thoroughly analyzed, design spec reviewed, all integration points traced through source code)
+**Domain:** Driver-centric route optimization for Kerala LPG delivery
+**Researched:** 2026-03-12
+**Confidence:** HIGH (all integration points traced through source code, VROOM TSP capability verified, Google Routes API pricing researched)
 
-## Existing System Data Flow (Before Changes)
+## Executive Summary
+
+The v3.0 milestone replaces the vehicle-fleet mental model with a driver-centric model. Today, the system creates 13 predefined vehicles in `init.sql`, optimizes across all of them via VROOM CVRP, and routes are identified by `vehicle_id` (VEH-01 through VEH-13). The target state: drivers are first-class entities created from CDCMS CSV uploads, each driver gets their pre-assigned orders optimized as a single-vehicle TSP, and the dashboard becomes the primary management interface.
+
+This is a conceptual rename with significant data flow changes, NOT a schema rewrite. The existing `vehicles` table, `routes` table structure, and `route_stops` ordering all remain valid. The changes center on: (1) promoting `DriverDB` to a working entity with auto-creation from CSV, (2) changing the optimization from fleet-wide CVRP to per-driver TSP, (3) adding dashboard settings/management pages, and (4) adding Google Maps route validation as a confidence comparison.
+
+---
+
+## Current System Data Flow (Before Changes)
 
 ```
-CURRENT ADDRESS PROCESSING PIPELINE
-=====================================
+CURRENT UPLOAD-TO-ROUTE PIPELINE
+==================================
 
-User uploads CDCMS CSV
-  |
-  v
-apps/kerala_delivery/api/main.py :: upload_and_optimize()
-  |-- _is_cdcms_format() detects tab-separated CDCMS columns
-  |
-  v
-core/data_import/cdcms_preprocessor.py :: preprocess_cdcms()
-  |-- Reads raw CDCMS export (tab-separated, 19 columns)
-  |-- Filters by OrderStatus = "Allocated-Printed"
-  |-- Calls clean_cdcms_address() per row:
-  |     Step 1: Remove phone numbers (10-digit regex)
-  |     Step 2: Remove CDCMS artifacts (PH: annotations, backticks)
-  |     Step 3: Expand abbreviations (NR->Near, PO->P.O., (H)->House)
-  |     Step 4: Split digit->uppercase only: re.sub(r"(\d)([A-Z])", ...)
-  |     Step 5: Collapse whitespace
-  |     Step 6: Title case
-  |     Step 7: Append area suffix ", Vatakara, Kozhikode, Kerala"
-  |-- Returns DataFrame with columns: order_id, address, quantity, area_name, delivery_man
-  |
-  v
-core/data_import/csv_importer.py :: CsvImporter.import_orders()
-  |-- Reads preprocessed CSV
-  |-- Creates Order objects with address_raw = cleaned address
-  |-- Returns ImportResult (orders + errors + warnings + row_numbers)
-  |
-  v
-apps/kerala_delivery/api/main.py :: geocoding loop (lines 1074-1131)
-  |-- For each order without coordinates:
-  |     CachedGeocoder.geocode(order.address_raw)
-  |       |-- Check PostGIS cache (by normalized key)
-  |       |-- Cache HIT -> return Location
-  |       |-- Cache MISS -> GoogleGeocoder._call_api(address)
-  |       |     |-- Google returns formatted_address, location_type, lat/lon
-  |       |     |-- Confidence mapped: ROOFTOP=0.95, INTERPOLATED=0.80, CENTER=0.60, APPROX=0.40
-  |       |     |-- Location.address_text = Google's formatted_address     <-- BUG: wrong display text
-  |       |-- Save to PostGIS cache
-  |       |-- order.location = result.location
-  |
-  v
-core/optimizer/vroom_adapter.py :: VroomAdapter.optimize()
-  |-- _build_request(): converts Orders to VROOM JSON jobs
-  |-- _parse_response(): converts VROOM solution to RouteAssignment
-  |     Line 278: address_display = order.location.address_text or order.address_raw
-  |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^
-  |                                 On cache MISS: Google's formatted_address (possibly wrong)
-  |                                 On cache HIT: original address from cache
-  |
-  v
-core/database/repository.py :: save_optimization_run()
-  |-- Saves OptimizationRunDB, OrderDB (with geocode_confidence), RouteDB, RouteStopDB
-  |-- OrderDB.address_display = order.location.address_text (Google's text)
-  |-- RouteStopDB.address_display = stop.address_display (from vroom_adapter)
-  |
-  v
-API Response: GET /api/routes/{vehicle_id}
-  |-- route_db_to_pydantic() converts DB to Pydantic
-  |-- Returns stops with address, lat, lon, etc.
-  |-- NO geocode_confidence in response currently
-  |
-  v
-Driver PWA: index.html
-  |-- Renders stop address from API response
-  |-- Navigate button opens Google Maps with lat/lon
-  |-- NO "approximate location" indicator currently
+1. Employee uploads CDCMS CSV
+   |
+   v
+2. api/main.py :: upload_and_optimize()
+   |-- _is_cdcms_format() detects CDCMS tab-separated format
+   |-- preprocess_cdcms() extracts: order_id, address, quantity, area_name, delivery_man
+   |     NOTE: delivery_man column is PRESERVED in DataFrame but NEVER USED for routing
+   |-- CsvImporter.import_orders() creates Order objects
+   |
+   v
+3. Geocoding loop
+   |-- CachedGeocoder.geocode() for each un-geocoded order
+   |-- GeocodeValidator validates against 30km zone
+   |
+   v
+4. Fleet assembly
+   |-- repo.get_active_vehicles(session) -> 13 VehicleDB rows from DB
+   |-- vehicle_db_to_pydantic() converts each to Pydantic Vehicle
+   |-- All 13 vehicles participate in optimization regardless of CSV content
+   |
+   v
+5. VROOM optimization (CVRP -- Capacitated Vehicle Routing Problem)
+   |-- VroomAdapter._build_request(): ALL orders + ALL 13 vehicles
+   |-- VROOM decides: which orders go to which vehicle, in what sequence
+   |-- VROOM may leave some vehicles empty if not needed
+   |-- Result: RouteAssignment with routes per vehicle
+   |
+   v
+6. Persistence
+   |-- save_optimization_run(): optimization_runs + orders + routes + route_stops
+   |-- routes.vehicle_id = "VEH-01" through "VEH-13"
+   |-- routes.driver_name = vehicle.driver_name (empty string from DB)
+   |
+   v
+7. Driver access
+   |-- GET /api/routes/VEH-01 -> driver's route
+   |-- Driver PWA identifies by vehicle_id, not driver name
 ```
 
-### Two Interacting Bugs Identified
+### Key Problem
 
-**Bug 1 -- Insufficient word splitting:**
-`clean_cdcms_address()` only splits `digit->uppercase` transitions (`8/542SREESHYLAM` -> `8/542 SREESHYLAM`). CDCMS also concatenates `letter->letter` with no separator: `ANANDAMANDIRAMK.T.BAZAR`, `MUTTUNGAL-POBALAVADI`. These garbled strings produce wrong geocoding results.
-
-**Bug 2 -- `formatted_address` overwrites display text:**
-On cache MISS, `Location.address_text` = Google's `formatted_address` (could be "HDFC ERGO Insurance Agent, Palayam, Kozhikode" -- 40km away). This wrong text flows through `vroom_adapter.py:278` into `address_display`, then to the API response, then to the driver's navigation link.
+The CDCMS CSV already has a `DeliveryMan` column that pre-assigns orders to specific drivers. The current system **ignores this assignment** and re-assigns all orders across all 13 vehicles via CVRP. This conflicts with the real-world workflow where the office has already decided which driver handles which orders.
 
 ---
 
 ## Target Architecture (After Changes)
 
 ```
-TARGET ADDRESS PROCESSING PIPELINE
-=====================================
+TARGET UPLOAD-TO-ROUTE PIPELINE (v3.0)
+========================================
 
-User uploads CDCMS CSV
-  |
-  v
-api/main.py :: upload_and_optimize()
-  |
-  v
-cdcms_preprocessor.py :: preprocess_cdcms()
-  |-- clean_cdcms_address() MODIFIED:
-  |     Stage 1: Remove phone numbers, artifacts, backticks (existing)
-  |     Stage 2: Word splitting IMPROVED:
-  |       (a) Digit->uppercase (existing)
-  |       (b) Lowercase->uppercase (NEW regex)                         <-- FIX #1
-  |     Stage 3: Dictionary-powered splitting (NEW)                    <-- CORE ADDITION
-  |       |-- AddressSplitter.split(text) called between cleanup and title case
-  |       |-- Loads place_names_vatakara.json (static, ~285 entries)
-  |       |-- Scans for known place names (longest match first)
-  |       |-- Splits at place name boundaries
-  |       |-- Detects PO/NR between place names
-  |       |-- Falls back gracefully if dictionary missing (None check)
-  |     Stage 4: Expand abbreviations (existing, reordered to AFTER splitting)
-  |     Stage 5: Title case + suffix (existing)
-  |
-  v
-csv_importer.py :: CsvImporter.import_orders()  -- UNCHANGED
-  |
-  v
-api/main.py :: geocoding loop MODIFIED:
-  |-- CachedGeocoder.geocode(address, area_name=area_name)            <-- area_name passed
-  |     |-- Check PostGIS cache (unchanged)
-  |     |-- Cache MISS -> GoogleGeocoder._call_api(address)
-  |     |     |-- result.location.address_text still = Google's formatted_address
-  |     |
-  |     |-- NEW: GeocodeValidator.validate(location, area_name)       <-- FIX #3
-  |     |     |-- Haversine distance from depot (11.6244, 75.5796)
-  |     |     |-- Within 30km? -> accept as-is
-  |     |     |-- Outside 30km? -> Fallback chain:
-  |     |     |     1. Retry: geocode("{area_name}, Vatakara, Kozhikode, Kerala")
-  |     |     |        -> validate again -> if within 30km, use (confidence * 0.7)
-  |     |     |     2. Dictionary centroid: get_area_centroid(area_name)
-  |     |     |        -> use centroid coordinates (confidence = 0.3)
-  |     |     |     3. Last resort: use original result, flag as unvalidated
-  |     |
-  |     |-- Save to PostGIS cache (unchanged)
-  |
-  v
-vroom_adapter.py :: VroomAdapter.optimize()
-  |-- _parse_response():
-  |     Line 278: address_display = order.address_raw                  <-- FIX #2
-  |                                 ^^^^^^^^^^^^^^^^
-  |                                 ALWAYS use cleaned original, never Google's text
-  |
-  v
-repository.py :: save_optimization_run()  -- UNCHANGED
-  |-- OrderDB.geocode_confidence already saved (existing field)
-  |
-  v
-API Response: GET /api/routes/{vehicle_id}  MODIFIED:
-  |-- NEW fields in stop JSON:
-  |     "geocode_confidence": stop.location.geocode_confidence,
-  |     "location_approximate": (confidence is not None and confidence < 0.5)
-  |
-  v
-Driver PWA: index.html  MODIFIED:
-  |-- Hero card: "Approx. location" badge (DaisyUI warning badge)
-  |-- Compact cards: orange dot indicator for approximate stops
-  |-- Informational only -- Navigate button still works
-  |-- Driver-verified GPS on delivery corrects the cache for next time
+1. Employee uploads CDCMS CSV
+   |
+   v
+2. api/main.py :: upload_and_optimize()
+   |-- preprocess_cdcms() extracts delivery_man column (ALREADY EXTRACTED)
+   |-- Build driver_orders_map: {driver_name -> [order_ids]}
+   |
+   v
+3. Driver resolution
+   |-- For each unique delivery_man in CSV:
+   |     a. Look up DriverDB by name (case-insensitive)
+   |     b. If not found: auto-create DriverDB with name from CSV
+   |     c. Associate driver -> vehicle (round-robin or manual assignment)
+   |-- Result: driver_vehicle_map: {driver_name -> vehicle_id}
+   |
+   v
+4. Geocoding loop (UNCHANGED)
+   |
+   v
+5. Per-driver TSP optimization
+   |-- For each driver:
+   |     a. Filter orders assigned to this driver
+   |     b. Create single VROOM vehicle for this driver's assigned vehicle
+   |     c. VroomAdapter.optimize([driver_orders], [single_vehicle])
+   |     d. VROOM solves TSP: optimal sequence for this driver's stops
+   |-- Result: list of RouteAssignment (one per driver)
+   |
+   v
+6. Persistence (MODIFIED)
+   |-- save_optimization_run(): single run, multiple routes
+   |-- routes.vehicle_id = driver's assigned vehicle_id
+   |-- routes.driver_name = driver's name from CSV
+   |
+   v
+7. Driver access (MODIFIED)
+   |-- GET /api/routes/{driver_name_or_vehicle_id} -> driver's route
+   |-- Dashboard shows driver names, not vehicle IDs
 ```
 
 ---
 
 ## New Components
 
-### 1. `core/data_import/address_splitter.py` (NEW)
+### 1. Driver Management Service (in `core/database/repository.py`)
 
-**Responsibility:** Split concatenated CDCMS address text using a static place name dictionary. Pure function, no I/O beyond initial dictionary load.
+**Responsibility:** CRUD operations for drivers with auto-creation from CSV uploads.
 
-**Why a separate module (not inline in cdcms_preprocessor.py):**
-- Separation of concerns: preprocessor handles CDCMS format quirks, splitter handles word boundary detection
-- Testability: dictionary splitting logic is independently testable with unit tests
-- Reusability: if another data source has concatenated text, the splitter works with any text
-- The dictionary dependency is injected via the constructor, keeping the splitter loosely coupled
+**Why extend repository.py instead of a new module:**
+- The repository already manages all other entities (vehicles, orders, routes, telemetry, geocode cache)
+- Driver operations are simple CRUD with one unique pattern (find-or-create)
+- A separate `driver_service.py` would add indirection without adding value at this scale
+
+**New repository functions:**
+
+```python
+async def get_driver_by_name(session: AsyncSession, name: str) -> DriverDB | None:
+    """Case-insensitive driver lookup by name."""
+
+async def get_or_create_driver(session: AsyncSession, name: str) -> DriverDB:
+    """Find existing driver or create new one. Idempotent.
+    Used during CSV upload to auto-create drivers from DeliveryMan column."""
+
+async def get_active_drivers(session: AsyncSession) -> list[DriverDB]:
+    """Get all active drivers for dashboard display."""
+
+async def update_driver(session: AsyncSession, driver_id: uuid.UUID, updates: dict) -> bool:
+    """Update driver fields (name, phone, vehicle assignment, active status)."""
+
+async def assign_driver_to_vehicle(
+    session: AsyncSession, driver_id: uuid.UUID, vehicle_id: uuid.UUID
+) -> bool:
+    """Assign a driver to a specific vehicle."""
+```
+
+**Integration point:** Called from `upload_and_optimize()` after CSV parsing, before optimization.
+
+### 2. Per-Driver TSP Optimizer Wrapper (in `apps/kerala_delivery/api/main.py`)
+
+**Responsibility:** Split orders by driver, run VROOM TSP for each driver separately, combine results.
+
+**Why in main.py instead of a new module:**
+- This is orchestration logic specific to the Kerala delivery workflow
+- The VroomAdapter itself stays generic (it already handles 1 vehicle = TSP)
+- Moving orchestration to a separate module would mean passing many dependencies (session, geocoder, validator) through yet another layer
+
+**Pseudocode:**
+
+```python
+async def optimize_per_driver(
+    orders: list[Order],
+    driver_orders_map: dict[str, list[str]],  # driver_name -> [order_ids]
+    driver_vehicle_map: dict[str, Vehicle],     # driver_name -> Vehicle
+    optimizer: VroomAdapter,
+) -> RouteAssignment:
+    """Run per-driver TSP optimization and combine into single RouteAssignment."""
+    all_routes: list[Route] = []
+    all_unassigned: list[str] = []
+
+    for driver_name, order_ids in driver_orders_map.items():
+        driver_orders = [o for o in orders if o.order_id in order_ids]
+        vehicle = driver_vehicle_map[driver_name]
+
+        if not driver_orders:
+            continue
+
+        # VROOM with 1 vehicle = TSP (optimal stop sequence)
+        assignment = optimizer.optimize(driver_orders, [vehicle])
+
+        for route in assignment.routes:
+            route.driver_name = driver_name
+            all_routes.append(route)
+
+        all_unassigned.extend(assignment.unassigned_order_ids)
+
+    return RouteAssignment(
+        assignment_id=str(uuid.uuid4())[:8],
+        routes=all_routes,
+        unassigned_order_ids=all_unassigned,
+        optimization_time_ms=total_time,
+    )
+```
+
+**VROOM TSP behavior:** When VROOM receives 1 vehicle + N jobs, it solves a TSP -- finding the optimal visit order that minimizes total travel time. This is confirmed by VROOM documentation: "VROOM solves several well-known types of vehicle routing problems including the Travelling Salesman Problem." No special configuration needed; 1 vehicle = TSP automatically.
+
+### 3. Google Maps Route Validation Service (NEW: `core/routing/gmaps_validator.py`)
+
+**Responsibility:** Compare OSRM-based route distance/duration against Google Maps Directions API (now Routes API) for confidence scoring.
+
+**Why in core/routing/ (not apps/):**
+- Route validation is a generic routing concept, not Kerala-specific
+- The RoutingEngine protocol in `core/routing/interfaces.py` already defines the routing abstraction boundary
+- Could be reused by any deployment that wants Google validation
 
 **Component Boundary:**
 
 | Aspect | Detail |
 |--------|--------|
-| Input | Raw uppercase text from CDCMS address field (after phone/artifact removal, before title case) |
-| Output | Same text with spaces inserted at detected place name boundaries |
-| Dependencies | `rapidfuzz` (fuzzy matching, MIT, ~200KB), `json` (stdlib) |
-| Data source | `data/place_names_vatakara.json` (static, committed to repo) |
-| Initialization | Lazy -- loaded on first call to `split()`. If dictionary file missing, returns `None` and preprocessor falls back to regex-only |
-| Thread safety | Read-only after init. Dictionary is loaded once, immutable after construction |
-
-**Interface:**
-
-```python
-class AddressSplitter:
-    def __init__(self, dictionary_path: str | Path):
-        """Load place name dictionary from JSON file.
-        Sorts entries by name length descending (longest match first).
-        """
-
-    def split(self, text: str) -> str:
-        """Split concatenated words at known place name boundaries.
-        Unknown text passes through unchanged.
-        """
-
-    def find_place(self, text: str) -> PlaceMatch | None:
-        """Find the best matching place name in the given text.
-        Uses rapidfuzz.fuzz.ratio() with threshold 85%.
-        Returns PlaceMatch(name, position, confidence) or None.
-        """
-```
-
-**Integration point in cdcms_preprocessor.py:**
-
-```python
-# Module-level lazy initialization
-_splitter: AddressSplitter | None = None
-_splitter_loaded: bool = False
-
-def _get_splitter() -> AddressSplitter | None:
-    global _splitter, _splitter_loaded
-    if not _splitter_loaded:
-        dict_path = Path(__file__).parent.parent.parent / "data" / "place_names_vatakara.json"
-        if dict_path.exists():
-            _splitter = AddressSplitter(dict_path)
-        _splitter_loaded = True
-    return _splitter
-
-# Inside clean_cdcms_address(), between Step 2 (word splitting) and Step 4 (abbreviation expansion):
-splitter = _get_splitter()
-if splitter is not None:
-    addr = splitter.split(addr)
-```
-
-### 2. `core/geocoding/validator.py` (NEW)
-
-**Responsibility:** Validate geocoding results against the delivery zone boundary. Implements the fallback chain (area retry -> centroid fallback) for out-of-zone results.
-
-**Why a separate module (not inline in cache.py):**
-- Separation of concerns: CachedGeocoder handles cache-then-API flow, validator handles spatial validation
-- Testability: zone checking and fallback logic are independently testable with known coordinates
-- Reusability: any geocoding source (not just Google) benefits from zone validation
-- The haversine function is useful elsewhere (duplicate_detector.py already has one -- this could share it)
-
-**Component Boundary:**
-
-| Aspect | Detail |
-|--------|--------|
-| Input | A `Location` (lat/lon from geocoding result) + optional `area_name` from CDCMS |
-| Output | `ValidationResult` with is_valid flag, distance_from_depot_km, confidence_adjustment, reason |
-| Dependencies | `math` (stdlib for haversine), `json` (stdlib for dictionary load) |
-| Data source | `data/place_names_vatakara.json` (same dictionary as AddressSplitter) |
-| Configuration | `depot: Location`, `max_radius_km: float = 30.0` (injected via constructor) |
+| Input | Ordered list of waypoints (depot + stops as lat/lon) |
+| Output | `RouteValidation` with Google distance_km, duration_min, comparison delta |
+| Dependencies | `httpx` for Google Routes API HTTP calls |
+| Configuration | Google Maps API key (already available via `GOOGLE_MAPS_API_KEY` env var) |
+| Cost | ~$5 per 1000 Basic requests (< 11 waypoints), $10 per 1000 Advanced (11-25 waypoints) |
+| Limit | 25 intermediate waypoints per request (matching existing QR segment splitting logic) |
 
 **Interface:**
 
 ```python
 @dataclass
-class ValidationResult:
-    is_valid: bool
-    distance_from_depot_km: float
-    confidence_adjustment: float  # 1.0 = no change, 0.7 = area retry, 0.3 = centroid
-    reason: str  # "within_zone", "outside_zone", "area_fallback", "centroid_fallback"
+class RouteValidation:
+    google_distance_km: float
+    google_duration_minutes: float
+    osrm_distance_km: float
+    osrm_duration_minutes: float
+    distance_delta_pct: float    # (google - osrm) / osrm * 100
+    duration_delta_pct: float
+    confidence: str              # "high" if delta < 15%, "medium" < 30%, "low" >= 30%
 
-class GeocodeValidator:
-    def __init__(self, depot: Location, max_radius_km: float = 30.0,
-                 dictionary_path: str | Path | None = None):
-        """Initialize with depot location and delivery zone radius."""
+class GoogleMapsRouteValidator:
+    def __init__(self, api_key: str):
+        """Initialize with Google Maps API key."""
 
-    def validate(self, location: Location, area_name: str = "") -> ValidationResult:
-        """Check if a geocoded location falls within the delivery zone."""
-
-    def get_area_centroid(self, area_name: str) -> Location | None:
-        """Look up centroid coordinates for a CDCMS area name.
-        Uses fuzzy matching against dictionary.
-        """
+    def validate_route(
+        self, waypoints: list[Location], osrm_distance_km: float, osrm_duration_min: float
+    ) -> RouteValidation:
+        """Call Google Routes API computeRoutes and compare with OSRM estimates."""
 ```
 
-**Integration point in cache.py -- CachedGeocoder:**
+**API choice:** Use Google Routes API (computeRoutes) NOT the legacy Directions API. The Directions API is deprecated. Routes API supports up to 25 intermediate waypoints per request at the Essentials tier ($5/1000 requests for Basic, no traffic awareness needed for validation).
 
-The validator integrates into `CachedGeocoder.geocode()` after the upstream provider returns a result but before saving to cache. This requires adding `area_name` as a parameter:
+**Integration point:** Called optionally after VROOM optimization, before persistence. Dashboard displays the comparison. NOT used for routing decisions -- purely informational for office staff confidence.
 
-```python
-class CachedGeocoder:
-    def __init__(self, upstream, session, default_source="google",
-                 validator=None, area_suffix=""):           # NEW params
-        self._validator = validator
-        self._area_suffix = area_suffix
+### 4. Dashboard Settings Page (NEW: `apps/kerala_delivery/dashboard/src/pages/Settings.tsx`)
 
-    async def geocode(self, address: str, area_name: str = "") -> GeocodingResult:
-        # ... existing cache check ...
+**Responsibility:** Admin interface for API key configuration, geocode cache management, and upload history.
 
-        result = self._upstream.geocode(address)
+**Sub-sections:**
 
-        # NEW: Validate result if validator configured
-        if result.success and result.location and self._validator:
-            validation = self._validator.validate(result.location, area_name)
-            if not validation.is_valid:
-                # Execute fallback chain
-                result = await self._try_fallbacks(result, area_name, validation)
-
-        # ... existing cache save ...
-```
-
-**Fallback chain detail:**
-
-```
-geocode(address) -> location outside 30km?
-  |
-  |-- Retry #1: geocode("{area_name}, Vatakara, Kozhikode, Kerala")
-  |     |-- Within 30km? -> use this result (confidence * 0.7)
-  |     |-- Still outside? -> continue to #2
-  |
-  |-- Retry #2: get_area_centroid(area_name) from dictionary
-  |     |-- Found in dictionary? -> use centroid (confidence = 0.3)
-  |     |-- Not found? -> continue to #3
-  |
-  |-- Fallback #3: use original result, unmodified
-  |     |-- Log warning "geocode outside delivery zone"
-  |     |-- Original confidence preserved (driver still gets a location)
-```
-
-### 3. `data/place_names_vatakara.json` (NEW)
-
-**Responsibility:** Static dictionary of ~285 place names within 30km of the Vatakara depot. Contains names, aliases, types, coordinates, and sources.
-
-**Built by:** `scripts/build_place_dictionary.py` (one-time script)
-**Data sources:** OSM Overpass API (hamlets, villages, neighbourhoods) + PostalPinCode API (post office names)
-**Committed to repo:** Yes -- no runtime API calls needed
-
-**Schema (from design spec):**
-
-```json
-{
-  "metadata": {
-    "generated_at": "2026-03-10T12:00:00Z",
-    "depot": {"latitude": 11.6244, "longitude": 75.5796},
-    "radius_km": 30,
-    "sources": ["osm_overpass", "india_post_pincode"],
-    "total_entries": 285
-  },
-  "places": [
-    {
-      "name": "VALLIKKADU",
-      "name_ml": "...",
-      "aliases": ["VALLIKADU", "VALLIKKAD"],
-      "type": "hamlet",
-      "latitude": 11.6312,
-      "longitude": 75.5845,
-      "source": "osm"
-    }
-  ],
-  "post_offices": [
-    {
-      "name": "MUTTUNGAL",
-      "pincode": "673104",
-      "latitude": 11.6201,
-      "longitude": 75.5867,
-      "source": "india_post"
-    }
-  ]
-}
-```
-
-**Consumed by:**
-- `AddressSplitter` -- for word boundary detection (place name matching)
-- `GeocodeValidator` -- for area centroid fallback coordinates
-
-### 4. `scripts/build_place_dictionary.py` (NEW)
-
-**Responsibility:** One-time (or periodic) script that fetches place names from public APIs and merges them into the static JSON dictionary.
-
-**Not imported at runtime.** Only used by developers to refresh the dictionary.
+| Section | Data Source | Operations |
+|---------|------------|------------|
+| API Key Config | `/api/config` + new PUT endpoint | View masked key, test connectivity, update |
+| Geocode Cache Stats | New `GET /api/geocode-cache/stats` | View hit rate, entry count, top addresses, estimated savings |
+| Upload History | Existing `GET /api/runs` enhanced | View past uploads with filename, date, order count, driver breakdown |
+| Driver Management | New `GET /api/drivers`, `POST /api/drivers` | List drivers, edit, assign to vehicles, deactivate |
 
 ---
 
 ## Modified Components
 
-### 1. `core/data_import/cdcms_preprocessor.py` (MODIFIED)
+### 1. `core/database/models.py` -- DriverDB Enhancement
 
-**Changes:**
-1. Add `lowercase->uppercase` word split regex alongside existing `digit->uppercase` split
-2. Reorder cleaning steps: word splitting BEFORE abbreviation expansion (so `NR`, `PO` patterns are detected after words are separated)
-3. Integrate `AddressSplitter` with lazy initialization and graceful fallback
+**Current state:** `DriverDB` exists but is minimal (name, phone, vehicle_id FK, is_active). It has never been used in the upload-optimize pipeline.
 
-**Line-level changes:**
-
-| Location | Current | New |
-|----------|---------|-----|
-| Line 269 | `re.sub(r"(\d)([A-Z])", r"\1 \2", addr)` | Add: `re.sub(r"([a-z])([A-Z])", r"\1 \2", addr)` |
-| After line 269 | (nothing) | Call `_get_splitter().split(addr)` if splitter available |
-| Step ordering | Steps: phone -> artifacts -> abbreviations -> digit-split -> whitespace -> title case | Steps: phone -> artifacts -> digit-split -> letter-split -> dictionary-split -> abbreviations -> whitespace -> title case |
-
-**Impact on existing tests:** `tests/core/data_import/test_cdcms_preprocessor.py` may need updates for step reordering. Some expected outputs may change because abbreviation expansion now happens after splitting. All changes improve output quality.
-
-### 2. `core/optimizer/vroom_adapter.py` (MODIFIED)
-
-**Change:** One line fix at line 278.
+**Changes needed:**
 
 ```python
-# BEFORE:
-address_display=order.location.address_text or order.address_raw,
+class DriverDB(Base):
+    __tablename__ = "drivers"
 
-# AFTER:
-address_display=order.address_raw,
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    name_normalized: Mapped[str] = mapped_column(String(100), nullable=False)  # NEW: lowercase for lookup
+    phone: Mapped[str | None] = mapped_column(String(20))
+    vehicle_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("vehicles.id")
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    source: Mapped[str] = mapped_column(String(30), default="csv")  # NEW: "csv", "manual"
+    last_seen_at: Mapped[datetime | None] = mapped_column(  # NEW: last CSV upload with this driver
+        DateTime(timezone=True)
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("idx_drivers_name_normalized", "name_normalized"),  # NEW: fast lookup
+    )
+
+    vehicle: Mapped[VehicleDB | None] = relationship(back_populates="drivers")
 ```
 
-**Rationale:** `order.address_raw` is the cleaned CDCMS address that the driver recognizes. `order.location.address_text` is Google's `formatted_address` which may reference a completely different place (e.g., "HDFC ERGO Insurance Agent, Palayam, Kozhikode"). The driver should always see the address from the CSV.
+**New columns:**
+- `name_normalized`: Lowercase, stripped name for case-insensitive matching. CDCMS names can be "SURESH KUMAR", "Suresh Kumar", or "SURESHKUMAR". Normalizing prevents duplicate driver creation.
+- `source`: Track how the driver was created ("csv" for auto-creation, "manual" for dashboard-created).
+- `last_seen_at`: Updated on each CSV upload. Helps identify inactive drivers who no longer appear in CDCMS exports.
 
-**Impact:** `address_display` in all `RouteStop` objects will now use the original cleaned address instead of Google's interpretation. This is the correct behavior for all cases (cache hit and cache miss alike).
+**Migration:** Alembic migration adds `name_normalized`, `source`, `last_seen_at` columns with defaults. Backfills `name_normalized` from existing `name` values.
 
-### 3. `core/geocoding/cache.py` (MODIFIED)
+### 2. `infra/postgres/init.sql` -- Driver Seed Data
 
-**Changes:**
-1. Accept optional `validator: GeocodeValidator` and `area_suffix: str` in constructor
-2. Accept optional `area_name: str` parameter in `geocode()` method
-3. Add fallback chain logic after upstream returns a result
-4. Add `_try_fallbacks()` private method for area retry and centroid fallback
+**Current state:** Seeds 13 vehicles. No driver seed data.
 
-**Backward compatibility:** All new parameters are optional with defaults. Existing callers (tests, scripts) that construct `CachedGeocoder` without a validator will work unchanged -- validation is simply skipped.
+**Change:** Add index on `drivers.name_normalized`. No seed data for drivers -- they are auto-created from CSV.
 
-**The critical integration question -- where does `area_name` come from?**
+```sql
+CREATE INDEX IF NOT EXISTS idx_drivers_name_normalized ON drivers(name_normalized);
+```
 
-In the API's `upload_and_optimize()` geocoding loop, the CDCMS preprocessor preserves `area_name` in the DataFrame and it flows into the import result. However, `Order` does not have an `area_name` field -- the field is on the DataFrame, not on the Order object.
+### 3. `core/data_import/cdcms_preprocessor.py` -- Expose Driver Assignment
 
-**Solution:** Pass `area_name` through a side channel. The `preprocess_cdcms()` output DataFrame has an `area_name` column. The API code already has access to `preprocessed_df`. Build a mapping `order_id -> area_name` before the geocoding loop:
+**Current state:** `preprocess_cdcms()` already extracts `delivery_man` column into the DataFrame. It is preserved in the output but never consumed by the optimization pipeline.
+
+**Change:** No code change needed in the preprocessor itself. The `delivery_man` column is already available. The change is in how `upload_and_optimize()` consumes it.
+
+### 4. `apps/kerala_delivery/api/main.py` -- Major Pipeline Change
+
+This is the largest modification. The `upload_and_optimize()` endpoint changes from fleet-wide CVRP to per-driver TSP.
+
+**Changes in order:**
+
+#### 4a. After CSV parsing, build driver-to-orders mapping
 
 ```python
-# In upload_and_optimize(), after orders are imported:
-area_name_map: dict[str, str] = {}
+# After import_result = importer.import_orders(...)
+# and after orders list is populated:
+
+# Build driver -> order mapping from preprocessed DataFrame
+driver_orders_map: dict[str, list[str]] = {}
 if is_cdcms and not preprocessed_df.empty:
     for _, row in preprocessed_df.iterrows():
-        area_name_map[str(row["order_id"])] = str(row.get("area_name", ""))
-
-# In geocoding loop:
-for order in orders:
-    if not order.is_geocoded:
-        area_name = area_name_map.get(order.order_id, "")
-        result = await cached_geocoder.geocode(order.address_raw, area_name=area_name)
+        driver = str(row.get("delivery_man", "")).strip()
+        order_id = str(row.get("order_id", "")).strip()
+        if driver and order_id:
+            driver_orders_map.setdefault(driver, []).append(order_id)
 ```
 
-### 4. `apps/kerala_delivery/api/main.py` (MODIFIED)
-
-**Changes:**
-1. Add `geocode_confidence` and `location_approximate` fields to stop JSON in `GET /api/routes/{vehicle_id}` (line ~1470) and batch mode in `GET /api/routes?include_stops=true` (line ~1388)
-2. Construct `GeocodeValidator` and pass it to `CachedGeocoder` in the geocoding section
-3. Build `area_name_map` from preprocessed DataFrame
-4. Pass `area_name` to `cached_geocoder.geocode()` calls
-
-**Stop JSON additions (two endpoints):**
+#### 4b. After geocoding, resolve drivers and run per-driver TSP
 
 ```python
-{
-    "sequence": stop.sequence,
-    "order_id": stop.order_id,
-    "address": stop.address_display,
-    "latitude": stop.location.latitude,
-    "longitude": stop.location.longitude,
-    "geocode_confidence": stop.location.geocode_confidence,      # NEW
-    "location_approximate": (                                     # NEW
-        stop.location.geocode_confidence is not None
-        and stop.location.geocode_confidence < 0.5
-    ),
-    # ... existing fields ...
+# Resolve drivers (find-or-create in DB)
+driver_vehicle_map: dict[str, Vehicle] = {}
+for driver_name in driver_orders_map:
+    driver_db = await repo.get_or_create_driver(session, driver_name)
+    if driver_db.vehicle_id:
+        vehicle_db = await session.get(VehicleDB, driver_db.vehicle_id)
+        vehicle = repo.vehicle_db_to_pydantic(vehicle_db)
+    else:
+        # Auto-assign to next available vehicle (round-robin or first available)
+        vehicle = fleet[len(driver_vehicle_map) % len(fleet)]
+    driver_vehicle_map[driver_name] = vehicle
+
+# Per-driver TSP optimization
+if driver_orders_map:
+    assignment = await optimize_per_driver(
+        geocoded_orders, driver_orders_map, driver_vehicle_map, optimizer
+    )
+else:
+    # Fallback: no driver column in CSV -> fleet-wide CVRP (backward compatible)
+    assignment = optimizer.optimize(geocoded_orders, fleet)
+```
+
+#### 4c. New API endpoints
+
+```python
+# Driver management
+GET  /api/drivers                    # List all drivers
+POST /api/drivers                    # Create driver manually
+PUT  /api/drivers/{driver_id}        # Update driver (name, phone, vehicle)
+DELETE /api/drivers/{driver_id}      # Deactivate driver
+
+# Geocode cache management
+GET  /api/geocode-cache/stats        # Cache hit rate, entry count, cost savings
+POST /api/geocode-cache/clear        # Clear cache (admin operation)
+
+# Route validation
+GET  /api/routes/{vehicle_id}/validate   # Compare OSRM vs Google for this route
+
+# Settings
+GET  /api/settings                   # Current settings (masked API key, cache stats)
+PUT  /api/settings                   # Update settings (API key)
+```
+
+### 5. `apps/kerala_delivery/dashboard/src/types.ts` -- New TypeScript Types
+
+```typescript
+// Driver types
+export interface Driver {
+  id: string;
+  name: string;
+  phone: string | null;
+  vehicle_id: string | null;
+  is_active: boolean;
+  source: "csv" | "manual";
+  last_seen_at: string | null;
+  created_at: string;
+}
+
+export interface DriversResponse {
+  count: number;
+  drivers: Driver[];
+}
+
+// Route validation types
+export interface RouteValidation {
+  google_distance_km: number;
+  google_duration_minutes: number;
+  osrm_distance_km: number;
+  osrm_duration_minutes: number;
+  distance_delta_pct: number;
+  duration_delta_pct: number;
+  confidence: "high" | "medium" | "low";
+}
+
+// Geocode cache stats
+export interface GeocodeCacheStats {
+  total_entries: number;
+  google_entries: number;
+  driver_verified_entries: number;
+  total_hits: number;
+  estimated_savings_usd: number;
+  top_addresses: { address: string; hit_count: number }[];
 }
 ```
 
-**Geocoder construction change:**
+### 6. `apps/kerala_delivery/dashboard/src/App.tsx` -- New Navigation Item
+
+Add "Settings" page to the sidebar navigation:
+
+```typescript
+const NAV_ITEMS = [
+  { page: "upload", icon: Upload, label: "Upload & Routes" },
+  { page: "live-map", icon: Map, label: "Live Map" },
+  { page: "run-history", icon: ClipboardList, label: "Run History" },
+  { page: "fleet", icon: Truck, label: "Fleet" },
+  { page: "settings", icon: Settings, label: "Settings" },  // NEW
+];
+```
+
+### 7. `apps/kerala_delivery/dashboard/src/pages/UploadRoutes.tsx` -- Driver Selection UI
+
+**Current state:** Employee uploads CSV, system optimizes across all vehicles, shows route cards per vehicle.
+
+**Target state:** After CSV upload and before optimization, show a driver selection/confirmation step:
+
+1. Parse CSV and extract unique driver names from `DeliveryMan` column
+2. Display driver list with order counts: "SURESH (12 orders), RAJESH (8 orders), ..."
+3. Allow selecting/deselecting drivers to include
+4. "Optimize" button triggers per-driver TSP
+5. Route cards show driver names instead of vehicle IDs
+
+This is a UI flow change, not a separate component. The existing `UploadRoutes.tsx` gains a new intermediate state between "file uploaded" and "routes generated".
+
+### 8. Route Response Format -- Vehicle ID vs Driver Name
+
+**Current API responses** use `vehicle_id` as the primary identifier:
+- `GET /api/routes/VEH-01` to fetch a specific route
+- Response: `{"vehicle_id": "VEH-01", "driver_name": ""}`
+
+**Target state:** Support both vehicle_id and driver name as route lookup keys. The existing `vehicle_id` field in `RouteDB` remains the DB storage format. A new lookup path resolves driver name to vehicle_id:
 
 ```python
-# BEFORE:
-cached_geocoder = CachedGeocoder(upstream=geocoder, session=session) if geocoder else None
-
-# AFTER:
-from core.geocoding.validator import GeocodeValidator
-validator = GeocodeValidator(
-    depot=config.DEPOT_LOCATION,
-    max_radius_km=30.0,
-    dictionary_path=Path(__file__).parent.parent.parent.parent / "data" / "place_names_vatakara.json",
-)
-cached_geocoder = CachedGeocoder(
-    upstream=geocoder,
-    session=session,
-    validator=validator,
-    area_suffix=config.CDCMS_AREA_SUFFIX,
-) if geocoder else None
+@app.get("/api/routes/{identifier}")
+async def get_driver_route(identifier: str, session: AsyncSession = SessionDep):
+    """Get route by vehicle_id OR driver name."""
+    # Try vehicle_id first (backward compatible)
+    route_db = await repo.get_route_for_vehicle(session, run.id, identifier)
+    if not route_db:
+        # Try driver name lookup
+        route_db = await repo.get_route_by_driver_name(session, run.id, identifier)
+    if not route_db:
+        raise HTTPException(404, ...)
 ```
-
-### 5. `apps/kerala_delivery/driver_app/index.html` (MODIFIED)
-
-**Changes:** Add visual indicators for approximate locations.
-
-**Hero card (next pending stop):**
-```html
-<!-- After address display, inside hero card -->
-<div class="tw:badge tw:badge-warning tw:badge-sm tw:gap-1"
-     style="display: ${stop.location_approximate ? 'inline-flex' : 'none'}">
-  <span>~</span> Approx. location
-</div>
-```
-
-**Compact card (remaining stops):**
-```html
-<!-- Orange dot next to address text -->
-<span class="tw:text-warning" title="Approximate location"
-      style="display: ${stop.location_approximate ? 'inline' : 'none'}">
-  &#9679;
-</span>
-```
-
-**Driver behavior:** Informational only. Navigate button still works with the approximate coordinates. Google Maps opens at the area center, and the driver calls the customer for exact directions. When driver marks "Done" and confirms GPS, `save_driver_verified()` caches the correct location for next time.
 
 ---
 
@@ -514,196 +478,262 @@ cached_geocoder = CachedGeocoder(
 
 | Component | Why No Change |
 |-----------|--------------|
-| `core/geocoding/normalize.py` | Cache key normalization is orthogonal. Dictionary splitting happens before cache lookup. |
-| `core/geocoding/google_adapter.py` | Pure API caller. No changes needed -- it still sends addresses and returns results. |
-| `core/geocoding/interfaces.py` | Geocoder/AsyncGeocoder protocols unchanged. Validation is external to the protocol. |
-| `core/geocoding/duplicate_detector.py` | Already has `haversine_meters()`. The validator could share it, but circular imports are a concern. Better to have a standalone haversine in validator.py (10 lines, no dependency). |
-| `core/models/location.py` | Already has `geocode_confidence` field. No schema change needed. |
-| `core/models/order.py` | `address_raw` already preserved. No field additions needed. |
-| `core/models/route.py` | `RouteStop.location` already carries confidence via `Location.geocode_confidence`. |
-| `core/database/models.py` | `OrderDB.geocode_confidence` already exists. `RouteStopDB.location` already stores PostGIS point. No migration needed. |
-| `core/database/repository.py` | `save_optimization_run()` already persists `geocode_confidence`. `route_db_to_pydantic()` already passes confidence through. |
-| `core/data_import/csv_importer.py` | Generic importer. CDCMS-specific changes stay in preprocessor. |
-| `apps/kerala_delivery/config.py` | `DEPOT_LOCATION`, `CDCMS_AREA_SUFFIX` already exist. No new config constants needed. |
+| `core/optimizer/vroom_adapter.py` | Already handles 1 vehicle = TSP. No code change needed -- the orchestration layer decides how many vehicles to pass. |
+| `core/optimizer/interfaces.py` | `RouteOptimizer.optimize(orders, vehicles)` protocol works for both CVRP (N vehicles) and TSP (1 vehicle). |
+| `core/models/order.py` | Order model is driver-agnostic. Orders don't know which driver they belong to -- that's a routing decision. |
+| `core/models/vehicle.py` | Vehicle model unchanged. The driver_name field already exists. |
+| `core/models/route.py` | Route and RouteStop models already have `driver_name` field. |
+| `core/geocoding/` (all) | Geocoding is independent of driver assignment. No changes. |
+| `core/data_import/csv_importer.py` | Generic importer. CDCMS-specific driver extraction stays in preprocessor. |
+| `core/routing/osrm_adapter.py` | OSRM provides travel times. Unrelated to driver assignment. |
+| `apps/kerala_delivery/driver_app/` | Driver PWA fetches route by vehicle_id. It will continue to work -- the route lookup just adds driver name as an alternative key. |
+| `core/database/connection.py` | Async engine and session factory unchanged. |
+| `core/licensing/` | License management unrelated to driver features. |
+
+---
+
+## Database Schema Changes
+
+### New Migration: Add Driver Management Columns
+
+```sql
+-- Alembic migration: add driver management columns
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS name_normalized VARCHAR(100);
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS source VARCHAR(30) DEFAULT 'manual';
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+
+-- Backfill normalized names from existing data
+UPDATE drivers SET name_normalized = LOWER(TRIM(name)) WHERE name_normalized IS NULL;
+
+-- Make name_normalized NOT NULL after backfill
+ALTER TABLE drivers ALTER COLUMN name_normalized SET NOT NULL;
+
+-- Index for fast driver lookup during CSV upload
+CREATE INDEX IF NOT EXISTS idx_drivers_name_normalized ON drivers(name_normalized);
+
+-- Unique constraint to prevent duplicate drivers
+ALTER TABLE drivers ADD CONSTRAINT uq_drivers_name_normalized UNIQUE (name_normalized);
+```
+
+### New Migration: Routes Table Driver Lookup
+
+```sql
+-- Index for looking up routes by driver_name (new lookup path)
+CREATE INDEX IF NOT EXISTS idx_routes_driver_name ON routes(driver_name);
+```
+
+### No Changes to These Tables
+
+| Table | Reason |
+|-------|--------|
+| `vehicles` | Still the physical fleet. Drivers are assigned to vehicles, not the reverse. |
+| `orders` | Orders are driver-agnostic at the DB level. Driver assignment is via routes. |
+| `route_stops` | Stops belong to routes. Driver info is on the route, not the stop. |
+| `optimization_runs` | Already tracks vehicles_used. Could add drivers_used but not essential. |
+| `telemetry` | Already has `vehicle_id` and `driver_name` fields. No schema change. |
+| `geocode_cache` | Completely independent of driver management. |
 
 ---
 
 ## Data Flow Changes (Detailed)
 
-### Change 1: Address Cleaning Pipeline Reorder
-
-```
-BEFORE:                               AFTER:
-Step 1: Phone removal                 Step 1: Phone removal
-Step 2: Artifact removal              Step 2: Artifact removal
-Step 3: Abbreviation expansion        Step 3: Digit->uppercase split (existing)
-Step 4: Digit->uppercase split        Step 4: Lowercase->uppercase split (NEW)
-Step 5: Whitespace collapse           Step 5: Dictionary-powered split (NEW)
-Step 6: Title case                    Step 6: Abbreviation expansion (MOVED)
-Step 7: Title case artifacts fix      Step 7: Whitespace collapse
-Step 8: Area suffix                   Step 8: Title case
-                                      Step 9: Title case artifacts fix
-                                      Step 10: Area suffix
-```
-
-**Why reorder?** Abbreviation expansion converts `NR.` to `Near`, `PO.` to `P.O.`. If this happens before splitting, the split patterns can not detect `NR` or `PO` in concatenated text. Example: `KUNIYILNR.EK GOPALAN` -- expanding `NR.` first gives `KUNIYILNear EK GOPALAN` (wrong). Splitting first detects `KUNIYIL` as a place name, then the remainder `NR.EK GOPALAN` gets expanded to `Near EK GOPALAN` (correct).
-
-### Change 2: Geocoding Flow Adds Validation Layer
+### Change 1: CSV Upload Extracts Driver Assignment
 
 ```
 BEFORE:
-  address -> cache check -> miss -> Google API -> save to cache -> return
+  CDCMS CSV -> preprocess_cdcms() -> DataFrame with delivery_man column -> IGNORED
 
 AFTER:
-  address -> cache check -> miss -> Google API
-    -> VALIDATE (within 30km?)
-    -> YES: save to cache -> return
-    -> NO: retry with area name -> validate again
-        -> YES: save to cache (confidence * 0.7) -> return
-        -> NO: centroid fallback (confidence = 0.3) -> save to cache -> return
+  CDCMS CSV -> preprocess_cdcms() -> DataFrame with delivery_man column
+    -> Build driver_orders_map: {"SURESH": ["ORD-001", "ORD-003", ...]}
+    -> For each driver: get_or_create_driver(session, name)
+    -> Assign drivers to vehicles (round-robin or manual mapping)
 ```
 
-**Cache interaction:** The validation result (including adjusted confidence) is what gets saved to the PostGIS cache. Future cache hits for the same address will return the validated (possibly fallback) location, not the original wrong one. This means the fallback chain runs at most once per address.
-
-### Change 3: API Response Adds Confidence Fields
+### Change 2: Optimization Strategy Changes
 
 ```
-BEFORE (GET /api/routes/{vehicle_id}):
-{
-  "stops": [
-    {"sequence": 1, "address": "...", "latitude": ..., "longitude": ..., ...}
-  ]
-}
+BEFORE (CVRP):
+  All 40 orders + All 13 vehicles -> VROOM -> Assigns orders to vehicles
 
-AFTER:
-{
-  "stops": [
-    {
-      "sequence": 1,
-      "address": "...",
-      "latitude": ...,
-      "longitude": ...,
-      "geocode_confidence": 0.95,          // NEW
-      "location_approximate": false,        // NEW
-      ...
-    }
-  ]
-}
+AFTER (Per-driver TSP):
+  SURESH's 12 orders + 1 vehicle -> VROOM -> Optimal sequence for SURESH
+  RAJESH's 8 orders + 1 vehicle -> VROOM -> Optimal sequence for RAJESH
+  KUMAR's 10 orders + 1 vehicle -> VROOM -> Optimal sequence for KUMAR
+  ... (one VROOM call per driver)
+  -> Combine into single RouteAssignment
 ```
 
-**Backward compatibility:** New fields are additive. Existing consumers that don't read `geocode_confidence` or `location_approximate` are unaffected. The driver PWA will be updated to display badges, but older cached versions of the PWA will simply ignore the new fields.
+**Performance note:** Multiple VROOM calls (one per driver) is slightly more overhead than a single call, but VROOM solves TSP for 30 stops in < 10ms. With 13 drivers, total optimization time is still < 200ms. Negligible compared to geocoding (which takes seconds per address).
 
-### Change 4: Display Text Source Change
+### Change 3: Route Lookup Supports Driver Name
 
 ```
 BEFORE:
-  RouteStop.address_display = order.location.address_text    (Google's formatted_address)
-                                 OR order.address_raw         (fallback)
+  GET /api/routes/VEH-01  -> route for vehicle VEH-01
 
 AFTER:
-  RouteStop.address_display = order.address_raw               (ALWAYS cleaned original)
+  GET /api/routes/VEH-01  -> route for vehicle VEH-01 (backward compatible)
+  GET /api/routes/SURESH   -> route for driver SURESH (new)
+  GET /api/routes?driver_name=SURESH  -> alternative query param syntax
 ```
 
-**This affects all routes, not just new ones.** Existing cached geocode results still have `address_text = formatted_address`, but the vroom adapter now ignores that field. The display always comes from the CSV source.
+### Change 4: Dashboard Shows Drivers, Not Vehicles
+
+```
+BEFORE:
+  Route cards: "VEH-01 | 8 stops | 23.4 km"
+
+AFTER:
+  Route cards: "Suresh Kumar | VEH-03 | 8 stops | 23.4 km"
+  Driver selection step before optimization
+  Settings page with cache stats and driver management
+```
+
+### Change 5: Google Maps Route Validation (New Data Flow)
+
+```
+After VROOM optimization (optional, triggered from dashboard):
+  1. Take VROOM's optimized stop sequence for a driver
+  2. Build waypoint list: depot -> stop1 -> stop2 -> ... -> depot
+  3. Call Google Routes API computeRoutes with waypoints (no optimization)
+  4. Compare:
+     - OSRM distance (from VROOM) vs Google distance
+     - OSRM duration * safety_multiplier vs Google duration
+  5. Display delta on dashboard route card:
+     "OSRM: 23.4 km / Google: 24.1 km (+3%)"
+  6. High confidence (< 15% delta) = green badge
+     Medium (15-30%) = amber badge
+     Low (> 30%) = red badge -- investigate OSRM data quality
+```
 
 ---
 
 ## Dependency Graph (Build Order)
 
 ```
-Phase 1: Foundation Fixes (no dependencies)
-  |-- 1.1: Fix address_display source (vroom_adapter.py:278) -- ONE LINE
-  |-- 1.2: Add lowercase->uppercase regex (cdcms_preprocessor.py)
-  |-- 1.3: Reorder cleaning steps (cdcms_preprocessor.py)
-  |-- 1.4-1.5: Update/add tests
+Phase 1: Driver DB Foundation (no external dependencies)
+  |-- 1.1: Alembic migration for DriverDB columns (name_normalized, source, last_seen_at)
+  |-- 1.2: Repository functions (get_or_create_driver, get_active_drivers, etc.)
+  |-- 1.3: API endpoints for driver CRUD (GET/POST/PUT/DELETE /api/drivers)
+  |-- 1.4: Unit tests for driver repository and API
   |
-Phase 2: Place Name Dictionary (no runtime dependencies on Phase 1)
-  |-- 2.1: Write build_place_dictionary.py
-  |-- 2.2: Run script, generate place_names_vatakara.json
-  |-- 2.3: Build AddressSplitter class
-  |-- 2.4: Add fuzzy matching with RapidFuzz
-  |-- 2.5: Integrate splitter into clean_cdcms_address() -- depends on 1.3 (step reorder)
-  |-- 2.6: Tests
+Phase 2: Per-Driver TSP Optimization (depends on Phase 1)
+  |-- 2.1: Build driver_orders_map from CDCMS delivery_man column
+  |-- 2.2: Driver-to-vehicle assignment logic (round-robin default)
+  |-- 2.3: Per-driver TSP wrapper calling VroomAdapter with 1 vehicle
+  |-- 2.4: Fallback to fleet-wide CVRP for non-CDCMS uploads
+  |-- 2.5: Update save_optimization_run to persist driver_name correctly
+  |-- 2.6: Unit + integration tests
   |
-Phase 3: Geocode Validation (depends on 2.2 for dictionary)
-  |-- 3.1: Implement haversine utility
-  |-- 3.2: Build GeocodeValidator
-  |-- 3.3: Add area centroid lookup
-  |-- 3.4: Integrate into CachedGeocoder -- depends on 3.2
-  |-- 3.5: Add retry-with-area-name fallback -- depends on 3.4
-  |-- 3.6: Tests
+Phase 3: CSV Upload Flow Improvements (parallel with Phase 2)
+  |-- 3.1: CDCMS .xlsx detection fixes (already in scope)
+  |-- 3.2: Address garbling fixes in preprocessor
+  |-- 3.3: Multi-format support (tab-sep, comma-sep, Excel)
+  |-- 3.4: Tests
   |
-Phase 4: API + Driver UI (depends on 3.4 for confidence data)
-  |-- 4.1: Add confidence fields to API response
-  |-- 4.2: Add "Approx. location" badge to hero card
-  |-- 4.3: Add orange dot to compact cards
-  |-- 4.4: E2E tests
+Phase 4: Dashboard Driver UI (depends on Phase 1 + 2)
+  |-- 4.1: Driver selection step in UploadRoutes.tsx
+  |-- 4.2: Route cards show driver names
+  |-- 4.3: Driver management section (list, edit, assign vehicles)
+  |-- 4.4: TypeScript types for new API responses
   |
-Phase 5: Integration Testing (depends on all above)
-  |-- 5.1: Full pipeline test with sample_cdcms_export.csv
-  |-- 5.2: Verify "HDFC ERGO" bug is fixed
-  |-- 5.3: Measure accuracy metrics
-  |-- 5.4: Document upgrade trigger criteria for Approach B (NER)
+Phase 5: Google Maps Route Validation (depends on Phase 2)
+  |-- 5.1: GoogleMapsRouteValidator in core/routing/
+  |-- 5.2: GET /api/routes/{id}/validate endpoint
+  |-- 5.3: Dashboard validation badge on route cards
+  |-- 5.4: Tests (mock Google API)
+  |
+Phase 6: Dashboard Settings & Cache Management (parallel with Phase 5)
+  |-- 6.1: GET /api/geocode-cache/stats endpoint
+  |-- 6.2: Settings page (API key, cache stats, upload history)
+  |-- 6.3: Geocode zone radius tightening (30km -> 20km)
+  |
+Phase 7: Integration Testing (depends on all above)
+  |-- 7.1: Full pipeline test with real CDCMS export
+  |-- 7.2: Driver auto-creation and vehicle assignment verification
+  |-- 7.3: Per-driver TSP vs fleet CVRP comparison
+  |-- 7.4: E2E Playwright tests for new dashboard flows
 ```
 
 ### Build Order Rationale
 
-- **Phase 1 first** because the `address_display` fix and regex improvements are safe, independent, and immediately beneficial. They can ship before the dictionary exists.
-- **Phase 2 before Phase 3** because the validator uses the same dictionary for area centroid lookups. Building the dictionary infrastructure once and sharing it across both components avoids duplication.
-- **Phase 3 before Phase 4** because the API confidence fields are only meaningful after the validator assigns adjusted confidence scores. Without validation, all Google results have the same confidence regardless of whether they are in-zone.
-- **Phase 4 last (before integration testing)** because UI changes should reflect the complete pipeline behavior, not an intermediate state.
-- **Phase 5 is verification, not implementation** -- it tests the assembled pipeline end-to-end.
+- **Phase 1 first** because driver DB is the foundation everything else depends on. Auto-creation from CSV is the critical path for the entire milestone.
+- **Phase 2 depends on Phase 1** because per-driver TSP requires resolved driver entities with vehicle assignments.
+- **Phase 3 parallel with Phase 2** because CSV improvements (xlsx detection, address fixes) are independent of the optimization strategy change. They improve the input quality for both old and new flows.
+- **Phase 4 depends on Phases 1+2** because the dashboard driver UI needs working API endpoints for drivers and per-driver routes.
+- **Phase 5 depends on Phase 2** because route validation compares VROOM output against Google, so optimization must be working first.
+- **Phase 6 parallel with Phase 5** because settings/cache management are independent of route validation.
+- **Phase 7 last** because it tests the assembled system end-to-end.
 
 ---
 
-## Haversine Function Sharing Decision
+## API Endpoint Summary
 
-The codebase already has `haversine_meters()` in `core/geocoding/duplicate_detector.py` (lines 50-64). The new `GeocodeValidator` also needs haversine distance.
+### New Endpoints
 
-**Decision: Duplicate the haversine function in `validator.py`.**
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/drivers` | Read key | List all drivers |
+| POST | `/api/drivers` | Write key | Create driver manually |
+| PUT | `/api/drivers/{id}` | Write key | Update driver (name, phone, vehicle) |
+| DELETE | `/api/drivers/{id}` | Write key | Deactivate driver |
+| GET | `/api/geocode-cache/stats` | Read key | Cache performance metrics |
+| POST | `/api/geocode-cache/clear` | Write key | Clear cache (admin) |
+| GET | `/api/routes/{id}/validate` | Read key | Google Maps route validation |
+| GET | `/api/settings` | Read key | Current settings |
+| PUT | `/api/settings` | Write key | Update settings |
 
-**Rationale:**
-- The function is 10 lines of pure math with no dependencies
-- Extracting to a shared `core/geocoding/utils.py` would require modifying `duplicate_detector.py` imports, which adds a code change and test update to a module that is NOT part of this milestone
-- The haversine formula is universally known and unlikely to have bugs or need changes
-- If a shared utility becomes warranted later (3+ call sites), refactor then
+### Modified Endpoints
+
+| Method | Path | Change |
+|--------|------|--------|
+| POST | `/api/upload-orders` | Add driver extraction, per-driver TSP, driver auto-creation |
+| GET | `/api/routes` | Include driver_name in response, support driver lookup |
+| GET | `/api/routes/{identifier}` | Accept both vehicle_id and driver name |
+
+### Unchanged Endpoints
+
+All other endpoints (telemetry, vehicles, health, config, QR sheet) remain unchanged. The vehicle CRUD endpoints stay for fleet management -- vehicles are physical assets, drivers are the people who use them.
 
 ---
 
 ## Scalability Considerations
 
-| Concern | At 50 orders/day (current) | At 500 orders/day | At 5000 orders/day |
-|---------|---------------------------|--------------------|--------------------|
-| Dictionary loading | ~5ms one-time (285 entries) | Same -- loaded once | Same |
-| Fuzzy matching per address | ~0.1ms (scan 285 entries) | Acceptable | Consider building a Trie or prefix index |
-| Validation (haversine) | <0.01ms per check | Negligible | Negligible |
-| Fallback retries (area geocode) | 1 extra Google API call per out-of-zone | Same cost per failure | Consider batch validation |
-| Dictionary maintenance | Manual refresh via script | Same | Need automated refresh + versioning |
+| Concern | At 13 drivers (current) | At 50 drivers | At 200 drivers |
+|---------|------------------------|---------------|----------------|
+| VROOM calls per upload | 13 TSP calls, ~130ms total | 50 calls, ~500ms | 200 calls, ~2s (still acceptable) |
+| Driver DB lookups | 13 get_or_create calls | 50 calls, ~50ms | Consider batch upsert |
+| Google validation calls | 13 Routes API calls, ~$0.065 | 50 calls, ~$0.25 | $1/upload, may need caching |
+| Dashboard rendering | 13 route cards | 50 cards, pagination needed | Virtual scroll + search filter |
 
-At the current scale of 40-50 deliveries/day, all performance concerns are negligible. The dictionary scan is O(n) where n=285, taking ~0.1ms per address. Even at 500 orders, this adds only 50ms total.
+At the current scale of 13 drivers and 40-50 orders/day, all concerns are negligible. The per-driver TSP approach is actually faster than fleet-wide CVRP because each individual TSP solve is simpler (fewer stops per vehicle).
 
 ---
 
 ## Integration Risk Assessment
 
-| Integration Point | Risk Level | What Could Go Wrong | Mitigation |
-|-------------------|-----------|---------------------|------------|
-| Step reordering in clean_cdcms_address() | Medium | Existing test expectations change | Run full test suite after reorder. Most changes are improvements. |
-| AddressSplitter lazy init | Low | Dictionary file missing at runtime | Graceful None fallback. Preprocessor works without splitter (regex-only). |
-| Validator in CachedGeocoder | Medium | area_name not available (non-CDCMS uploads) | Default area_name="" skips area retry. Still does zone check. |
-| API response additions | Low | Breaking change for consumers | Additive fields only. No existing fields removed. |
-| Driver PWA badge | Low | Older cached PWA versions | New fields ignored by old JS. Badge simply won't appear. |
-| vroom_adapter address_display fix | Low | Some consumers expected Google's formatted_address | address_raw is always present and more recognizable to drivers. |
+| Integration Point | Risk | What Could Go Wrong | Mitigation |
+|-------------------|------|---------------------|------------|
+| Driver auto-creation from CSV | Medium | CDCMS name variations create duplicates ("SURESH K" vs "SURESH KUMAR") | Normalize names aggressively (lowercase, strip, collapse spaces). Add fuzzy matching if needed later. |
+| Per-driver TSP replacing CVRP | Medium | Non-CDCMS uploads have no delivery_man column | Fallback to fleet-wide CVRP when no driver mapping available. Feature flag for gradual rollout. |
+| Vehicle assignment for new drivers | Low | More drivers than vehicles (13) | Round-robin assignment with clear warning in dashboard. Long-term: decouple driver from vehicle. |
+| Route lookup by driver name | Low | Name collisions (two drivers named "SURESH") | Use normalized name + run_id for disambiguation. Dashboard shows full name with vehicle. |
+| Google Routes API cost | Low | Validation adds API cost per upload | Make validation opt-in (button click, not automatic). Cache validation results. |
+| Dashboard driver selection UI | Medium | Complex state management for upload flow | Keep it simple: show checkboxes, not drag-and-drop. Use existing DaisyUI components. |
+| Backward compatibility | Low | Driver PWA uses vehicle_id for route fetch | Vehicle_id lookup remains primary. Driver name is additive path. |
 
 ---
 
 ## Sources
 
-- Design spec: `docs/superpowers/specs/2026-03-10-address-preprocessing-design.md` -- comprehensive design document with algorithm details, interface definitions, and implementation plan
-- Existing codebase architecture: `.planning/codebase/ARCHITECTURE.md` -- system layer analysis
-- Source code analysis: `core/data_import/cdcms_preprocessor.py`, `core/geocoding/cache.py`, `core/geocoding/google_adapter.py`, `core/geocoding/validator.py` (planned), `core/optimizer/vroom_adapter.py`, `core/database/repository.py`, `core/database/models.py`, `apps/kerala_delivery/api/main.py`
-- Project context: `.planning/PROJECT.md` -- constraints, key decisions, scope
+- VROOM API documentation: [GitHub VROOM-Project/vroom docs/API.md](https://github.com/VROOM-Project/vroom/blob/master/docs/API.md) -- confirms TSP behavior with 1 vehicle
+- Google Routes API: [Routes API Usage and Billing](https://developers.google.com/maps/documentation/routes/usage-and-billing) -- pricing tiers, 25 waypoint limit
+- Google Routes API overview: [Compute Routes Overview](https://developers.google.com/maps/documentation/routes/overview/) -- computeRoutes endpoint specification
+- Existing codebase analysis: `.planning/codebase/ARCHITECTURE.md` -- system layer analysis (2026-03-01)
+- Source code traced: `core/database/models.py` (DriverDB schema), `core/database/repository.py` (all CRUD patterns), `core/optimizer/vroom_adapter.py` (request building), `core/data_import/cdcms_preprocessor.py` (delivery_man extraction), `apps/kerala_delivery/api/main.py` (upload pipeline, fleet assembly at line 1306), `apps/kerala_delivery/config.py` (fleet constants)
+- Project context: `.planning/PROJECT.md` -- v3.0 milestone scope and constraints
 
 ---
-*Architecture research for: v2.2 Address Preprocessing Pipeline*
-*Researched: 2026-03-10*
+*Architecture research for: v3.0 Driver-Centric Model*
+*Researched: 2026-03-12*

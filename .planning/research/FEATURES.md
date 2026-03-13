@@ -1,185 +1,340 @@
-# Feature Research
+# Feature Landscape
 
-**Domain:** Address preprocessing, geocode validation, and location confidence for LPG delivery route optimization (Kerala, India)
-**Researched:** 2026-03-10
-**Confidence:** HIGH
+**Domain:** Driver-centric delivery management -- driver management, per-driver TSP optimization, route validation, geocode cache management, upload history, settings
+**Researched:** 2026-03-12
+**Milestone:** v3.0 (Driver-Centric Model)
+**Overall Confidence:** MEDIUM-HIGH
 
-## Feature Landscape
+## Context
 
-This analysis covers the v2.2 milestone scope: fixing wrong route locations caused by concatenated CDCMS addresses and unvalidated geocoding results. All features build on the existing geocoding pipeline (`GoogleGeocoder` -> `CachedGeocoder` -> PostGIS cache) and the existing CDCMS preprocessor (`clean_cdcms_address()`).
+This research covers features for the v3.0 milestone which transforms the system from a vehicle-fleet CVRP model to a driver-centric TSP model. The CDCMS CSV already contains a "DeliveryMan" column that pre-assigns orders to drivers. The optimizer's job shifts from "assign orders to vehicles" (CVRP) to "find optimal stop sequence for each driver's pre-assigned orders" (TSP per driver).
 
-### Table Stakes (Users Expect These)
+Existing infrastructure leveraged:
+- VROOM solver (already supports single-vehicle TSP when given one vehicle)
+- PostgreSQL `drivers` table (exists but unused)
+- `optimization_runs` table with `source_filename` (partial upload history)
+- `geocode_cache` table with `hit_count`, `last_used_at`, `confidence`, `source`
+- Google Maps route URL generation (QR codes, navigation links)
+- Dashboard with DaisyUI/Tailwind v4, sidebar navigation, skeleton loading
+- Driver PWA with offline support, hero card architecture
 
-Features that must ship together. Without all of these, drivers still get sent to wrong locations and the core value proposition ("every address must appear on the map and be assigned to an optimized route") is broken.
+---
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **address_display source fix** | Drivers see Google's `formatted_address` ("HDFC ERGO Insurance Agent, Palayam, Kozhikode") in navigation links but the correct address in the stops list. Root cause: `vroom_adapter.py:278` uses `order.location.address_text` (Google's response) on cache miss but `address_raw` on cache hit. Both paths must always show the cleaned original. | LOW | One-line change: `address_display=order.address_raw`. Eliminates display inconsistency regardless of cache state. Independent of all other features -- ship first as safety net. |
-| **Improved regex word splitting** | CDCMS concatenates words without separators: `ANANDAMANDIRAMK.T.BAZAR`, `CHEKKIPURATHPO.`. Current regex (`re.sub(r"(\d)([A-Z])", ...)`) only splits digit-to-uppercase transitions. Adding lowercase-to-uppercase splitting covers the most common concatenation pattern. | LOW | Add `re.sub(r"([a-z])([A-Z])", r"\1 \2", addr)` and reorder cleaning steps so splitting runs before abbreviation expansion. ~20 lines changed, ~30 lines new tests. Safe, independent regex change. |
-| **Geocode zone validation (30km check)** | Google geocodes garbled addresses to locations 40+ km away (Kozhikode city center, random places in Karnataka). Without validation, drivers follow routes to completely wrong locations. The delivery zone is a 30km radius around the Vatakara depot -- any result outside this boundary is definitively wrong. | MEDIUM | New `GeocodeValidator` class using haversine distance (~10 lines of pure Python math, no dependencies). The 30km threshold is generous (actual delivery zone is ~15-20km). This is standard practice in logistics geocoding: Geocodio, Route4Me, and LogiNext all validate results against service area boundaries. |
-| **Fallback chain (area retry -> centroid)** | When zone validation rejects a geocode result, the system needs a recovery path instead of dropping the order. Three-tier chain: (1) retry geocoding with AreaName only, (2) use area centroid from place dictionary, (3) keep original result but flag as approximate. | MEDIUM | Integrates into `CachedGeocoder.geocode()`. Area retry costs one extra Google API call (negligible at 40-50 orders/day). Centroid fallback uses static dictionary coordinates -- no API call. Final fallback ensures no order is silently dropped. Depends on zone validation and place name dictionary. |
-| **geocode_confidence + location_approximate in API response** | Without confidence data in the API response, neither the driver app nor the dashboard can distinguish between accurate and approximate locations. The `Location` model already has `geocode_confidence` -- this feature just exposes it in the stop JSON. | LOW | Add two fields to stop JSON in `main.py`: `geocode_confidence` (float 0-1, already on the model) and `location_approximate` (boolean, true when confidence < 0.5). ~5 lines per endpoint. Backward compatible -- new fields only. |
-| **"Approx. location" badge in Driver PWA** | Drivers need to know when a stop's location is approximate so they can call the customer for directions. Without a visual indicator, approximate locations silently fail -- the driver arrives at the wrong place. | LOW | DaisyUI `tw:badge-warning` on hero card, orange dot on compact cards. ~15 lines HTML/CSS in `index.html`. Informational only -- Navigate button still works. The self-healing loop already exists: when drivers mark "Done" with GPS, `save_driver_verified()` caches correct coordinates for next time. Depends on API confidence fields. |
+## Table Stakes
 
-### Differentiators (Competitive Advantage)
+Features users expect from any driver-centric delivery management system. Missing any of these makes the v3.0 transition feel broken or incomplete.
 
-Features that go beyond baseline correctness. These solve the hardest cases that regex alone cannot handle.
+### 1. Vehicle-to-Driver Conceptual Rename
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **Dictionary-powered word splitting** | Regex alone cannot split `MUTTUNGALPOBALAVADI` into `MUTTUNGAL` + `PO` + `BALAVADI` because there is no case transition or separator. A local dictionary of ~200-300 place names within 30km enables splitting at known word boundaries. This is the key differentiator over naive preprocessing -- it handles the hardest CDCMS concatenation patterns that cause wrong geocoding. | MEDIUM | New `AddressSplitter` class (~150 lines). Longest-match-first algorithm prevents false splits. Fuzzy matching via RapidFuzz (threshold 85%) handles transliteration variants. Passthrough for unknown text -- if no dictionary match, text goes to geocoder unchanged. Graceful degradation if dictionary file is missing. |
-| **Place name dictionary from OSM + India Post** | Static JSON dictionary of hamlet, village, town, and post office names within 30km of depot. Built from two free, public APIs (OSM Overpass + India Post PostalPinCode). No API key needed, no authentication, no personal data sent. Committed to repo -- runtime never calls these APIs. | MEDIUM | Build script (~150 lines): queries OSM for place nodes within 30km, India Post for post offices by PIN code (673101-673110), deduplicates with fuzzy matching, outputs `data/place_names_vatakara.json`. Each entry has name, aliases, type, lat/lon, source. Dictionary also provides centroid coordinates for the geocode fallback chain. |
-| **Self-healing geocode cache (amplified)** | Already built: `save_driver_verified()` writes confidence=0.95 coordinates when drivers mark deliveries as done. The new confidence system amplifies this: an address starting at confidence=0.3 (centroid fallback) gets promoted to 0.95 after one successful delivery. Over weeks, the system learns correct locations for its delivery zone without any manual intervention. | ALREADY EXISTS | No new code. Documented here because the new confidence pipeline gives existing self-healing much more leverage -- approximate locations are now visible to drivers, who naturally correct them through normal delivery workflow. |
-| **Integration testing with accuracy metrics** | After implementing, measure on real CDCMS data: % within 30km (target >90%), % needing centroid fallback (target <10%), dictionary coverage (target >95% of area names). These metrics define the upgrade trigger to Approach B (NER model). | LOW | Test script + documentation of metrics. Not user-facing but critical for engineering confidence. Establishes measurable go/no-go criteria for the NER upgrade path. |
+| Aspect | Detail |
+|--------|--------|
+| **Why Expected** | The system currently says "Vehicle VEH-01" everywhere but the office staff thinks in terms of drivers ("Rajan's route"). CDCMS data uses "DeliveryMan" -- the system should match the mental model. |
+| **Complexity** | LOW-MEDIUM |
+| **What Changes** | DB: `routes.vehicle_id` -> `routes.driver_id` (or add driver_id alongside). API: response fields use "driver" terminology. Dashboard: "Fleet Management" -> "Drivers" page. TypeScript types: `Vehicle` interface adapted or replaced with `Driver`. |
+| **Dependencies** | None -- pure renaming/aliasing. Can be done incrementally with backward-compatible aliases. |
+| **Risk** | Breaking change to API consumers if not aliased. Driver PWA fetches by `vehicle_id` -- must be updated or route API must accept either. |
+| **Existing code affected** | `VehicleDB` model, `FleetManagement.tsx`, `types.ts` (`Vehicle`, `RouteSummary.vehicle_id`), API endpoints (`/api/vehicles`, `/api/routes/{vehicle_id}`), Driver PWA route fetching. |
 
-### Anti-Features (Commonly Requested, Often Problematic)
+### 2. Driver Auto-Creation from CSV
 
-Features that seem useful but would cause harm for this specific system.
+| Aspect | Detail |
+|--------|--------|
+| **Why Expected** | Office staff upload a CDCMS export that already has a "DeliveryMan" column. Requiring them to manually create each driver before uploading is wasted effort. The system should learn driver names from the data it ingests. |
+| **Complexity** | LOW |
+| **What Changes** | During CSV upload, extract unique DeliveryMan values, check against `drivers` table, auto-create new entries with `is_active=true`. Return creation count in upload response. |
+| **Dependencies** | Depends on CDCMS preprocessor detecting the DeliveryMan column. |
+| **Risk** | Name normalization -- "RAJAN K" vs "Rajan K" vs "RAJAN.K" must resolve to the same driver. Use `normalize_driver_name()` with case-insensitive matching + whitespace/punctuation normalization. |
+| **Industry pattern** | Standard in logistics software -- Detrack, Onfleet, and Route4Me all auto-detect drivers from import files. First-seen names create records; subsequent uploads match against existing records. |
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| **NER model as default path** | ML-powered Named Entity Recognition (IndicBERT) could parse any Indian address into structured components. Seems like the "proper" solution. | Adds ~400MB dependency (transformers + torch), 50ms/address vs <1ms dictionary lookup, requires model download, and 95% of CDCMS addresses reference the same ~200 places. Overkill for a 30km zone. | Dictionary + regex first (Approach A). NER designed as conditional Approach B, triggered only if measurable accuracy criteria are not met after testing. |
-| **Fuzzy address matching across full addresses** | Match incoming addresses against cached ones using Levenshtein distance. Saves API calls. | False positives assign wrong coordinates. "VALLIKKADU EAST" and "VALLIKKADU WEST" differ by one word but are 3km apart. The API cost savings (~$0.25/day) do not justify the accuracy risk. | Already in PROJECT.md Out of Scope. PostGIS cache with `normalize_address()` handles exact matches. RapidFuzz used only within dictionary splitter on individual place name tokens, not full addresses. |
-| **Multiple geocoding provider fallback** | If Google fails, try Bing, Nominatim, or OLA Maps. More providers = more coverage. | Mixing providers creates coordinate inconsistency -- Google and Nominatim geocode the same address to points 200m apart, producing suboptimal route sequences. Complicates caching and confidence comparison. | Single provider (Google) with zone validation + area centroid fallback. Centroid guarantees a result within the delivery zone even when Google fails entirely. |
-| **Real-time address autocomplete** | As the office employee types, suggest completions from the dictionary. Prevent typos before geocoding. | CDCMS addresses come from a CSV file export, not manual typing. The office employee uploads a file -- they never type individual addresses. Autocomplete solves a problem that does not exist in this workflow. | Dictionary used server-side during preprocessing. If manual entry is ever needed, autocomplete can be added then. |
-| **Auto-correcting addresses** | Fix spelling errors in CDCMS addresses before geocoding. | CDCMS text is ALL-CAPS transliterated Malayalam. Standard spell checkers flag every word. Kerala places have legitimate variant spellings (Vadakara/Vatakara). Auto-correction would introduce errors. | RapidFuzz matching within the dictionary handles transliteration variants without modifying the original text. The dictionary acts as a domain-specific "spell checker" -- it matches, not replaces. |
-| **Reverse geocoding for telemetry** | Convert driver GPS pings to street addresses. | $0.005/call, 13 vehicles every 30s for 8 hours = ~12,480 calls/day = ~$62/day. Already in PROJECT.md Out of Scope. | Raw GPS coordinates for telemetry. Forward-geocode only during CSV upload (40-50 calls/day). |
+### 3. Manual Driver Add/Edit/Deactivate
+
+| Aspect | Detail |
+|--------|--------|
+| **Why Expected** | Auto-creation handles the common case but office staff need to correct typos (CSV had "RAJN K" instead of "RAJAN K"), add phone numbers for the Call Office button, and deactivate drivers who left. |
+| **Complexity** | LOW (existing `FleetManagement.tsx` pattern can be adapted) |
+| **What Changes** | Rename/adapt FleetManagement page to "Drivers" page. Replace vehicle-specific fields (max_weight_kg, depot_location, speed_limit) with driver-specific fields (name, phone, assigned vehicle, status). Keep inline edit pattern (already proven UX). |
+| **Dependencies** | Driver table schema must support all needed fields. Existing `DriverDB` model already has `name`, `phone`, `vehicle_id`, `is_active`. |
+| **Existing code reused** | 80%+ of `FleetManagement.tsx` logic (CRUD operations, inline editing, error handling, form validation). `EmptyState`, `ErrorBanner` components unchanged. |
+
+### 4. Per-Driver TSP Optimization
+
+| Aspect | Detail |
+|--------|--------|
+| **Why Expected** | With CDCMS pre-assigning orders to drivers, the optimizer should find the best stop sequence for each driver -- not reassign orders across the fleet. This is TSP (one driver, optimal sequence) not CVRP (many vehicles, assignment + sequencing). |
+| **Complexity** | MEDIUM |
+| **What Changes** | After CSV parsing, group orders by DeliveryMan. For each driver, create a VROOM request with exactly one vehicle and that driver's orders. VROOM naturally solves TSP when given one vehicle. Collect results into a unified `RouteAssignment`. |
+| **Dependencies** | Driver auto-creation (need driver records to map DeliveryMan column values). Vehicle capacity constraints still apply (each driver has an assigned vehicle). |
+| **Technical detail** | VROOM handles TSP as a special case of VRP with one vehicle. No solver change needed -- just change how we partition the input. Send N requests (one per driver) instead of one request with all orders and vehicles. Each request is tiny (10-30 jobs, 1 vehicle) so VROOM solves in <10ms each. Total wall time similar to current single CVRP solve. |
+| **Risk** | If CDCMS data has an unrecognized DeliveryMan value or missing column, the system needs a fallback. Options: (a) error out clearly, (b) assign unmatched orders to a "default" driver, (c) fall back to fleet-wide CVRP. Option (a) is safest for data integrity. |
+| **Industry context** | Per-driver TSP is standard when assignment is pre-determined. Route4Me, OptimoRoute, and RoadWarrior all support "optimize sequence only" mode alongside full fleet dispatch. |
+
+### 5. Improved CSV Upload Flow
+
+| Aspect | Detail |
+|--------|--------|
+| **Why Expected** | Current upload immediately triggers optimization for the entire fleet. With the driver-centric model, the office employee should see which drivers were detected, how many orders each has, and confirm before optimizing. |
+| **Complexity** | MEDIUM |
+| **What Changes** | Two-step upload: (1) parse + validate + show driver summary, (2) confirm to optimize. The summary screen shows detected drivers, order counts, any new drivers that will be created, and validation warnings. |
+| **Dependencies** | CDCMS preprocessor must extract DeliveryMan column. Driver auto-creation logic must be ready. |
+| **Risk** | Adding a confirmation step slows the workflow. Mitigate by making confirmation fast (single button click, no additional form fields). The parsing step should be <2 seconds. |
+
+### 6. Upload History / Audit Trail
+
+| Aspect | Detail |
+|--------|--------|
+| **Why Expected** | The existing `optimization_runs` table already stores `source_filename`, `created_at`, `total_orders`, `status`. The `RunHistory.tsx` page already displays this. But office staff want to see "what file did I upload yesterday?" and re-run optimization on past data. This is table stakes for any business tool that processes file uploads. |
+| **Complexity** | LOW (mostly already exists) |
+| **What Changes** | Enhance `RunHistory` page: show source filename prominently, add filter by date range, add driver breakdown per run. The API already returns this data via `GET /api/runs`. Minor API enhancement: add `drivers_in_run` count to run response. |
+| **Dependencies** | None -- builds on existing `optimization_runs` table and `RunHistory.tsx`. |
+| **Existing code reused** | `RunHistory.tsx` page structure, `fetchRuns()` API call, expandable row pattern, skeleton loading. |
+| **What NOT to build** | Re-upload/re-process from history -- this requires storing the original CSV file (storage cost, privacy concerns with PII like addresses). Instead, the employee re-uploads a fresh file. Show history for audit/reference, not replay. |
+
+### 7. Dashboard Settings Page
+
+| Aspect | Detail |
+|--------|--------|
+| **Why Expected** | Google Maps API key is currently set via environment variable. Office staff cannot change it without SSH access. A settings page lets them manage the API key, see system configuration, and access cache stats -- all standard admin features. |
+| **Complexity** | LOW-MEDIUM |
+| **What Changes** | New dashboard page with sections: (a) Google Maps API key input (masked, test button), (b) system info (depot location, safety multiplier -- read-only from `/api/config`), (c) geocode cache stats. |
+| **Dependencies** | API endpoint for updating/testing API key. API endpoint for cache stats. |
+| **Risk** | API key security -- must be stored encrypted or in environment variable, never in localStorage. The API key should be settable via dashboard but stored server-side. Send to API via authenticated POST, mask in GET response (show last 4 chars). |
+| **Industry pattern** | Every SaaS settings page follows the same pattern: section header, form fields, save button, success toast. Stripe, Datadog, and MoEngage all manage API keys through Settings > API Keys. |
+
+---
+
+## Differentiators
+
+Features that set this system apart. Not universally expected, but high-value for this specific deployment context.
+
+### 8. Google Maps Route Validation / Confidence Comparison
+
+| Aspect | Detail |
+|--------|--------|
+| **Value Proposition** | Compare OSRM-calculated route distance/duration against Google Maps Routes API for the same waypoints. Large discrepancies (>30% difference) suggest geocoding errors or road network issues. This is a "trust but verify" signal that catches subtle problems OSRM's OSM data might miss (e.g., a road closed for construction that Google knows about). |
+| **Complexity** | MEDIUM |
+| **What Changes** | After VROOM optimization, call Google Maps Routes API (`computeRoutes`) with the same waypoints. Compare total distance and duration. Store discrepancy as a route-level confidence metric. Surface in dashboard as a green/amber/red indicator per route. |
+| **Dependencies** | Google Maps API key must be configured. Requires Google Maps Routes API to be enabled (separate from Geocoding API). |
+| **Cost** | Routes API: $0.005/route for basic, $0.01/route with traffic. At 13 routes/day: $0.065-$0.13/day (~$2-4/month). Acceptable for validation. |
+| **Risk** | Different routing engines use different road networks and speed profiles. OSRM uses OSM data (community-maintained); Google uses proprietary data with real-time traffic. Some discrepancy is expected and normal. The threshold (>30%) needs calibration with real data. |
+| **Industry context** | Onfleet and LogiNext both offer "route confidence" scores but implement them differently. Most compare planned vs actual (post-delivery), not planned vs alternative engine. Pre-delivery comparison using Google is uncommon and genuinely differentiating. |
+
+### 9. Geocode Cache Management Dashboard
+
+| Aspect | Detail |
+|--------|--------|
+| **Value Proposition** | The geocode cache is the system's most valuable asset -- over time it builds a verified address database for the delivery zone. Giving office staff visibility into cache health (total entries, hit rate, source breakdown, stale entries) builds trust and enables proactive maintenance. |
+| **Complexity** | LOW-MEDIUM |
+| **What Changes** | New section in Settings or dedicated page. API endpoints: `GET /api/cache/stats` (total entries, hits, misses, source breakdown, staleness distribution), `DELETE /api/cache/{id}` (purge single entry with API key auth). Dashboard shows stats cards and optionally a searchable table of cached addresses. |
+| **Dependencies** | Existing `geocode_cache` table has all needed fields (`hit_count`, `last_used_at`, `source`, `confidence`). |
+| **Risk** | Cache purge must be authenticated (API key required). Accidental bulk delete could force expensive re-geocoding. Add confirmation dialog. Do NOT expose bulk delete initially -- single-entry purge only. |
+| **Google ToS note** | Google's Terms of Service restrict caching geocoding results to 30 days. However, the system's cache stores driver-verified coordinates (`source='driver_verified'`) and manually corrected coordinates (`source='manual'`) which are not subject to Google's restriction -- they are first-party data. Only `source='google'` entries are subject to the 30-day limit. A cache management UI could flag stale Google entries (>30 days since `created_at`). |
+
+### 10. Multi-Format CSV Support
+
+| Aspect | Detail |
+|--------|--------|
+| **Value Proposition** | CDCMS exports can be .csv or .xlsx. The current system accepts both but the CDCMS preprocessor has fragile column detection. Better format handling (auto-detect delimiter, handle BOM, detect .xlsx masquerading as .csv) reduces upload failures. |
+| **Complexity** | LOW |
+| **What Changes** | Improve `CsvImporter` and `cdcms_preprocessor.py`: add BOM stripping, try multiple delimiters (comma, semicolon, tab), validate .xlsx magic bytes vs extension, better error messages for format mismatches. |
+| **Dependencies** | None -- enhancement to existing code. |
+
+### 11. CDCMS Preprocessing Fixes
+
+| Aspect | Detail |
+|--------|--------|
+| **Value Proposition** | Known issues: address garbling in certain CDCMS exports, .xlsx files with wrong extension not detected, inconsistent column naming between CDCMS versions. Fixing these reduces the "upload failed" rate that frustrates office staff. |
+| **Complexity** | LOW |
+| **What Changes** | Harden `preprocess_cdcms()`: handle more column name variants, improve error messages for unrecognized columns, add `.xlsx` content-type sniffing. |
+| **Dependencies** | None. |
+
+---
+
+## Anti-Features
+
+Features that seem useful but would cause harm for this specific system and use case.
+
+| Anti-Feature | Why Commonly Requested | Why Avoid | What to Do Instead |
+|--------------|----------------------|-----------|-------------------|
+| **Drag-and-drop route reordering** | Operators want to manually adjust stop sequences. Every competitor offers it. | Undermines the VROOM optimizer. Manual overrides create suboptimal routes and make the system feel unreliable ("if I have to fix it myself, why use an optimizer?"). Already in PROJECT.md Out of Scope. | Trust the optimizer. If stop sequence is wrong, the root cause is bad geocoding (fix the address), not bad optimization. |
+| **Driver assignment UI (drag drivers to orders)** | "Let me choose which driver gets which stop." Feels like control. | CDCMS already assigns drivers in the CSV. Manual reassignment contradicts the source-of-truth data. If the office wants different assignments, they should change the CDCMS export, not override in the optimizer. | Auto-detect from CSV. Provide clear error messages when DeliveryMan column is missing or has issues. |
+| **Real-time route recalculation** | "A stop was cancelled mid-route, re-optimize the remaining stops." | Requires the driver to have connectivity (Kerala has spotty mobile networks in rural areas). Re-routing mid-delivery confuses drivers who memorized the sequence. The 10-30 stop routes are short enough that skipping one stop doesn't materially change efficiency. | Driver marks stop as "Failed" and moves to next stop. The PWA already handles this with auto-advance. |
+| **Driver shift scheduling** | "Manage driver availability, working hours, break times." | Over-engineers the workflow. This is a single-depot, single-shift operation. All 13 drivers work the same hours. Shift management adds complexity with zero benefit for this deployment. | Single implicit shift. If multi-shift is ever needed, it is a future milestone. |
+| **Driver performance dashboards** | "Show delivery speed, on-time percentage, stops per hour." | Introduces surveillance dynamics that damage driver trust. Kerala labor relations are sensitive to monitoring. The system should help drivers, not evaluate them. Also, accuracy requires GPS telemetry analysis that is out of scope for v3.0. | Track delivery completion (already done via status updates). Performance analytics is a separate future concern if ever needed. |
+| **Editable API key in localStorage** | "Let me type the API key in the browser settings." | API keys in browser storage are vulnerable to XSS attacks. Any script on the page can read localStorage. | Server-side API key storage. Dashboard sends key to authenticated API endpoint. Response shows masked key (last 4 chars). Key never stored client-side. |
+| **Geocode cache auto-purge** | "Automatically delete cache entries older than 30 days." | Driver-verified entries (source='driver_verified') are first-party data exempt from Google's 30-day restriction. Auto-purging would destroy the most valuable data in the system. | Manual purge of individual entries. Flag Google-sourced entries >30 days old but do not auto-delete. Let the operator decide. |
+| **Bulk cache operations** | "Select all and delete" in the cache management UI. | Accidental bulk delete forces expensive re-geocoding of the entire address database. One misclick destroys months of accumulated cache value. | Single-entry delete only, with confirmation dialog. If bulk cleanup is needed, provide a server-side script for IT staff with double-confirmation. |
+
+---
 
 ## Feature Dependencies
 
 ```
-[address_display source fix]  (standalone, no deps)
-    independent -- ship first as safety net
+[CDCMS DeliveryMan column detection]
+    |
+    +--enables--> [Driver auto-creation from CSV]
+    |                 |
+    |                 +--enables--> [Per-driver TSP optimization]
+    |                 |                 |
+    |                 |                 +--feeds--> [Route validation vs Google Maps]
+    |                 |
+    |                 +--populates--> [Driver management page]
+    |
+    +--enables--> [Improved upload flow with driver summary]
+                      |
+                      +--links to--> [Upload history (enhanced RunHistory)]
 
-[Improved regex splitting]  (standalone, no deps)
-    independent -- safe to ship alongside address_display fix
+[Dashboard Settings page]  (independent)
+    |
+    +--contains--> [API key management]
+    |                  |
+    |                  +--required by--> [Route validation] (needs Routes API enabled)
+    |
+    +--contains--> [Geocode cache stats + management]
 
-[Place name dictionary build]
-    └──enables──> [Dictionary-powered word splitting]
-                      └──integrates into──> [clean_cdcms_address() pipeline]
+[Vehicle-to-Driver rename]  (can be incremental, partially independent)
+    |
+    +--affects--> [Dashboard pages, API responses, TypeScript types]
+    +--affects--> [Driver PWA route fetching]
 
-[Geocode zone validation (haversine + 30km check)]
-    └──enables──> [Fallback chain (area retry -> centroid)]
-                      └──requires──> [Place name dictionary] (for centroid coordinates)
-
-[Fallback chain]
-    └──populates──> [geocode_confidence values in Location model]
-                         └──exposed by──> [API confidence fields]
-                                               └──consumed by──> [Driver PWA "Approx." badge]
-
-[Integration testing + accuracy metrics]
-    └──requires──> ALL of the above
-    └──gates──> [Approach B: NER model] (future, conditional)
+[CDCMS preprocessing fixes]  (independent)
+[Multi-format CSV support]  (independent)
 ```
 
-### Dependency Notes
+### Critical Path
 
-- **address_display fix is independent:** One-line change in `vroom_adapter.py:278`. Can and should ship first. Even if every other feature fails, this fix eliminates the display inconsistency bug.
-- **Regex improvements are independent:** Safe regex change in `cdcms_preprocessor.py` with no external dependencies. Can ship alongside the address_display fix in the same phase.
-- **Dictionary must exist before splitter:** `AddressSplitter` loads `data/place_names_vatakara.json` at init. Build script must run first. If the dictionary file is missing, the splitter gracefully degrades to None and the pipeline falls back to regex-only behavior.
-- **Centroid fallback requires dictionary:** When zone validation rejects a geocode and area-name retry also fails, the system looks up area centroid coordinates from the dictionary. Without the dictionary, the fallback chain degrades to "flag as unvalidated" instead of providing approximate coordinates.
-- **API fields require meaningful confidence values:** Exposing `geocode_confidence` is trivial (field already exists on `Location` model), but the values are only meaningful after zone validation and fallback chain populate them. Without validation, all results show 0.40-0.95 based solely on Google's `location_type`, which does not reflect delivery zone accuracy.
-- **Driver badge requires API fields:** The PWA reads `location_approximate` from the stop JSON. The API must expose this field before the badge can render.
-- **NER upgrade is gated by metrics:** Approach B is explicitly NOT a dependency. It is a conditional future feature triggered only if Phase 5 metrics show >10% validation failures or >5% centroid fallback rate.
+The critical dependency chain is:
 
-## MVP Definition
+1. DeliveryMan column detection in CDCMS preprocessor
+2. Driver auto-creation from detected names
+3. Per-driver grouping and TSP optimization
+4. Dashboard showing per-driver results
 
-This is a subsequent milestone (v2.2) on an existing product (v2.0 shipped). The framing below reflects what must ship to fix the "wrong route locations" bug.
+Everything else (settings, cache management, route validation, upload history) can be built in parallel or after the critical path.
 
-### Launch With (v2.2 Core)
+### Independence Notes
 
-All of these are required to fix the bug. Shipping a subset leaves drivers going to wrong locations.
+- **Settings page** is fully independent -- no dependency on driver model changes. Can be built in any phase.
+- **Upload history enhancements** build on existing `RunHistory.tsx` and `optimization_runs` table. Independent of driver model.
+- **Cache management** is independent -- only depends on existing `geocode_cache` table.
+- **Route validation** depends on Google Maps API key being configured (Settings page helps here) and routes being generated (optimization pipeline).
+- **Vehicle-to-Driver rename** is a cross-cutting concern that touches many files but has no functional dependency on other features. Can be done gradually with backward-compatible aliases.
 
-- [ ] address_display source fix -- eliminates display inconsistency (1 line)
-- [ ] Improved regex splitting -- handles common concatenation patterns (~20 lines)
-- [ ] Place name dictionary build -- enables dictionary-powered splitting
-- [ ] Dictionary-powered word splitting -- the core preprocessing improvement
-- [ ] Geocode zone validation -- catches results outside delivery zone
-- [ ] Fallback chain -- ensures every address gets a usable location
-- [ ] API confidence fields -- exposes quality signal to consumers
-- [ ] Driver PWA "Approx. location" badge -- informs drivers about quality
+---
 
-### Add After Validation (v2.2.x)
+## MVP Recommendation
 
-Features to add once the pipeline has run with real delivery data for at least one week.
+### Phase 1: Driver Model Foundation (Critical Path)
 
-- [ ] Accuracy metrics dashboard view -- trigger: operators asking "how is the new pipeline performing?"
-- [ ] Dictionary auto-refresh script -- trigger: new settlements appear that the dictionary misses
-- [ ] Dictionary gap reporting -- log which address tokens had no dictionary match to identify coverage holes
+These features must ship together to make the v3.0 transition functional.
 
-### Future Consideration (v3+, Conditional)
+1. **CDCMS DeliveryMan column detection** -- parse the column, extract driver names
+2. **Driver auto-creation** -- create driver records from CSV data
+3. **Per-driver TSP optimization** -- group orders by driver, VROOM TSP per group
+4. **Vehicle-to-Driver rename** (at least in UI terminology) -- dashboard and API say "driver" not "vehicle"
+5. **Driver management page** -- adapted from FleetManagement.tsx
+6. **Improved upload flow** -- show driver summary before optimizing
 
-Features to defer until measurable evidence justifies the investment.
+### Phase 2: Operational Polish
 
-- [ ] Approach B: NER model -- defer until accuracy metrics show >10% validation failures. May never be needed.
-- [ ] Dashboard geocode quality report -- per-upload breakdown of fallback usage and driver corrections over time.
-- [ ] Driver location pin correction -- drag-to-correct in the PWA map. Lower priority because `save_driver_verified()` already handles this passively.
+Add after core driver model works:
+
+7. **Upload history enhancements** -- date filter, driver breakdown, filename display
+8. **Dashboard Settings page** -- API key management, system info, cache overview
+9. **CDCMS preprocessing fixes** -- hardening for edge cases
+10. **Multi-format CSV support** -- .xlsx detection, delimiter handling
+
+### Phase 3: Validation and Confidence
+
+Add after baseline routes are flowing correctly:
+
+11. **Google Maps route validation** -- compare OSRM vs Google distances
+12. **Geocode cache management** -- stats dashboard, single-entry purge
+13. **Geocode validation tightening** -- 20km radius (from current 30km)
+
+### Defer
+
+- Driver performance dashboards -- explicitly avoid
+- Driver shift scheduling -- single shift, no complexity needed
+- Drag-and-drop route reordering -- undermines optimizer
+
+---
 
 ## Feature Prioritization Matrix
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| address_display source fix | HIGH | LOW | P1 |
-| Improved regex splitting | HIGH | LOW | P1 |
-| Cleaning step reorder | MEDIUM | LOW | P1 |
-| Place name dictionary build script | HIGH | MEDIUM | P1 |
-| Dictionary-powered word splitting | HIGH | MEDIUM | P1 |
-| Geocode zone validation | HIGH | MEDIUM | P1 |
-| Fallback chain | HIGH | MEDIUM | P1 |
-| API confidence fields | MEDIUM | LOW | P1 |
-| Driver PWA badge | MEDIUM | LOW | P1 |
-| Integration testing + metrics | MEDIUM | LOW | P1 |
-| NER model (Approach B) | LOW | HIGH | P3 |
+| Feature | User Value | Implementation Cost | Priority | Phase |
+|---------|------------|---------------------|----------|-------|
+| CDCMS DeliveryMan detection | HIGH | LOW | P0 | 1 |
+| Driver auto-creation from CSV | HIGH | LOW | P0 | 1 |
+| Per-driver TSP optimization | HIGH | MEDIUM | P0 | 1 |
+| Vehicle-to-Driver rename (UI) | HIGH | MEDIUM | P0 | 1 |
+| Driver management page | HIGH | LOW | P0 | 1 |
+| Improved upload flow | MEDIUM | MEDIUM | P1 | 1 |
+| CDCMS preprocessing fixes | MEDIUM | LOW | P1 | 2 |
+| Multi-format CSV support | MEDIUM | LOW | P1 | 2 |
+| Upload history enhancements | MEDIUM | LOW | P1 | 2 |
+| Dashboard Settings page | MEDIUM | MEDIUM | P1 | 2 |
+| API key management | MEDIUM | LOW | P1 | 2 |
+| Google Maps route validation | MEDIUM | MEDIUM | P2 | 3 |
+| Geocode cache stats/management | LOW-MEDIUM | LOW-MEDIUM | P2 | 3 |
+| Geocode validation tightening | LOW | LOW | P2 | 3 |
 
 **Priority key:**
-- P1: Must have for v2.2 launch (fixes the bug)
-- P2: Should have, add after real-world validation
-- P3: Nice to have, conditional on metrics
+- P0: Must have for v3.0 to be functional (driver-centric model works end-to-end)
+- P1: Should have for v3.0 to feel polished (operational quality of life)
+- P2: Nice to have, improves confidence and maintainability
+
+---
 
 ## Existing Infrastructure Leveraged
 
-These features build on already-shipped capabilities, keeping implementation cost low.
+| Existing Component | How v3.0 Features Use It |
+|--------------------|--------------------------|
+| `DriverDB` model (table exists, unused) | Driver auto-creation populates this table. Driver management page reads/writes it. |
+| `VroomAdapter.optimize()` | Per-driver TSP calls this with a single vehicle -- VROOM handles TSP as VRP with 1 vehicle. No solver change needed. |
+| `optimization_runs` table | Upload history already stored. Enhance with driver_count, display in RunHistory. |
+| `geocode_cache` table | Cache management reads `hit_count`, `last_used_at`, `source`, `confidence`. All fields already exist. |
+| `FleetManagement.tsx` | Driver management page reuses 80%+ of this code: CRUD pattern, inline editing, form validation, error handling. |
+| `RunHistory.tsx` | Upload history page reuses expandable row pattern, skeleton loading, date formatting. |
+| `UploadRoutes.tsx` | Upload flow enhanced with driver summary step. Existing drop zone, progress feedback, error display all reused. |
+| `/api/config` endpoint | Settings page reads depot location, safety multiplier from this existing endpoint. |
+| `cdcms_preprocessor.py` | DeliveryMan column detection adds to existing preprocessing. `CDCMS_COL_*` constants pattern followed. |
+| DaisyUI component library | Settings page uses existing `tw:stat`, `tw:input`, `tw:alert` classes. No new dependencies. |
+| `ErrorBanner`, `EmptyState`, `StatusBadge` components | Reused across all new pages without modification. |
+| Google Maps API key in env var | Settings page provides UI for what is currently an env var. Backward compatible -- env var remains as fallback. |
 
-| Existing Component | How New Features Use It |
-|--------------------|------------------------|
-| `Location.geocode_confidence` field | Already on the Pydantic model. Zone validation populates it; API exposes it; PWA reads it. No model change needed. |
-| `CachedGeocoder.save_driver_verified()` | Already wired to delivery status endpoint. Self-healing cache corrects approximate locations over time without new code. |
-| `clean_cdcms_address()` pipeline | Dictionary splitter inserts as Stage 2 between existing cleanup (Stage 1) and title case (Stage 3). Existing stages unchanged. |
-| `normalize_address()` for cache keys | Orthogonal to preprocessing. No changes needed. |
-| Google `location_type` -> confidence mapping | Already in `google_adapter.py` (lines 111-118). Zone validation adjusts these values: multiply by 0.7 for area retry, set to 0.3 for centroid fallback. |
-| `address_raw` on Order model | Already stored separately from `location.address_text`. Source fix just changes which field populates `address_display`. |
-| PostGIS `geocode_cache` table | No schema migration needed. New confidence values flow through existing columns. |
-| DaisyUI component library | PWA badge uses existing `tw:badge-warning tw:badge-sm` classes. No new CSS dependency. |
-| Haversine formula | Standard math (acos, sin, cos, radians). ~10 lines of stdlib Python. No external dependency. |
+---
 
 ## Competitor Feature Analysis
 
-| Feature | Route4Me | LogiNext | Veho | Our Approach |
-|---------|----------|----------|------|--------------|
-| Address preprocessing | US-focused USPS standardization | API-based address verification | Customer self-service pin correction | Dictionary-powered splitting tuned for CDCMS Kerala addresses |
-| Geocode validation | Service area geofence check | Zone-based validation with confidence | Delivery zone verification | 30km haversine radius around depot |
-| Confidence scores | Match codes (A-F grade) | Internal scoring | Binary valid/invalid | 0-1 float with threshold at 0.5 for "approximate" |
-| Fallback strategy | Re-geocode with partial address | Multiple provider fallback | Customer pin correction | Area retry -> area centroid -> flag as approximate |
-| Driver notification | Address quality indicators | Delivery risk flags | Customer-corrected pins shown | "Approx. location" badge with orange warning styling |
-| Self-correction | Manual address editing | Support ticket workflow | Customer moves pin | Automatic GPS caching when driver marks delivery done |
+| Feature | Route4Me | OptimoRoute | Onfleet | This System (v3.0) |
+|---------|----------|-------------|---------|---------------------|
+| Driver auto-detect from CSV | Yes, column mapping | Yes, import wizard | No (API-only) | Auto-detect DeliveryMan column, fuzzy name matching |
+| Per-driver optimization | "Optimize sequence only" mode | TSP mode toggle | Per-driver dispatch | VROOM TSP per driver group |
+| Route validation | Distance vs ETA comparison | Google Maps overlay | Post-delivery comparison | OSRM vs Google Maps pre-delivery comparison |
+| Cache management | Not exposed | Not exposed | Not exposed | Stats dashboard with per-entry purge |
+| Upload history | Import log with status | Batch import history | API audit log | Enhanced RunHistory with driver breakdown |
+| Settings page | Full admin panel | Settings > Integrations | Dashboard > Settings | API key + cache stats + system info |
+| Driver management | Full driver profiles | Driver + vehicle pairing | Team management | Auto-create + manual CRUD, inline editing |
+
+---
 
 ## Sources
 
-- [Google Maps Geocoding API: Request and Response](https://developers.google.com/maps/documentation/geocoding/requests-geocoding) -- location_type values and confidence mapping
-- [Google Maps Platform: Address Validation Architecture](https://developers.google.com/maps/architecture/geocoding-address-validation) -- geocoding validation patterns
-- [Geocodio: Accuracy Types and Scores](https://www.geocod.io/guides/accuracy-types-scores/) -- confidence score tiers and fallback strategies
-- [Radar: Complete Guide to Geocoding APIs](https://radar.com/blog/geocoding-apis) -- logistics geocoding caching and fallback
-- [Route4Me: Geocoding Guide](https://support.route4me.com/geocoding-guide-address-verification/) -- delivery-specific geocode validation
-- [Kestrel Insights: Geofencing for Last-Mile Delivery](https://www.kestrelinsights.com/blog/how-accurate-precise-geofencing-optimizes-last-mile-delivery) -- zone-based validation in logistics
-- [LogiNext: Geocoding Intelligence in Logistics](https://www.loginextsolutions.com/blog/geocoding-intelligence-that-reduces-exceptions-before-they-happen/) -- confidence scores preventing delivery exceptions
-- [Veho: Self-Serve Customer Geocode Corrections](https://www.shipveho.com/blog/improving-delivery-accuracy-with-self-serve-customer-geocode-corrections) -- self-healing geocode patterns
-- [RapidFuzz GitHub](https://github.com/rapidfuzz/RapidFuzz) -- fuzzy string matching for place name dictionary
-- [PostalPinCode API](http://www.postalpincode.in/Api-Details) -- free India Post API for post office names by PIN code
-- [OSM Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) -- free API for place name extraction
-- [GeoIndia: Seq2Seq Geocoding for Indian Addresses (EMNLP 2024)](https://aclanthology.org/2024.emnlp-industry.29/) -- Indian address geocoding challenges
-- [libpostal](https://github.com/openvenues/libpostal) -- reference for statistical NLP address parsing (not recommended for this use case due to deployment weight)
-- Design spec: `docs/superpowers/specs/2026-03-10-address-preprocessing-design.md`
+- [VROOM Project GitHub](https://github.com/VROOM-Project/vroom) -- VROOM handles TSP as VRP with 1 vehicle (HIGH confidence)
+- [Nextmv: TSP vs CVRP](https://www.nextmv.io/blog/tsp-pdtsp-cvrp-cvrptw-oh-my-the-alphabet-soup-of-route-optimization) -- when to use TSP vs CVRP (MEDIUM confidence)
+- [Google Maps Routes API: Compute Routes](https://developers.google.com/maps/documentation/routes/compute_route_directions) -- route distance/duration comparison (HIGH confidence)
+- [Google Maps Route Optimization API](https://developers.google.com/maps/documentation/route-optimization/overview) -- Google's fleet optimization offering (HIGH confidence)
+- [Google Maps Geocoding Policies](https://developers.google.com/maps/documentation/geocoding/policies) -- 30-day cache restriction, Place ID exemption (HIGH confidence)
+- [Google Cloud Maps Service Terms](https://cloud.google.com/maps-platform/terms/maps-service-terms) -- caching restrictions on geocoding results (HIGH confidence)
+- [OSRM vs Google comparison tool](https://github.com/yklyahin/osrm-google-comparison) -- open-source distance comparison methodology (MEDIUM confidence)
+- [LogisticsOS: Comparing Matrix Routing Services](https://www.logisticsos.com/blog/distance-matrix) -- OSRM vs Google accuracy analysis (MEDIUM confidence)
+- [Coaxsoft: Driver Management Software Guide](https://coaxsoft.com/blog/guide-to-driver-management-software) -- industry feature expectations (MEDIUM confidence)
+- [Detrack: Delivery Management](https://www.detrack.com/) -- competitor feature reference (LOW confidence, marketing material)
+- [Route4Me](https://www.route4me.com/) -- competitor feature reference for sequence-only optimization (LOW confidence)
+- [Stripe API Key Management](https://docs.stripe.com/keys) -- settings page UX pattern reference (HIGH confidence)
+- [Opsgenie API Key Management](https://support.atlassian.com/opsgenie/docs/api-key-management/) -- settings page pattern (MEDIUM confidence)
+- [Mapscaping: Geocoding API Pricing Guide](https://mapscaping.com/guide-to-geocoding-api-pricing/) -- Google Maps API cost reference (MEDIUM confidence)
 
 ---
-*Feature research for: Address preprocessing pipeline, geocode validation, and location confidence (v2.2)*
-*Researched: 2026-03-10*
+*Feature research for: Driver-centric delivery management (v3.0)*
+*Researched: 2026-03-12*

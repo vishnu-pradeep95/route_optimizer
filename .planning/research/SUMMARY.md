@@ -1,235 +1,196 @@
 # Project Research Summary
 
-**Project:** Kerala LPG Delivery Route Optimizer — v2.2 Address Preprocessing Pipeline
-**Domain:** Dictionary-powered address splitting, geocode validation, and location confidence UI
-**Researched:** 2026-03-10
+**Project:** Kerala LPG Delivery Route Optimizer -- v3.0 Driver-Centric Model
+**Domain:** Driver-centric delivery route optimization (CVRP-to-TSP transition, dashboard admin features)
+**Researched:** 2026-03-12
 **Confidence:** HIGH
 
 ## Executive Summary
 
-This is a targeted bug-fix milestone (v2.2) on an existing production system. The core problem is two interacting bugs: CDCMS exports concatenate Malayalam place names without separators (e.g., `MUTTUNGALPOBALAVADI`), causing Google to geocode delivery addresses to locations 40+ km away, while a secondary bug in `vroom_adapter.py` displays Google's `formatted_address` instead of the original cleaned address — so drivers see wrong locations AND wrong text. The fix requires building a domain-specific preprocessing layer tuned for CDCMS Kerala address patterns, not a general-purpose Indian address NLP solution.
+The v3.0 milestone transforms the Kerala LPG delivery optimizer from a vehicle-fleet CVRP model to a driver-centric TSP model. The core insight is that the CDCMS CSV already pre-assigns orders to drivers via its `DeliveryMan` column, but the current system ignores this assignment and re-assigns all orders across 13 vehicles. The fix is conceptually simple: group orders by driver, run VROOM TSP (1 vehicle, N jobs) per driver, and surface driver names instead of vehicle IDs throughout the UI. This is an architectural and data-model change, not a technology change. Zero new Python packages, zero new npm packages, and zero new Docker services are required.
 
-The recommended approach is a two-stage fix. Stage one is fast and independent: a one-line display-text fix and an improved regex. Stage two is the core improvement: a static dictionary of ~285 place names within 30km of the Vatakara depot (built from OSM Overpass + India Post APIs, committed to the repo), used by a new `AddressSplitter` class to detect word boundaries in concatenated text. A new `GeocodeValidator` then applies a 30km haversine zone check to every geocode result, with a three-tier fallback chain (area-name retry -> area centroid -> flag as approximate). The pipeline ends by surfacing confidence data through the API to the Driver PWA as an "Approx. location" badge. The entire implementation requires exactly one new runtime dependency: RapidFuzz 3.14.3 (MIT, ~4MB wheel, no compiler needed in Docker).
+The recommended approach follows a strict dependency chain: first promote the existing `DriverDB` model to a working entity with auto-creation from CSV, then rewire the optimization pipeline from fleet-wide CVRP to per-driver TSP, then update the dashboard and Driver PWA to speak in "driver" terms instead of "vehicle" terms. Parallel workstreams (settings page, cache management, Google Maps route validation) can proceed independently once the driver foundation is laid. VROOM already handles TSP as a special case of VRP with one vehicle, so no solver change is needed -- only the orchestration layer changes.
 
-The primary risks are cache poisoning from preprocessing changes (old cache entries persist with wrong keys — desired behavior, but must be monitored), fuzzy matching false positives on short Kerala place names (mitigated by length-dependent thresholds), and an invalid Google API key causing every address to fall back to centroid-only mode with a wall of orange badges that erodes driver trust. The validator must include a circuit breaker for API failures. NER-based address parsing (IndicBERT) is explicitly deferred to a conditional future path, triggered only if post-deployment metrics show >10% validation failures.
+The primary risks are: (1) the vehicle-to-driver rename is a semantic split, not a simple find-and-replace, with 371 "vehicle" references in the dashboard, 67 in the Driver PWA, and 129 in tests -- a naive rename would break everything; (2) driver name normalization from CDCMS free-text creates duplicate driver records over time; and (3) Alembic auto-generated migrations could silently drop data if not hand-reviewed. All three are preventable with the phased approach outlined below, which adds new columns alongside old ones rather than renaming, uses fuzzy name matching for driver lookup, and mandates hand-written migrations.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The existing Python 3.12 / FastAPI / React / TypeScript stack requires no changes to support this feature. One new runtime dependency is needed: RapidFuzz 3.14.3 for fuzzy string matching in the dictionary splitter. All other components — haversine distance (10 lines of stdlib `math`), dictionary storage (static JSON, <50KB), and UI indicators (existing DaisyUI `tw:badge-warning`) — use what is already in the project. The dictionary build script uses `requests` (already in `requirements.txt`) to call the OSM Overpass API and the India Post PostalPinCode API at build time only; the runtime never makes these calls.
+The v3.0 milestone requires zero new dependencies. Every capability is built with existing packages: SQLAlchemy 2.0 for the extended driver model and settings table, Alembic for schema migrations, httpx for Google Routes API calls (same pattern as geocoding and OSRM), VROOM for per-driver TSP (1 vehicle = TSP automatically), React 19 + DaisyUI 5 for the settings and driver management pages.
 
-See `.planning/research/STACK.md` for full dependency analysis including the optional NER path (Approach B), which would add ~600MB to the Docker image and is explicitly deferred.
+See `.planning/research/STACK.md` for full dependency analysis, pricing impact assessment, and alternatives considered.
 
-**Core technologies:**
-- **RapidFuzz 3.14.3**: Fuzzy matching in `AddressSplitter` — C++ core (10-100x faster than fuzzywuzzy), MIT license, pre-built wheel for `python:3.12-slim`, no Dockerfile changes needed
-- **Python stdlib `math`**: Haversine zone validation in `GeocodeValidator` — 10 lines, no external dependency, accuracy within 0.5% at 30km
-- **OSM Overpass API** (build-time only): Extract ~285 place name nodes within 30km of depot — free, no auth, ODbL licensed
-- **India Post PostalPinCode API** (build-time only): Extract post office names for PIN codes 673101-673110 — free, 1000 req/hr, structured JSON
-- **Existing DaisyUI `tw:badge-warning tw:badge-sm`**: "Approx. location" badge in Driver PWA — zero new CSS, no build step
+**Core technologies (all existing):**
+- **VROOM (Docker, existing):** Per-driver TSP optimization -- submit 1 vehicle + N jobs, VROOM solves TSP. No adapter code changes needed.
+- **Google Routes API v2 (new API, existing httpx client):** Route validation comparing OSRM vs Google distances. Use `computeRoutes` POST endpoint, NOT the deprecated Directions API. Essentials tier at $5/1000 requests, well within free tier at 13 routes/day ($0/month incremental cost).
+- **SQLAlchemy 2.0 + Alembic (existing):** Extend `DriverDB` model with `name_normalized`, `source`, `last_seen_at` columns. New `settings` key-value table. All hand-written migrations.
+- **PostgreSQL + PostGIS (existing):** New `settings` table, extended driver queries, geocode cache export. Zero new services.
+
+**Critical version note:** Use Google Routes API v2 (`computeRoutes`), NOT the legacy Directions API deprecated March 2025. Do NOT install the `googlemaps` pip package (wraps legacy API). Use raw httpx POST, matching the existing codebase pattern.
 
 ### Expected Features
 
-All eight features listed below are required together. Shipping a subset leaves drivers going to wrong locations and the core bug unfixed.
+See `.planning/research/FEATURES.md` for full details, dependency graph, competitor analysis, and anti-feature rationale.
 
-See `.planning/research/FEATURES.md` for full details, dependency graph, and competitor analysis.
+**Must have (table stakes -- v3.0 is broken without these):**
+- CDCMS DeliveryMan column detection and driver auto-creation from CSV
+- Per-driver TSP optimization (group by driver, VROOM TSP per group)
+- Vehicle-to-Driver UI terminology rename (labels only, not API field names)
+- Driver management page (adapted from existing FleetManagement.tsx, 80% code reuse)
+- Improved upload flow with driver summary/confirmation step before optimization
+- Upload history enhancements (date filter, driver breakdown in RunHistory.tsx)
+- Dashboard settings page (API key management, system info, cache overview)
 
-**Must have (table stakes — v2.2 launch):**
-- **address_display source fix** — one-line change (`vroom_adapter.py:278`); eliminates display inconsistency independently of all other work; must ship first as a safety net
-- **Improved regex word splitting** — adds `([a-z])([A-Z])` split to existing `(\d)([A-Z])` pattern; handles common concatenation patterns with ~20 lines; independent and safe
-- **Place name dictionary build** — `scripts/build_place_dictionary.py` fetches OSM + India Post data, commits `data/place_names_vatakara.json`; gates dictionary-powered splitting
-- **Dictionary-powered word splitting** — `AddressSplitter` class (~150 lines); longest-match-first scan, 85%+ fuzzy threshold, graceful passthrough for unknown text
-- **Geocode zone validation** — `GeocodeValidator` with 30km haversine check; standard practice in logistics geocoding (Route4Me, LogiNext, Geocodio all do this)
-- **Fallback chain (area retry -> centroid -> flag)** — integrated into `CachedGeocoder.geocode()`; ensures no order is silently dropped; confidence tiers: 1.0 (in-zone first try), 0.7x (area retry), 0.3 (centroid)
-- **API confidence fields** — `geocode_confidence` (float) and `location_approximate` (bool) added to stop JSON; additive, backward compatible; `Location` model already has the field
-- **Driver PWA "Approx. location" badge** — `tw:badge-warning` on hero card, orange dot on compact cards; informational only, Navigate button still works; existing `save_driver_verified()` self-heals over time
+**Should have (differentiators):**
+- Google Maps route validation / confidence comparison (OSRM vs Google, green/amber/red badge)
+- Geocode cache management dashboard (stats, single-entry purge, Google ToS compliance flags)
+- Multi-format CSV support (.xlsx detection, BOM stripping, delimiter auto-detection)
+- CDCMS preprocessing hardening (column name variants, address garbling fixes)
 
-**Should have (add after one week of real-world validation):**
-- Dictionary gap reporting — log unmatched address tokens to identify coverage holes
-- Dictionary auto-refresh script — when new settlements appear
-- Accuracy metrics dashboard view — operator visibility into pipeline performance
-
-**Defer (v3+, conditional on metrics):**
-- Approach B NER model (IndicBERT) — only if metrics show >10% validation failures; may never be needed
-- Dashboard geocode quality report
-- Driver location pin correction (passive self-healing via `save_driver_verified()` already handles this)
-
-**Reject (anti-features):**
-- NER as default path (adds 600MB Docker image, 50ms/address, unnecessary for a 30km zone)
-- Multiple geocoding providers (coordinate inconsistency outweighs coverage benefit)
-- Fuzzy full-address matching (false positives for "VALLIKKADU EAST" vs "VALLIKKADU WEST")
-- Real-time address autocomplete (CDCMS is a CSV upload workflow, not manual entry)
+**Defer (explicitly avoid):**
+- Drag-and-drop route reordering -- undermines the VROOM optimizer
+- Driver assignment UI -- CDCMS is the source of truth for assignments
+- Real-time route recalculation -- spotty mobile networks, short routes make this pointless
+- Driver performance dashboards -- surveillance dynamics damage driver trust
+- Driver shift scheduling -- single depot, single shift, zero benefit
+- Geocode cache auto-purge -- would destroy valuable driver-verified entries
+- Bulk cache delete -- one misclick destroys months of accumulated cache value
 
 ### Architecture Approach
 
-The pipeline is an extended preprocessing chain inserted between the existing CDCMS importer and the existing GoogleGeocoder / CachedGeocoder / PostGIS stack. Two new modules (`address_splitter.py`, `validator.py`) integrate via injection: the splitter is called inside `clean_cdcms_address()` as a new Stage 3 (after regex splitting, before abbreviation expansion); the validator is injected into `CachedGeocoder` as an optional constructor parameter (backward compatible, defaults to no-op). The dictionary JSON file (`data/place_names_vatakara.json`) is the single shared data source for both the splitter (word boundary detection) and the validator (area centroid fallback coordinates). All integration points are additive — no existing API fields are removed, no DB schema migrations are needed, and all four modified files preserve existing behavior when new components are absent.
+The system remains a monolith with 4 Docker services. The key architectural change is in the upload-to-route pipeline: after CSV parsing, build a `driver_orders_map` from the DeliveryMan column, auto-create drivers via `get_or_create_driver()`, then call VROOM N times (once per driver) instead of once for the whole fleet. All N driver routes are stored under a single `optimization_run` to preserve fleet-wide visibility. The existing `VroomAdapter.optimize()` protocol handles TSP without modification when given 1 vehicle.
 
-See `.planning/research/ARCHITECTURE.md` for full data flow diagrams, component interfaces, the step-reorder rationale, and the complete dependency graph with build order.
+See `.planning/research/ARCHITECTURE.md` for full data flow diagrams (before/after), component interfaces, database schema changes, API endpoint inventory, and the complete dependency graph with build order.
 
-**Major components:**
-1. **`core/data_import/address_splitter.py`** (NEW) — dictionary-powered word splitting; lazy init, graceful `None` fallback if dictionary missing; RapidFuzz fuzzy match at 85%+ threshold with longest-match-first ordering
-2. **`core/geocoding/validator.py`** (NEW) — 30km haversine zone check; three-tier fallback chain (area geocode retry -> area centroid -> flag); injectable into CachedGeocoder; circuit-breaker for API key failures
-3. **`data/place_names_vatakara.json`** (NEW) — static dictionary (~285 entries); built once from OSM + India Post; committed to repo; loaded once per process lifetime; shared between splitter and validator
-4. **`scripts/build_place_dictionary.py`** (NEW) — one-time build script; not imported at runtime
-5. **`core/data_import/cdcms_preprocessor.py`** (MODIFIED) — adds lowercase->uppercase regex and dictionary splitter call between existing cleanup and abbreviation expansion stages
-6. **`core/optimizer/vroom_adapter.py`** (MODIFIED) — one-line fix: `address_display = order.address_raw` always
-7. **`core/geocoding/cache.py`** (MODIFIED) — optional `validator` and `area_name` parameters; backward compatible
-8. **`apps/kerala_delivery/api/main.py`** (MODIFIED) — adds confidence fields to stop JSON; constructs GeocodeValidator; builds `area_name_map` from preprocessed DataFrame
+**Major components (new or modified):**
+1. **Driver Management (repository.py extension):** `get_or_create_driver()`, `get_active_drivers()`, `update_driver()` -- CRUD with case-insensitive fuzzy name matching for auto-creation from CSV
+2. **Per-Driver TSP Wrapper (main.py):** ~50-line orchestration function that groups orders by driver, calls VROOM per group, combines results into a single `RouteAssignment`
+3. **Google Maps Route Validator (new: core/routing/gmaps_validator.py):** Calls Google Routes API `computeRoutes`, compares distance/duration with OSRM, returns confidence level (high <15% delta, medium <30%, low >=30%)
+4. **Dashboard Settings Page (new: Settings.tsx):** API key config (masked display, server-side storage, test button), geocode cache stats, system info
+5. **Driver Management Page (adapted FleetManagement.tsx):** List, create, edit, deactivate drivers. Inline edit pattern reused from existing fleet management.
+
+**Unchanged components:** VroomAdapter internals, OSRM adapter, geocoding pipeline, Order/Vehicle/Route/RouteStop models, core protocols, Driver PWA (backward-compatible -- accepts both vehicle_id and driver_name).
 
 ### Critical Pitfalls
 
-See `.planning/research/PITFALLS.md` for all seven critical pitfalls, integration gotchas, technical debt patterns, and the full "Looks Done But Isn't" checklist.
+See `.planning/research/PITFALLS.md` for all 15 pitfalls with severity ratings, code-level analysis, and prevention strategies.
 
-1. **Cache poisoning from preprocessing changes** — when `clean_cdcms_address()` produces different output, existing PostGIS cache entries become orphaned under old normalized keys. Do NOT change `normalize_address()`. Accept that the first upload after deployment will re-geocode affected addresses (desired — old cache had wrong coordinates). Monitor cache miss spike. Old entries for garbled addresses are harmless but never used again.
+1. **Vehicle-to-Driver rename is a semantic split, not find-and-replace.** 647+ references across codebase. Prevention: add new columns alongside old ones, change UI labels only, keep `vehicle_id` in API field names and URLs. Never rename the column.
 
-2. **Fuzzy matching false positives on short Kerala place names** — at 85% threshold, `EDAPPAL` matches `EDAPALLI` (88% similarity, but different places 50km apart). Implement length-dependent thresholds: 95% for names under 6 characters, 90% for 6-8 characters, 85% for names over 8 characters. Prefer explicit `aliases` arrays in the dictionary over fuzzy matching for known transliteration variants.
+2. **CVRP-to-TSP transition must preserve capacity constraints and fleet metrics.** Store all N driver routes under ONE `optimization_run`. Never create separate runs per driver (breaks `get_latest_run()`). Keep vehicle capacity in per-driver VROOM calls.
 
-3. **Validator retry has no circuit breaker for invalid API key** — if the Google API key is invalid (`REQUEST_DENIED`), every address triggers a retry, producing a wall of "Approx. location" badges that destroys driver trust. Add a circuit breaker: 3 consecutive `REQUEST_DENIED` responses stop all retries for the batch and surface a single batch-level warning banner instead of per-stop badges.
+3. **CDCMS .xlsx files break auto-detection.** `_is_cdcms_format()` opens files as text, fails on binary .xlsx. Fix: check file extension first, use `pd.read_excel()` for .xlsx header inspection.
 
-4. **Regex reordering breaks existing tests** — moving abbreviation expansion after word splitting changes how inline abbreviations (`NR.`, `PO.`) are detected in concatenated text. The existing 426 unit tests for `clean_cdcms_address()` establish the contract. Run the full test suite before and after any step reordering. If tests break, add the new regex as an additional step rather than reordering existing steps.
+4. **Google Maps validation can cause cost spikes.** Must be user-triggered only (button click), never automatic. Cache results per route hash. Set Google Cloud billing alerts.
 
-5. **Dictionary incompleteness from OSM/India Post gaps** — OSM has thin coverage for rural Kerala micro-localities. Bootstrap the dictionary from actual historical CDCMS data: `SELECT DISTINCT area_name FROM orders`. Validate coverage against real area names before Phase 3. Hard gate: must cover >80% of area names in sample data before proceeding.
-
-6. **address_display downstream truncation and ripple** — `address_raw` with area suffix can exceed 255 chars (the `address_display` DB column limit). Audit all `address_display` consumers (including `qr_helpers.py` and `scripts/import_orders.py`, which the design spec does not list). Verify `MAX(LENGTH(address_raw)) < 255` in production data or widen the column via Alembic migration.
+5. **Driver auto-creation creates ghost drivers from name variations.** Prevention: `name_normalized` column (lowercase, stripped), unique constraint, fuzzy matching on lookup. Log all auto-created drivers for review.
 
 ## Implications for Roadmap
 
-The dependency graph is clear and the architecture research defines the exact build order. Five phases map naturally to the five logical work units.
+Based on the dependency analysis across all four research files, the v3.0 milestone should be structured in 5 phases with a clear critical path.
 
-### Phase 1: Foundation Fixes
+### Phase 1: Driver DB Foundation
 
-**Rationale:** The `address_display` fix and improved regex are independent of all other work and immediately beneficial. They can — and should — ship first as a safety net regardless of whether the dictionary infrastructure is ever built. They also establish the test baseline before any riskier pipeline changes.
+**Rationale:** Everything depends on the driver entity existing and being populated. The `DriverDB` model already exists in `core/database/models.py` but is unused. This phase promotes it to a working entity.
+**Delivers:** Alembic migration adding `name_normalized`, `source`, `last_seen_at` to `drivers` table. New `settings` key-value table. Repository functions for driver CRUD with fuzzy name matching. API endpoints for driver management (`GET/POST/PUT/DELETE /api/drivers`). Adapted driver management dashboard page (from FleetManagement.tsx).
+**Addresses:** CDCMS DeliveryMan detection, driver auto-creation, manual driver CRUD, driver management page (Features 1-3).
+**Avoids:** Pitfall 1 (semantic minefield) by adding columns alongside existing ones, never renaming. Pitfall 5 (Alembic drops data) by hand-writing all migrations. Pitfall 9 (ghost drivers) by implementing `name_normalized` with unique constraint and fuzzy matching from the start. Pitfall 13 (settings persistence) by creating `settings` table in this first migration.
 
-**Delivers:** Correct address display text in the Driver PWA for all routes; improved word splitting for the most common CDCMS concatenation patterns (digit-to-uppercase and lowercase-to-uppercase transitions).
+### Phase 2: Per-Driver TSP Optimization
 
-**Addresses (from FEATURES.md):** `address_display source fix`, `Improved regex word splitting`
+**Rationale:** Depends on Phase 1 (needs resolved driver entities with vehicle assignments). This is the core functional change -- switching from fleet CVRP to per-driver TSP.
+**Delivers:** `driver_orders_map` construction from CDCMS DeliveryMan column. Driver-to-vehicle assignment logic (round-robin default, manual override). Per-driver TSP wrapper calling VroomAdapter with 1 vehicle per driver. Fallback to fleet-wide CVRP for non-CDCMS uploads. Updated `save_optimization_run()` storing all driver routes under single run. Improved upload flow with driver summary/confirmation step.
+**Addresses:** Per-driver TSP optimization, improved upload flow (Features 4-5).
+**Avoids:** Pitfall 2 (optimizer interface breakage) by wrapping per-driver calls and combining into single RouteAssignment. Pitfall 6 (fleet metrics loss) by aggregating all driver results into one optimization_run record.
 
-**Avoids (from PITFALLS.md):** Downstream consumer breakage (requires full audit of `address_display` consumers including `qr_helpers.py` and `scripts/import_orders.py`; length check against DB column limit); regex reordering regressions (run full test suite before and after, add new regex as additional step rather than reorder if tests break)
+### Phase 3: Dashboard and PWA Driver Integration
 
-**Research flag:** Standard patterns — no additional research needed. Implementation is clear with line-number precision from ARCHITECTURE.md.
+**Rationale:** Depends on Phases 1+2 (needs working driver API and per-driver routes to display). This phase updates the UI layer to show driver names instead of vehicle IDs.
+**Delivers:** Route cards with driver names. Driver selection step in UploadRoutes.tsx. TypeScript types for Driver, RouteValidation, GeocodeCacheStats. Route lookup accepting both vehicle_id and driver name. Driver PWA backward-compatible display updates. Service worker cache version bump.
+**Addresses:** Vehicle-to-Driver UI rename (Feature 1 UI portion).
+**Avoids:** Pitfall 10 (PWA route fetching breakage) by keeping `/api/routes/{vehicle_id}` endpoint path and accepting both identifiers. Pitfall 15 (cached old PWA) by bumping service worker cache version and including both identifiers in API responses.
 
-### Phase 2: Place Name Dictionary and Address Splitter
+### Phase 4: Operational Polish
 
-**Rationale:** The dictionary is the shared data foundation for both the `AddressSplitter` (this phase) and the `GeocodeValidator` (Phase 3). It must exist and be validated for completeness before either consumer can work correctly. Dictionary completeness is a hard gate — if it covers less than 80% of real CDCMS area names, Phase 3's centroid fallback will silently fail for missing areas.
+**Rationale:** Independent of the critical path. Can run in parallel with Phase 3. Improves quality-of-life for office staff.
+**Delivers:** Dashboard settings page (API key management with masked display, system info, cache overview). Upload history enhancements (date filter, driver breakdown, filename display). CDCMS preprocessing hardening (.xlsx detection fix, column name variants, address garbling fixes). Multi-format CSV support (BOM stripping, delimiter auto-detection). Geocode cache export/import API endpoints.
+**Addresses:** Settings page, upload history, CDCMS fixes, multi-format CSV, cache export (Features 6-7, 10-11).
+**Avoids:** Pitfall 3 (.xlsx detection) by fixing `_is_cdcms_format()` to handle binary files. Pitfall 7 (API key exposure) by storing keys server-side with masked display only. Pitfall 8 (cache invalidation from preprocessing changes) by building cache export/import before changing preprocessing logic. Pitfall 14 (PostGIS serialization) by exporting as lat/lng JSON.
 
-**Delivers:** `data/place_names_vatakara.json` (~285 entries from OSM + India Post + historical CDCMS area names); `AddressSplitter` class with RapidFuzz fuzzy matching and length-dependent thresholds; splitter integrated into `clean_cdcms_address()` pipeline; unit tests for all splitter paths including short-name false-positive cases.
+### Phase 5: Validation and Confidence
 
-**Uses (from STACK.md):** RapidFuzz 3.14.3 (NEW dependency — add to `requirements.txt` and verify Docker build), OSM Overpass API (build-time), India Post PostalPinCode API (build-time), existing `requests` library
-
-**Implements (from ARCHITECTURE.md):** `address_splitter.py` component, `build_place_dictionary.py` script, dictionary JSON schema
-
-**Avoids (from PITFALLS.md):** Dictionary incompleteness (bootstrap from `SELECT DISTINCT area_name FROM orders`, validate before proceeding to Phase 3); fuzzy matching false positives (length-dependent thresholds: 95%/90%/85%, explicit alias arrays, log and manually review all matches below 90%); RapidFuzz Docker build failure (rebuild image from scratch, verify `import rapidfuzz` inside container after adding to `requirements.txt`)
-
-**Research flag:** Moderate risk — dictionary coverage is the primary unknown and cannot be confirmed without running the build script against real CDCMS data. Treat the 80% coverage threshold as a hard gate before Phase 3.
-
-### Phase 3: Geocode Validation and Fallback Chain
-
-**Rationale:** Depends on the dictionary (Phase 2) for area centroid coordinates. The zone validator is the core correctness fix — the display fix (Phase 1) and splitting (Phase 2) reduce the frequency of wrong geocodes, but the validator catches any that still slip through and ensures every delivery gets a usable location within the zone.
-
-**Delivers:** `GeocodeValidator` class with haversine zone check and three-tier fallback chain; circuit breaker for API key failures (`REQUEST_DENIED`); validator injected into `CachedGeocoder` with optional parameters (backward compatible); `area_name_map` built from preprocessed DataFrame and passed through geocoding loop; unit tests for all validation paths and fallback tiers including the circuit-breaker path.
-
-**Uses (from STACK.md):** stdlib `math` for haversine (no new dependency), existing `CachedGeocoder`, upstream `GoogleGeocoder` (for area-name retry — must go through upstream, NOT through CachedGeocoder, to avoid recursive validation loop)
-
-**Implements (from ARCHITECTURE.md):** `validator.py` component; modified `cache.py` (`validator` + `area_name` optional params); modified `main.py` (`GeocodeValidator` construction, `area_name_map` side-channel pattern)
-
-**Avoids (from PITFALLS.md):** Validator retry infinite loop (retry must use upstream GoogleGeocoder directly, not CachedGeocoder); inconsistent confidence scores (use discrete levels: 1.0 in-zone, 0.7x area retry, 0.3 centroid — document semantics, avoid multiplying ambiguous intermediate values); API key failure wall-of-badges (circuit breaker after 3 consecutive `REQUEST_DENIED`); haversine implementation error (validate against known distances: depot to Kozhikode city ~37km, depot to Mahe ~12km)
-
-**Research flag:** Medium complexity — the `area_name` side-channel (building `area_name_map` from preprocessed DataFrame) needs careful testing to ensure CDCMS and non-CDCMS upload paths both work correctly.
-
-### Phase 4: API Confidence Fields and Driver PWA Badge
-
-**Rationale:** UI work depends on the pipeline being complete (Phase 3) so that confidence values are meaningful before being surfaced. Exposing `geocode_confidence` before zone validation would surface Google's raw confidence, not the delivery-zone-validated confidence — a wrong signal to the driver.
-
-**Delivers:** Two new fields (`geocode_confidence`, `location_approximate`) in the stop JSON for both route endpoints (`GET /api/routes/{vehicle_id}` and `GET /api/routes?include_stops=true`); "Approx. location" badge on hero card; orange dot on compact cards in the Driver PWA; E2E Playwright tests verifying badge appears/hides correctly and handles `null` confidence from pre-upgrade routes (old cached routes have no confidence data).
-
-**Implements (from ARCHITECTURE.md):** Modified `main.py` stop JSON dict comprehension (2 new fields, additive); modified `index.html` (badge HTML for hero card and compact cards, conditional on `location_approximate` boolean)
-
-**Avoids (from PITFALLS.md):** Null confidence crash (Driver PWA must handle `null` gracefully — pre-upgrade routes have NULL confidence in DB); badge color contrast on dark saffron-themed PWA (test on real phone in sunlight — consider `tw:badge-info` blue if amber `tw:badge-warning` blends into existing saffron buttons); all-approximate scenario (surface a batch-level warning banner when ALL stops are approximate, not just per-stop badges)
-
-**Research flag:** Standard patterns — DaisyUI badge rendering is well-documented. UX decision on badge color vs. existing saffron theme requires a subjective visual test on a real device.
-
-### Phase 5: Integration Testing and Accuracy Metrics
-
-**Rationale:** Tests the assembled pipeline end-to-end with real CDCMS sample data. This phase is verification, not implementation. It also establishes the go/no-go criteria for the conditional Approach B (NER model) upgrade path.
-
-**Delivers:** Full pipeline test with `sample_cdcms_export.csv`; verification that the "HDFC ERGO" and other known wrong-geocode bugs are fixed; measured accuracy metrics (% within 30km target >90%, % needing centroid fallback target <10%, dictionary coverage target >95% of area names); documented upgrade trigger criteria for NER (>10% validation failures or >5% centroid fallback rate).
-
-**Avoids (from PITFALLS.md):** Cache poisoning not caught in development (monitor cache miss count on first real upload post-deployment; verify no duplicate cache entries within 50m proximity); driver-verified entries orphaned by preprocessing changes (verify proximity-based lookup path still works after key changes); all 10 items in the "Looks Done But Isn't" checklist in PITFALLS.md
-
-**Research flag:** No additional research needed — this is measurement and validation work. The metrics targets are specified in FEATURES.md and the test methodology is clear.
+**Rationale:** Depends on Phase 2 (needs working optimized routes to validate against Google). This is the "trust but verify" layer that adds confidence without changing routing decisions.
+**Delivers:** `GoogleMapsRouteValidator` in `core/routing/gmaps_validator.py`. `GET /api/routes/{id}/validate` endpoint. Dashboard validation badge (green/amber/red) on route cards. Geocode cache management dashboard (stats, single-entry purge, Google ToS compliance flags for entries >30 days). Geocode validation radius tightening (30km to 20km).
+**Addresses:** Google Maps route validation, geocode cache management (Features 8-9).
+**Avoids:** Pitfall 4 (cost explosion) by making validation user-triggered only with result caching and billing alerts. Pitfall 12 (25-waypoint limit) by reusing existing `split_route_into_segments()` logic from qr_helpers.py.
 
 ### Phase Ordering Rationale
 
-- Phase 1 before all others because the display fix and regex improvement are safe, independent, and provide immediate value with minimal risk. They also establish a clean test baseline before introducing more complex changes.
-- Phase 2 before Phase 3 because the dictionary is a shared dependency — the validator's centroid fallback requires dictionary coordinates, and building both components against a confirmed-complete dictionary avoids retrofitting coverage gaps after the validator is already integrated.
-- Phase 3 before Phase 4 because the `location_approximate` field is only meaningful after zone validation assigns validated confidence values. Without validation, all cache-miss results show Google's raw confidence (0.40-0.95), which does not reflect delivery-zone accuracy.
-- Phase 4 before Phase 5 because integration testing needs the complete assembled system, including the UI indicator that will reveal any remaining bugs in the confidence pipeline.
-- Phase 5 gates the conditional Approach B NER upgrade — measurable evidence required before investing in 600MB of dependencies.
+- **Phase 1 before everything** because the driver entity is the foundation. Auto-creation from CSV and name normalization must be rock-solid before optimization changes.
+- **Phase 2 after Phase 1** because per-driver TSP requires resolved driver entities with vehicle assignments to pass to VROOM.
+- **Phase 3 after Phase 2** because the dashboard cannot show per-driver routes until they exist. But Phase 3 is UI-only, so development could overlap with late Phase 2.
+- **Phase 4 is parallel-safe** because settings, upload history, CSV hardening, and cache management have no dependency on the driver model critical path. Build concurrently with Phases 2-3.
+- **Phase 5 last** because validation is a confidence layer on top of working routes. It adds value only after the core pipeline is flowing correctly.
 
 ### Research Flags
 
-Phases likely needing deeper validation during execution:
+Phases likely needing deeper research during planning:
+- **Phase 2 (Per-Driver TSP):** The VROOM single-vehicle behavior is verified, but the orchestration of N VROOM calls and result merging needs careful design around error handling (what if one driver's optimization fails?), the `optimization_run` record structure (single run with multiple routes), and the upload flow UX (driver summary confirmation step).
+- **Phase 5 (Google Maps Validation):** The Routes API v2 endpoint, pricing, and field masking are documented, but threshold calibration (what delta % means "low confidence"?) needs real-world data from production routes. Also: routes with >25 stops require segment splitting and distance reassembly.
 
-- **Phase 2:** Dictionary completeness is the single biggest uncertainty in this entire project. Cannot be confirmed without running `build_place_dictionary.py` and comparing against `SELECT DISTINCT area_name FROM orders`. Treat the 80% coverage threshold as a hard gate. Also: tune length-dependent fuzzy thresholds empirically against the full sample CDCMS addresses (not just the 4 examples in the design spec).
-- **Phase 3:** The `area_name` side-channel through the geocoding loop is the most complex integration point. Test thoroughly that non-CDCMS uploads pass empty `area_name` and degrade gracefully to zone-check-only without attempting the area-name retry.
-
-Phases with standard, well-understood patterns:
-
-- **Phase 1:** One-line fix plus additive regex. Full test suite provides immediate regression coverage. Clear implementation with exact line numbers.
-- **Phase 4:** DaisyUI badge rendering is documented. Additive API fields are backward compatible. Standard Driver PWA patterns already in the codebase.
-- **Phase 5:** Measurement and comparison against a fixed sample dataset. No novel patterns.
+Phases with standard patterns (skip research-phase):
+- **Phase 1 (Driver DB Foundation):** Well-established CRUD pattern. The repository already has the exact pattern for vehicles. Copy and adapt. Migration is straightforward column addition.
+- **Phase 3 (Dashboard Integration):** Standard React component work with existing DaisyUI patterns. FleetManagement.tsx provides 80% of the driver management code.
+- **Phase 4 (Operational Polish):** Settings pages and upload history are thoroughly documented industry patterns (Stripe, Datadog). No novel integration.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All dependencies verified against the actual `requirements.txt`, `Dockerfile`, and `docker-compose.yml`. RapidFuzz 3.14.3 confirmed on PyPI with pre-built wheels for `python:3.12-slim`. One MEDIUM note: PostalPinCode API docs verified via third-party source (official site was unresponsive during research). |
-| Features | HIGH | Feature set derived from an existing design spec with clearly defined bugs to fix and a working system to verify against. Competitor analysis (Route4Me, LogiNext, Geocodio, Veho) confirms zone validation + fallback chain is standard logistics practice. Anti-feature rejections grounded in concrete system constraints (40-50 orders/day, CSV upload workflow, 30km zone). |
-| Architecture | HIGH | Integration points traced through actual source code with line-number precision. Every file modification identified. Component interfaces defined in the design spec and verified against existing Pydantic models and API response structure. No speculative components — all proposed modules have clear analogues in the existing codebase. |
-| Pitfalls | HIGH | Critical pitfalls identified through direct source code analysis (cache key tracing, downstream consumer audit of `address_display`, RapidFuzz behavior on short strings verified against API docs). One area of MEDIUM: OSM/India Post coverage for rural Kerala micro-localities cannot be confirmed without running the build script. |
+| Stack | HIGH | Zero new dependencies. Every technology is already in the codebase and proven. Google Routes API v2 pricing verified against official docs. Incremental cost: $0/month. |
+| Features | MEDIUM-HIGH | Table stakes features are clear and well-bounded. Route validation threshold calibration (15% vs 30% delta) needs real-world data. Driver name normalization edge cases may surface in production. |
+| Architecture | HIGH | All integration points traced through source code with line-number precision. VroomAdapter, DriverDB, repository patterns all verified. Per-driver TSP is a ~50-line wrapper. |
+| Pitfalls | HIGH | 15 pitfalls identified with specific code references (line numbers, column counts, reference counts across files). Migration and rename pitfalls verified against existing schema and 6 Alembic migrations. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Dictionary coverage for rural Kerala**: Cannot be confirmed without running `build_place_dictionary.py` and comparing against `SELECT DISTINCT area_name FROM orders`. This is the primary unknown. Address in Phase 2 by treating the 80% coverage threshold as a hard gate before proceeding to Phase 3.
+- **Driver name normalization edge cases:** CDCMS free-text names have unknown variation patterns. The `name_normalized` approach handles case and whitespace, but abbreviations ("K" vs "KUMAR") and transliteration differences may need a fuzzy matching layer or alias tracking. Monitor after first 2-3 weeks of production uploads.
 
-- **Fuzzy threshold calibration**: The 85% global threshold in the design spec is likely too aggressive for short place names. Length-dependent thresholds (95% / 90% / 85%) need empirical tuning against real CDCMS data. Address in Phase 2 integration testing with the full sample address set.
+- **Route validation threshold calibration:** The 15%/30% delta thresholds for high/medium/low confidence are educated guesses. Need to run validation against 50+ real production routes to establish appropriate thresholds for Kerala road conditions (OSRM uses OSM data which may diverge from Google's proprietary data).
 
-- **Google Maps navigation URL parsing**: Changing `address_display` from Google's `formatted_address` to `order.address_raw` changes what Google Maps receives when the driver taps "Navigate." Whether verbose CDCMS addresses (e.g., "8/542 Sreeshylam, Anandamandiram, K.T. Bazar, Vatakara, Kozhikode, Kerala") parse correctly in Google Maps needs manual testing on a real device. Address in Phase 4 E2E testing.
+- **Vehicle-to-driver assignment for new drivers:** When a new driver appears in CSV with no vehicle assignment, the round-robin default may assign vehicles suboptimally. May need a "default vehicle" concept or manual assignment step in the upload flow.
 
-- **`scripts/import_orders.py:219-220`**: PITFALLS research flags this file as a potential missed consumer of `address_display` logic not listed in the design spec's "Unchanged Files" section. Needs explicit audit in Phase 1 before the display fix is considered complete.
+- **Google ToS compliance for geocode cache:** Google's 30-day caching restriction applies to `source='google'` entries. The cache management UI should flag stale Google entries, but the enforcement mechanism (auto-purge vs manual review) is not yet decided. Research recommends manual review to protect valuable data.
 
-- **Invalid Google API key on day one**: The project is known to have an invalid API key. The circuit breaker design must be tested against `REQUEST_DENIED` responses from the very first upload post-deployment, not just against transient failures. The centroid fallback must provide serviceable (area-level) locations even when the API is completely unavailable.
+- **Per-driver TSP error handling:** If VROOM fails for one driver's optimization (e.g., all stops are ungeocoded), the behavior for the remaining drivers is undefined. Need a clear strategy: skip failed driver and proceed, or fail the entire batch.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-
-- Project design spec: `docs/superpowers/specs/2026-03-10-address-preprocessing-design.md` — feature requirements, algorithm design, interface definitions, implementation plan
-- Project codebase architecture: `.planning/codebase/ARCHITECTURE.md`, `CONCERNS.md`, `INTEGRATIONS.md` — existing system architecture and known issues
-- Source files analyzed: `core/data_import/cdcms_preprocessor.py`, `core/geocoding/cache.py`, `core/geocoding/google_adapter.py`, `core/optimizer/vroom_adapter.py`, `core/database/models.py`, `core/models/location.py`, `apps/kerala_delivery/api/main.py`, `infra/Dockerfile`, `docker-compose.yml`, `requirements.txt`
-- [RapidFuzz PyPI](https://pypi.org/project/RapidFuzz/) — v3.14.3, MIT, Python 3.10+ pre-built wheels confirmed
-- [RapidFuzz fuzz module docs](https://rapidfuzz.github.io/RapidFuzz/Usage/fuzz.html) — `fuzz.ratio()` and `process.extractOne()` semantics and behavior on short strings
-- [OSM Overpass API wiki](https://wiki.openstreetmap.org/wiki/Overpass_API) — `around` spatial query syntax, 10K req/day rate limit
-- [Google Geocoding API Best Practices](https://developers.google.com/maps/documentation/geocoding/best-practices) — handling ambiguous results, `formatted_address` semantics
-- [Geocodio Accuracy Types](https://www.geocod.io/guides/accuracy-types-scores/) — confidence score tiers and fallback strategies in logistics geocoding
-- [Route4Me Geocoding Guide](https://support.route4me.com/geocoding-guide-address-verification/) — zone validation in delivery logistics as standard practice
-- [LogiNext Geocoding Intelligence](https://www.loginextsolutions.com/blog/geocoding-intelligence-that-reduces-exceptions-before-they-happen/) — confidence scores preventing delivery exceptions
+- [Google Maps Routes API Usage and Billing](https://developers.google.com/maps/documentation/routes/usage-and-billing) -- pricing tiers, free tier limits, SKU breakdown
+- [Google Maps Routes API Compute Routes](https://developers.google.com/maps/documentation/routes/compute_route_directions) -- POST endpoint, request/response format, field masking
+- [Google Maps Directions API Migration Guide](https://developers.google.com/maps/documentation/routes/migrate-routes) -- legacy API deprecation details
+- [VROOM Project GitHub](https://github.com/VROOM-Project/vroom) -- TSP as VRP with 1 vehicle, confirmed in docs
+- [VROOM API Documentation](https://github.com/VROOM-Project/vroom/blob/master/docs/API.md) -- request format, vehicles/jobs arrays, step-level output
+- [Alembic Autogenerate Documentation](https://alembic.sqlalchemy.org/en/latest/autogenerate.html) -- column rename limitations, manual review requirement
+- [Google Maps Geocoding Policies](https://developers.google.com/maps/documentation/geocoding/policies) -- 30-day cache restriction, Place ID exemption
+- [Google Maps Platform Security Best Practices](https://developers.google.com/maps/api-security-best-practices) -- server-side key storage
+- Codebase analysis: `core/database/models.py`, `core/optimizer/vroom_adapter.py`, `core/database/repository.py`, `apps/kerala_delivery/api/main.py`, `core/data_import/cdcms_preprocessor.py`, `apps/kerala_delivery/dashboard/src/` (16 files, 371 vehicle references)
 
 ### Secondary (MEDIUM confidence)
+- [Nextmv: TSP vs CVRP](https://www.nextmv.io/blog/tsp-pdtsp-cvrp-cvrptw-oh-my-the-alphabet-soup-of-route-optimization) -- when to use TSP vs CVRP
+- [LogisticsOS: Comparing Matrix Routing Services](https://www.logisticsos.com/blog/distance-matrix) -- OSRM vs Google accuracy analysis
+- [Google Maps API pricing restructure March 2025](https://masterconcept.ai/news/google-maps-api-changes-2025-migration-guide-for-directions-api-distance-matrix-api/) -- new billing tiers
+- [Coaxsoft: Driver Management Software Guide](https://coaxsoft.com/blog/guide-to-driver-management-software) -- industry feature expectations
+- [OSRM vs Google comparison tool](https://github.com/yklyahin/osrm-google-comparison) -- distance comparison methodology
 
-- [PostalPinCode API](http://www.postalpincode.in/Api-Details) — endpoint and rate limits verified via third-party docs (official site unresponsive during research)
-- [Kestrel Insights Geofencing](https://www.kestrelinsights.com/blog/how-accurate-precise-geofencing-optimizes-last-mile-delivery) — zone-based validation in last-mile logistics
-- [Veho Self-Serve Geocode Corrections](https://www.shipveho.com/blog/improving-delivery-accuracy-with-self-serve-customer-geocode-corrections) — self-healing geocode patterns
-- [Radar Geocoding APIs Guide](https://radar.com/blog/geocoding-apis) — logistics geocoding caching and fallback
-
-### Tertiary (context / reference)
-
-- [GeoIndia Seq2Seq Geocoding EMNLP 2024](https://aclanthology.org/2024.emnlp-industry.29/) — Indian address geocoding challenges (informs why NER is deferred to Approach B)
-- [haversine package source](https://github.com/mapado/haversine/blob/main/haversine/haversine.py) — confirms stdlib `math` sufficiency for 30km zone check
-- [shiprocket-ai/open-indicbert-indian-address-ner](https://huggingface.co/shiprocket-ai/open-indicbert-indian-address-ner) — NER model specifications for Approach B reference only
+### Tertiary (LOW confidence)
+- [Detrack](https://www.detrack.com/), [Route4Me](https://www.route4me.com/), [Onfleet](https://onfleet.com/) -- competitor feature references (marketing material)
+- [Stripe API Key Management](https://docs.stripe.com/keys) -- settings page UX pattern reference
 
 ---
-*Research completed: 2026-03-10*
+*Research completed: 2026-03-12*
 *Ready for roadmap: yes*

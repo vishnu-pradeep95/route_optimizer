@@ -1,364 +1,406 @@
-# Pitfalls Research
+# Domain Pitfalls
 
-**Domain:** Address preprocessing pipeline, geocode validation, and confidence UI -- adding to an existing LPG delivery routing system (Kerala/Vatakara region)
-**Researched:** 2026-03-10
-**Confidence:** HIGH for cache/integration pitfalls (verified against codebase analysis); HIGH for fuzzy matching pitfalls (verified against RapidFuzz documentation); MEDIUM for dictionary data quality (based on OSM Overpass and India Post API characteristics); HIGH for address_display downstream impact (traced through vroom_adapter.py, repository.py, OrderDB, RouteStopDB, driver PWA)
+**Domain:** Adding driver-centric model, per-driver TSP, Google Maps route validation, geocode cache management, and dashboard settings to an existing LPG delivery route optimization system
+**Researched:** 2026-03-12
+**Confidence:** HIGH for DB migration pitfalls (verified against init.sql, models.py, repository.py, 6 Alembic migrations); HIGH for CVRP-to-TSP pitfalls (verified against vroom_adapter.py and RouteOptimizer protocol); HIGH for API/frontend coupling (traced 371 vehicle references across 16 dashboard files, 67 in driver PWA, 129 in tests, 80 in E2E specs); MEDIUM for Google Maps Directions API costs (verified pricing structure against official docs, specific SKU rates may shift); HIGH for xlsx detection (verified _is_cdcms_format reads text, fails on binary .xlsx)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Geocode Cache Poisoning from Preprocessing Changes
+Mistakes that cause rewrites, data corruption, or extended downtime.
+
+### Pitfall 1: Vehicle-to-Driver Rename Creates a Semantic Minefield
 
 **What goes wrong:**
-The existing geocode cache in PostGIS contains ~hundreds of entries keyed by `normalize_address(address_raw)`. When you change how `clean_cdcms_address()` works (adding word splitting, reordering abbreviation expansion), the same CDCMS input now produces a DIFFERENT cleaned address. This new address does not match any existing cache key, causing a cache miss. The system re-geocodes all addresses on next upload, consuming Google API quota. Worse: the cache now contains TWO entries for the same physical address -- the old garbled version AND the new cleaned version -- potentially with different coordinates.
+The codebase has "vehicle" embedded at every layer: 7 database tables reference `vehicle_id` as a VARCHAR(20) string (routes, telemetry, vehicles table itself), 371 occurrences across 16 dashboard TypeScript files, 67 occurrences in the driver PWA, 129 occurrences across 7 Python test files, and 80 occurrences across 4 Playwright E2E spec files. A naive find-and-replace corrupts the system because `vehicle_id` serves two distinct roles:
 
-The old cache entries are never invalidated. If a future code path or script uses the raw CDCMS text without going through the new preprocessing, it hits the old (wrong) cache entry and gets the wrong coordinates.
+1. **Physical vehicle identifier** (VEH-01): Used in the `vehicles` table, telemetry, fleet management, speed limits, depot locations, capacity constraints. These are properties of the VEHICLE.
+2. **Route assignment key**: Used in `routes.vehicle_id`, API endpoints (`/api/routes/{vehicle_id}`), driver PWA route fetching, QR sheet generation. In the new model, this should become a DRIVER identifier.
+
+Renaming the `routes.vehicle_id` column to `driver_id` while the `vehicles` table still exists creates foreign key ambiguity. The `telemetry.vehicle_id` column genuinely tracks which VEHICLE is moving (for speed alerts, GPS traces), not which driver is logged in. Renaming it to `driver_id` would be semantically wrong.
 
 **Why it happens:**
-The cache key flows through `normalize_address()` which lowercases, strips punctuation, and collapses whitespace -- but it does NOT perform word splitting or abbreviation expansion. So `clean_cdcms_address("MUTTUNGALPOBALAVADI")` currently produces `"Muttungalpobalavadi"` which normalizes to `"muttungalpobalavadi"`. After the fix, it produces `"Muttungal P.O. Balavadi"` which normalizes to `"muttungal po balavadi"`. These are different cache keys. The existing cached geocode for `"muttungalpobalavadi"` (which may point to the wrong location) remains in the database forever.
+The original CVRP model treats "vehicle" as the atomic routing unit. In the new driver-centric model, the driver is the routing unit, but vehicles still exist as physical assets. The rename is not a simple substitution -- it is a conceptual split of one entity into two related entities.
 
-**How to avoid:**
-1. Do NOT touch `normalize_address()`. It is the cache key function and must remain stable. The design spec correctly identifies it as "unchanged" -- enforce this.
-2. Accept that preprocessing changes will cause cache misses for affected addresses. This is the DESIRED behavior -- the old cache entries had wrong coordinates because the garbled address geocoded incorrectly.
-3. Add a migration script (or one-time cleanup) that identifies orphaned cache entries where `address_raw` contains concatenated text patterns (no spaces between words) and flags them for review. Do not auto-delete -- some may have been driver-verified.
-4. Log when a "similar but different" cache key is created for an address that already has a nearby variant. The duplicate detector (15m proximity) may catch some of these.
+**Consequences:**
+- Breaking all 38 Playwright E2E tests (they hardcode `VEH-01`, `/api/routes/VEH-01`)
+- Breaking 435+ pytest unit tests (102 references to `vehicle_id` in test_api.py alone)
+- API contract breakage: `/api/routes/{vehicle_id}` is consumed by the driver PWA. Changing the URL path breaks all existing QR codes already printed and distributed
+- Telemetry data becomes unqueryable if `vehicle_id` column is renamed mid-stream (existing rows say "VEH-01", new rows say "DRIVER-01")
 
-**Warning signs:**
-- Spike in Google API calls after deploying preprocessing changes (monitor `stats["misses"]` counter)
-- Duplicate location warnings from the existing duplicate detector for addresses that differ only in whitespace/abbreviation
-- Two geocode_cache rows where `address_raw` values are clearly the same physical address with different formatting
+**Prevention:**
+1. Do NOT rename the `vehicle_id` column in `routes` table. Add a new `driver_name` column (already exists) or `driver_id` FK alongside it. Keep `vehicle_id` for backward compatibility.
+2. Keep `/api/routes/{vehicle_id}` endpoint path unchanged. Internally, look up by driver identifier OR vehicle identifier.
+3. Add a `drivers` table (already exists in schema) and link it to routes via a new nullable `driver_id` FK column added by migration. Existing routes retain their `vehicle_id` and `driver_name` values.
+4. In the dashboard, change LABELS (UI text) from "Vehicle" to "Driver" without changing the API field names. The TypeScript interfaces keep `vehicle_id` as the wire format but UI renders "Driver: RAJESH" instead of "Vehicle: VEH-01".
+5. Phase the migration: Phase 1 adds driver entities, Phase 2 updates UI labels, Phase 3 (optional future) deprecates direct vehicle routing.
 
-**Phase to address:**
-Phase 1 (Foundation) -- document expected cache miss behavior. Phase 5 (Integration Testing) -- verify cache miss count is within budget and old entries are not causing confusion.
+**Detection:**
+Any plan that includes `ALTER TABLE routes RENAME COLUMN vehicle_id TO driver_id` or `s/vehicle_id/driver_id/g` is heading toward this pitfall.
 
 ---
 
-### Pitfall 2: address_display Change Breaks Downstream Consumers Silently
+### Pitfall 2: CVRP-to-TSP Transition Breaks the Optimizer Interface
 
 **What goes wrong:**
-The design spec calls for changing `vroom_adapter.py:278` from `order.location.address_text or order.address_raw` to `order.address_raw`. This one-line change affects every downstream consumer that reads `address_display`:
+The current `RouteOptimizer.optimize()` protocol signature is:
+```python
+def optimize(self, orders: list[Order], vehicles: list[Vehicle]) -> RouteAssignment
+```
+This takes ALL orders and ALL vehicles, letting VROOM decide the optimal assignment. Per-driver TSP means orders are pre-assigned to drivers before optimization. If you pass a single vehicle to VROOM with all orders, it still works -- but if you pass a single vehicle with only that driver's orders, VROOM solves TSP (which is correct). The pitfall is in the transition logic:
 
-1. **OrderDB.address_display** (String(255)) -- stored in the database during `save_optimization_run()`
-2. **RouteStopDB.address_display** (String(255)) -- stored for each stop in the route
-3. **API response** -- `/api/routes/{vehicle_id}` returns `address_display` to the driver PWA
-4. **QR sheet generation** -- `qr_helpers.py` uses `address_display` for print labels
-5. **Google Maps navigation URL** -- the driver's "Navigate" button passes the address to Google Maps
-6. **Dashboard route details** -- the React dashboard shows `address_display` in route tables
-
-If `order.address_raw` is longer than 255 characters (the DB column limit for `address_display`), the database INSERT will either truncate silently (depending on PostgreSQL strict mode) or raise a `DataError`. CDCMS addresses with area suffix appended can easily reach 200+ characters; with the new word splitting adding spaces and commas, some may exceed 255.
-
-Additionally, changing the address source changes what Google Maps searches for when the driver taps "Navigate." If the old `formatted_address` was "Vatakara, Kerala, India" (wrong place but parseable by Google Maps) and the new `address_raw` is "8/542 Sreeshylam, Anandamandiram, K.T. Bazar, Vatakara, Kozhikode, Kerala" (correct but verbose), Google Maps may interpret it differently.
+1. **Who assigns orders to drivers?** CDCMS's `DeliveryMan` column contains the pre-assignment. But if the office employee wants to reassign orders between drivers in the dashboard before optimizing, the assignment happens in the frontend/API layer, not the optimizer.
+2. **VROOM still needs vehicle capacity constraints.** Even in TSP mode (1 vehicle, N orders), the vehicle's `max_weight_kg` and `max_items` must be respected. If you strip vehicle info from the TSP call, you lose capacity validation. VROOM will happily produce a route with 50 cylinders on a vehicle that holds 30.
+3. **The `RouteAssignment` model assumes multi-vehicle output.** It has `vehicles_used`, `unassigned_order_ids`, multiple `routes`. For per-driver TSP, there is exactly 1 route and 0 unassigned orders (or the driver is overloaded). The UI code that iterates `assignment.routes` and shows "X vehicles used" becomes misleading.
 
 **Why it happens:**
-The fix is conceptually correct (show the original address, not Google's interpretation), but the ripple effects through multiple database columns, API responses, and UI consumers are easy to underestimate. The `address_display` field appears in 6+ code paths.
+VROOM is a CVRP solver. Using it for TSP is not wrong -- TSP is a special case of CVRP with 1 vehicle. But the calling code, response parsing, and data model all assume multi-vehicle context.
 
-**How to avoid:**
-1. Check the maximum length of `address_raw` values in production data before deploying. Run: `SELECT MAX(LENGTH(address_raw)) FROM orders;` and verify it is under 255 characters.
-2. If CDCMS addresses with area suffix can exceed 255 chars, either increase the column size via Alembic migration or truncate explicitly with a logged warning: `address_display = (order.address_raw or "")[:255]`.
-3. Test the Google Maps navigation URL with several real `address_raw` values to ensure Google Maps can parse them. The area suffix (", Vatakara, Kozhikode, Kerala") is critical for Google Maps -- verify it is present.
-4. Grep the entire codebase for `address_display` consumers before making the change. The design spec lists "Unchanged Files" but does NOT list `qr_helpers.py` or `import_orders.py`, both of which reference `address_display` or `address_text`.
-5. Write a test that uploads a CSV, runs optimization, and verifies `address_display` in the API response matches the cleaned CDCMS address (not Google's formatted_address).
+**Consequences:**
+- Overloaded drivers: no capacity check if vehicle info is stripped from per-driver calls
+- Dashboard shows "1 vehicle used" instead of meaningful driver stats
+- `optimization_runs.vehicles_used` is always 1 per run, losing fleet-wide visibility
+- If you create N separate optimization runs (one per driver), the `get_latest_run()` query returns only the last driver's run, hiding all others
 
-**Warning signs:**
-- `DataError` or `StringDataRightTruncation` in PostgreSQL logs during upload
-- Driver PWA shows truncated addresses (ending in "...")
-- Google Maps opens to wrong location when driver taps "Navigate" with the new address format
-- QR sheet prints show garbled or overly long addresses that wrap badly
+**Prevention:**
+1. Keep VROOM as the optimizer but call it N times (once per driver) with 1 vehicle + that driver's orders. This preserves capacity constraints.
+2. Wrap the N calls in a new `PerDriverOptimizer` that implements the same `RouteOptimizer` protocol but internally iterates over drivers.
+3. Store all N driver routes under a SINGLE `optimization_run` so `get_latest_run()` returns the complete picture. The `vehicles_used` field becomes "drivers_optimized" semantically.
+4. Alternatively, pass ALL orders to VROOM with N vehicles (one per driver) but use VROOM's `steps` feature to pre-assign specific jobs to specific vehicles. This lets VROOM optimize the SEQUENCE while respecting the ASSIGNMENT. (Requires VROOM job `skills` or vehicle `steps` matching.)
 
-**Phase to address:**
-Phase 1 (Foundation) -- the `address_display` source fix is listed as task 1.1 and must include downstream consumer audit. Phase 4 (API + Driver UI) -- verify end-to-end that the address shown in the PWA is correct and navigable.
+**Detection:**
+Any approach that creates separate `optimization_runs` per driver, or removes `Vehicle` objects from optimize calls, is heading into this pitfall.
 
 ---
 
-### Pitfall 3: Fuzzy Matching False Positives on Short Kerala Place Names
+### Pitfall 3: .xlsx Binary Format Breaks CDCMS Auto-Detection
 
 **What goes wrong:**
-The dictionary-powered word splitter uses RapidFuzz with an 85% similarity threshold. Kerala has many short place names (4-6 characters) that are similar to each other or to common Malayalam words:
+The `_is_cdcms_format()` function in `main.py` opens the uploaded file as TEXT (`open(file_path, "r", encoding="utf-8")`) and checks for tab characters and CDCMS column names in the first line. An `.xlsx` file is a ZIP archive of XML files -- opening it as text produces binary garbage, not column headers. The function returns `False`, so the upload falls through to the standard CSV import path, which also fails because `CsvImporter` cannot parse a binary Excel file as CSV.
 
-| Place A | Place B | `fuzz.ratio` | Should match? |
-|---------|---------|--------------|---------------|
-| EDAPPAL | EDAPPAL | 100 | Yes |
-| EDAPPAL | EDAPALLI | 88 | No -- different place (50km apart) |
-| KUTTUR | KUTTOOR | 86 | Maybe -- transliteration variant |
-| AZHIKODE | AZHIYUR | 71 | No |
-| VADAKARA | VADAKKARA | 94 | Yes -- same place |
-| PARAMBA | PARAMBU | 86 | No -- "paramba" = compound, "parambu" = land |
+The temp file is saved with suffix `.xlsx` (line 884: `suffix = ".csv" if ext == ".csv" else ".xlsx"`), so the file extension is correct. But `_is_cdcms_format()` ignores the extension entirely and relies on text content inspection.
 
-At 85% threshold, `EDAPPAL` and `EDAPALLI` would match (88% similarity), which is wrong -- they are completely different places 50km apart. The splitter would then insert a word break and assign coordinates for the wrong location.
-
-For 4-character names, an 85% threshold means 1 character difference triggers a match. `KODI` matches `KADI` (75%), `PADI` matches `MADI` (75%) -- these are wrong. RapidFuzz's `fuzz.ratio` on short strings is inherently unreliable because one character edit represents a high percentage of the total length.
+Currently this is masked because CDCMS exports are tab-separated `.csv` files. But the v3.0 milestone explicitly targets `.xlsx` support for when employees save CDCMS exports via Excel (which converts to `.xlsx`).
 
 **Why it happens:**
-The design spec recommends 85% threshold as "conservative," but this assessment assumes longer strings where 85% is indeed conservative. For strings under 8 characters, 85% is very aggressive. Malayalam place names in romanized form are typically 5-10 characters.
+`_is_cdcms_format()` was written for tab-separated text files. When CDCMS data arrives as `.xlsx`, the function's text-reading approach fails silently (returns `False`) rather than raising an error. The `preprocess_cdcms()` function DOES handle `.xlsx` (via `pd.read_excel()`), but it never gets called because the auto-detection gate rejects the file first.
 
-**How to avoid:**
-1. Use a **length-dependent threshold**: 95% for names under 6 characters, 90% for 6-8 characters, 85% for names over 8 characters. Short names need near-exact matches because one character flip changes meaning.
-2. Prefer `rapidfuzz.fuzz.ratio` over `token_sort_ratio` or `partial_ratio` -- the latter are even more permissive and produce more false positives for place name matching.
-3. Require that fuzzy matches are within the delivery zone (30km). If `EDAPPAL` in the dictionary is at lat/lon X and the matched `EDAPALLI` would be 50km away, reject the match. The dictionary already has coordinates -- use them for spatial validation of fuzzy matches.
-4. Build a curated **alias list** in the dictionary rather than relying on fuzzy matching for known variants. The design spec already supports an `aliases` array per place entry. Explicit aliases ("VADAKARA" -> "VADAKKARA") are always safer than fuzzy matching.
-5. Add a logging mode that reports all fuzzy matches with their scores during testing. Review the match list manually for false positives before deploying to production.
+**Consequences:**
+- Office employees who save CDCMS exports as `.xlsx` from Excel get cryptic "Required columns missing" errors
+- The error message says "make sure you're uploading the raw CDCMS export" -- confusing because they ARE uploading from CDCMS, just in a different format
+- Potential data loss if the employee gives up and manually reformats the file, losing CDCMS metadata
 
-**Warning signs:**
-- Addresses geocode to a place name that sounds similar but is in a different district
-- The splitter inserts word breaks at unexpected positions in an address
-- Fuzzy match log shows matches at exactly the threshold (85-87%) -- these are the most likely false positives
+**Prevention:**
+1. In `_is_cdcms_format()`, check file extension FIRST. If `.xlsx` or `.xls`, use `pd.read_excel()` to read the header row, then check for CDCMS column names.
+2. Alternatively, always try `preprocess_cdcms()` first for any uploaded file, catch `ValueError` if columns are missing, then fall back to standard `CsvImporter`. This is the "try CDCMS first, fall back to generic" pattern.
+3. Add a test case: upload a valid CDCMS `.xlsx` file and verify it reaches the preprocessor.
 
-**Phase to address:**
-Phase 2 (Place Name Dictionary) -- the fuzzy matching threshold must be tuned with real CDCMS data, not hypothetical examples. Phase 5 (Integration Testing) -- measure false positive rate on the 27 sample addresses.
+**Detection:**
+Test the upload endpoint with a `.xlsx` file containing CDCMS columns. If it fails with "Required columns missing" instead of processing successfully, this pitfall is active.
 
 ---
 
-### Pitfall 4: Fallback Chain Creates Inconsistent Confidence Across Re-uploads
+### Pitfall 4: Google Maps Directions API Cost Explosion
 
 **What goes wrong:**
-The geocode validation fallback chain (geocode -> validate -> retry with area name -> centroid fallback) produces different confidence scores depending on when an address is first geocoded:
+Using Google Maps Directions API to "validate" VROOM routes means calling the Directions API for every optimized route after every upload. With 13 drivers and daily uploads, that is 13 Directions API calls per day. Each call with >10 waypoints uses the "Directions Advanced" SKU. Routes with 20-30 stops require splitting into segments of 25 waypoints max (the API limit), potentially doubling the call count.
 
-- **Day 1:** Upload CSV. Address "MUTTUNGALPOBALAVADI" geocodes to wrong location (50km away). Validator catches it, retries with "Muttungal, Vatakara, Kozhikode, Kerala", gets a valid result at confidence 0.7 * 0.6 = 0.42. Cached at 0.42.
-- **Day 2:** New preprocessing deployed. Same address now cleans to "Muttungal P.O., Balavadi". Different cache key -> cache miss. Google geocodes it correctly within the zone at confidence 0.60. Cached at 0.60.
-- **Day 3:** Same address uploaded again. Cache hit from Day 2 entry at 0.60.
+The Directions API costs approximately $10 per 1,000 requests for Advanced SKU (routes with >10 waypoints). At 13 routes/day with possible segment splitting, that is ~20-26 API calls/day = ~600-780/month. Combined with the existing Geocoding API costs (~$5/1,000), the monthly API bill could jump from ~$5-10/month to ~$15-20/month. This is manageable, but the pitfall is in the IMPLEMENTATION:
 
-Now the database has TWO cache entries for the same physical address, with different confidence scores (0.42 and 0.60). Depending on which cleaned form is used, the driver sees different confidence badges for the same delivery location. If a third upload uses yet another cleaning variant, a third entry appears.
-
-The fallback chain also means that two addresses in the SAME upload batch can get different treatment: one geocodes correctly on first try (confidence 0.80), another goes through the area-only retry (confidence 0.56). The driver sees the first as "confirmed" and the second as "approximate" even though both are equally accurate delivery locations.
+If route validation is triggered on every page load (dashboard polling), or on every driver route refresh, or if a bug causes retry loops, the API call count could spike to thousands per month. Google's new 2025 billing structure provides free usage thresholds per SKU on the Essentials tier, but exceeding them triggers full-price billing.
 
 **Why it happens:**
-The confidence score conflates two meanings: (1) how confident Google is in the geocode, and (2) how many fallback steps were needed to get a valid result. A centroid fallback with confidence 0.3 is genuinely approximate, but an area-only retry with confidence 0.42 might be perfectly accurate -- it just went through an extra step.
+The Geocoding API is already integrated with careful caching (hit rates of 60-80%). The temptation is to add Directions API calls "just for validation" without the same caching discipline. Directions results are harder to cache because they depend on real-time traffic data and the exact waypoint order.
 
-**How to avoid:**
-1. Separate `geocode_confidence` (Google's raw score) from `validation_confidence` (whether the result passed zone validation). The driver cares about the FINAL result quality, not how many retries it took.
-2. Set clear thresholds: confidence < 0.5 shows "Approx. location" badge. Document that this threshold applies to the FINAL confidence after all fallbacks, not to intermediate values.
-3. When the fallback chain produces a result, log the full chain for debugging: "Address X: geocoded at 0.40 (outside zone) -> retry with area at 0.60 (within zone) -> final confidence 0.60."
-4. When a driver-verified location is saved (confidence 0.95), it overrides ALL previous cache entries for that normalized address. Ensure the `save_driver_verified()` path uses the same normalized key as the preprocessing pipeline.
+**Consequences:**
+- Unexpected Google Cloud bills (could reach $50-100/month if validation runs on every API call)
+- Hitting rate limits (3,000 requests/minute for Directions API, but the daily quota matters more for billing)
+- If the API key has billing alerts disabled, costs accumulate silently
 
-**Warning signs:**
-- Same physical address shows "Approx. location" badge on one day but not another
-- Driver-verified locations (0.95) coexist with low-confidence entries (0.30) for the same address
-- Confidence scores cluster around arbitrary multiplication products (0.42, 0.28) rather than meaningful values
+**Prevention:**
+1. Call Directions API ONLY on explicit user action ("Validate with Google Maps" button), never on automatic route generation or page load.
+2. Cache Directions results per route hash (ordered waypoint coordinates). Same route = same validation result. Only invalidate if stops change.
+3. Display the estimated cost before calling: "This will use ~2 Google Maps API calls ($0.02). Validate?"
+4. Set a daily/monthly budget cap in Google Cloud Console. Configure billing alerts at 50% and 80% of budget.
+5. Consider using OSRM route distance as the "good enough" validation and reserve Google Maps for routes where OSRM and user expectations diverge significantly (>20% difference).
 
-**Phase to address:**
-Phase 3 (Geocode Validation) -- design the confidence calculation carefully. Phase 4 (API + Driver UI) -- set the "approximate" badge threshold with clear documentation of what it means.
+**Detection:**
+If Directions API calls appear in Google Cloud billing without corresponding user actions in the dashboard audit log, the validation is being called too frequently.
 
 ---
 
-### Pitfall 5: Dictionary Build Script Fetches Stale or Incomplete OSM Data
+## Moderate Pitfalls
+
+### Pitfall 5: Alembic Migration for Schema Changes Drops Existing Data
 
 **What goes wrong:**
-The place name dictionary is built once from OSM Overpass API and India Post API. Both data sources have significant coverage gaps for rural Kerala:
+Adding a `driver_id` FK column to the `routes` table, or adding new columns to `optimization_runs` (like `drivers_optimized`), requires an Alembic migration. Alembic's autogenerate feature CANNOT detect column renames -- it sees the old column disappearing and a new column appearing, generating a `DROP COLUMN` followed by `ADD COLUMN`. If the migration is auto-generated and applied without review, existing route data loses its `vehicle_id` or `driver_name` values.
 
-1. **OSM coverage in rural Kerala is spotty.** Many hamlets, colonies, and micro-localities in the Vatakara region are not mapped in OpenStreetMap. OSM has good road coverage for Kerala but place name coverage for small settlements (which is exactly what CDCMS addresses reference) is incomplete. A 30km radius query might return 200 place nodes, but the actual CDCMS dataset references 50+ place names not in OSM.
-
-2. **India Post API returns post office names, not localities.** The PostalPinCode API for PIN codes 673101-673110 returns ~77 post office names. But CDCMS addresses reference landmarks, house names, colonies, and micro-areas that are NOT post offices. "K.T. Bazar" is a market area, not a post office. "Sarambi" is a locality, not a post office.
-
-3. **OSM Overpass API has no SLA.** The public Overpass API at `overpass-api.de` has rate limits (~10,000 requests/day) and occasionally goes down. If the build script runs when the API is slow or down, it produces an incomplete dictionary. The script should retry, but the design spec shows a single query approach.
-
-The dictionary is committed to the repo, so a bad build persists until someone notices and rebuilds.
+The project already has 6 migrations. A new migration that alters the `routes` table interacts with existing data: hundreds of route rows reference `vehicle_id` values like "VEH-01" through "VEH-13". These must be preserved.
 
 **Why it happens:**
-The design spec correctly identifies these as data sources but overestimates their coverage for rural Kerala micro-localities. OSM is excellent for cities like Kozhikode or Kochi but has much thinner coverage for the hamlets and colonies that CDCMS addresses reference in the Vatakara hinterland. The spec estimates "~200-300 entries" but the actual unique place names in CDCMS data may number 400+.
+Auto-generated migrations are a convenience but are explicitly documented as requiring manual review. The Alembic docs state: "autogenerate is not intended to be perfect, and it is always necessary to manually review and correct the candidate migrations."
 
-**How to avoid:**
-1. **Bootstrap the dictionary from actual CDCMS data**, not just OSM/India Post. Extract unique AreaName values from historical CDCMS uploads and add them to the dictionary. The area_name column in existing orders contains the most relevant place names. Run: `SELECT DISTINCT area_name FROM orders;` to get the real-world vocabulary.
-2. **Treat the dictionary as a living document.** When the splitter encounters an address it cannot split (no dictionary match), log the address. Periodically review logged addresses and add new place names to the dictionary.
-3. **Validate the dictionary against the 27 sample CDCMS addresses** from the test suite. Every area_name in the sample data must appear in the dictionary. If any are missing, the dictionary is incomplete.
-4. **Add a fallback for dictionary build failures.** If the Overpass API is down, the build script should fail loudly (not produce a partial dictionary) and documentation should explain how to retry.
-5. **Include GPS coordinates for CDCMS area names** from the geocode cache. If "MUTTUNGAL" has been geocoded before (even incorrectly), the cache has approximate coordinates that can seed the dictionary entry.
+**Consequences:**
+- Existing optimization history disappears (routes table has ON DELETE CASCADE from optimization_runs, but column drops don't cascade -- they just lose data)
+- The `GET /api/runs/{run_id}/routes` endpoint returns routes with NULL vehicle_id for historical runs
+- Driver PWA cannot load historical routes (vehicle_id is the lookup key)
 
-**Warning signs:**
-- Dictionary has fewer than 150 entries (suggests API returned incomplete data)
-- CDCMS area names in the sample CSV do not appear in the dictionary
-- Build script completes in under 2 seconds (suggests API returned empty or cached error response)
-- Multiple addresses fall through to "passthrough for unknown text" in the splitter logs
+**Prevention:**
+1. NEVER use `alembic revision --autogenerate` without manual review for this milestone. Hand-write the migration.
+2. For adding `driver_id` to routes: use `ADD COLUMN driver_id UUID REFERENCES drivers(id) NULL`. Make it nullable for backward compatibility. Existing rows have NULL driver_id (they were vehicle-assigned, not driver-assigned).
+3. For renaming concepts (vehicles_used -> drivers_used in optimization_runs): ADD the new column alongside the old one. Populate it with a data migration: `UPDATE optimization_runs SET drivers_used = vehicles_used`. Keep the old column for backward compatibility.
+4. Test the migration on a copy of production data before applying: `pg_dump | psql test_db && alembic upgrade head`.
 
-**Phase to address:**
-Phase 2 (Place Name Dictionary) -- validate dictionary completeness against real CDCMS data before proceeding to Phase 3. This is a gate: if the dictionary covers less than 80% of area names in sample data, stop and augment before continuing.
+**Detection:**
+Run `alembic revision --autogenerate --sql` (dry-run) and inspect the SQL. Any `DROP COLUMN` on `routes`, `orders`, or `optimization_runs` is a red flag.
 
 ---
 
-### Pitfall 6: Validator Retry Doubles Google API Cost Without Budget Guard
+### Pitfall 6: Per-Driver Optimization Loses Fleet-Wide Metrics
 
 **What goes wrong:**
-The geocode validation fallback chain can make up to 3 Google API calls per address:
-1. Original geocode (always)
-2. Retry with area name only (if original is outside 30km)
-3. Potential additional call if the area-only retry also fails and a different reformulation is attempted
+The dashboard's RunHistory page shows optimization summaries: total orders assigned, vehicles used, optimization time. The UploadRoutes page shows "X vehicles used" in the result summary. These metrics come from `optimization_runs` table columns and the `OptimizationSummary` response model (defined in main.py).
 
-For a batch of 50 addresses where 30% fail zone validation (15 addresses), that is 15 extra API calls. At $5/1000 requests, the cost is negligible ($0.075). But the design spec does not address what happens when the Google API key is invalid (`REQUEST_DENIED` -- the current known state of the system).
-
-With an invalid API key, EVERY geocode call fails. The fallback chain then retries EVERY address, doubling the number of failed API calls and associated error logging. The system degrades to: geocode fails -> validator retries -> retry also fails -> centroid fallback for ALL addresses. Every delivery gets confidence 0.3 and "Approx. location" badge. Drivers see a wall of orange badges and lose trust in the system.
+When optimization switches to per-driver TSP, several metrics break:
+- `vehicles_used`: Always matches driver count, not fleet utilization
+- `optimization_time_ms`: Is it the sum of all per-driver optimizations, the max (parallel), or the last one?
+- `orders_unassigned`: In CVRP, VROOM reports orders it could not fit into any vehicle. In per-driver TSP, all orders are pre-assigned, so "unassigned" means "the driver's vehicle is overloaded". The semantic meaning shifts.
+- `total_orders` vs `orders_assigned`: If different drivers are optimized at different times (upload per driver vs batch upload), the run-level totals are misleading.
 
 **Why it happens:**
-The design spec acknowledges the invalid API key as a "known constraint" but the fallback chain design assumes the API is functional and only SOME addresses fail validation. When the API is completely down, the entire chain degrades to centroid-only mode, which is not the intended behavior.
+The `OptimizationSummary` Pydantic model and the `optimization_runs` table were designed for a single CVRP invocation that processes all orders at once. Per-driver optimization is N smaller invocations, and the aggregation semantics change.
 
-**How to avoid:**
-1. **Check API key validity BEFORE running the fallback chain.** If the first geocode call returns `REQUEST_DENIED`, skip all retries and use cache-only mode. Do not retry with area name -- the same key will be denied again.
-2. **Add a circuit breaker for Google API calls.** If 3 consecutive calls return `REQUEST_DENIED` or `OVER_QUERY_LIMIT`, stop making API calls for this batch and log a clear error: "Google Maps API key is invalid -- all addresses will use cached or approximate locations."
-3. **Track retry API cost separately.** The existing cost tracking (cache hits vs API calls) should distinguish between first-attempt calls and retry calls. This makes the retry cost visible.
-4. **When ALL addresses fall back to centroid, surface a prominent warning** in the upload response and on the dashboard -- not just individual "approximate" badges on each stop.
+**Consequences:**
+- Dashboard shows confusing metrics ("1 vehicle used, 12 orders" when there are 13 drivers)
+- RunHistory comparisons become meaningless (yesterday: "13 vehicles, 50 orders" vs today: "1 driver, 4 orders" for each of 13 runs)
+- TypeScript types (`OptimizationRun.vehicles_used`) become misleading without UI label changes
 
-**Warning signs:**
-- Upload response shows 100% of addresses as "approximate" (centroid fallback)
-- Google API cost tracker shows double the expected number of API calls
-- Logs show `REQUEST_DENIED` errors for every geocode attempt plus every retry attempt
-- Driver PWA shows "Approx. location" badge on every single stop
+**Prevention:**
+1. If per-driver optimization, still store all driver routes under ONE `optimization_run`. Set `vehicles_used` = number of drivers optimized. This preserves the semantic meaning for the dashboard.
+2. Add a `mode` field to `optimization_runs`: "fleet_cvrp" or "per_driver_tsp". The dashboard can adapt its labels based on the mode.
+3. Aggregate metrics at the run level: `optimization_time_ms` = wall-clock time for the entire batch (not individual driver times). `orders_assigned` = sum across all drivers.
+4. Update the TypeScript `OptimizationRun` interface to include `mode` and conditionally render "drivers" vs "vehicles" in RunHistory.
 
-**Phase to address:**
-Phase 3 (Geocode Validation) -- the circuit breaker and API key check must be part of the validator, not an afterthought. Phase 4 (API + Driver UI) -- add a batch-level warning when all addresses are approximate.
+**Detection:**
+Upload a file with per-driver optimization and check the RunHistory page. If it shows "1 vehicle used" or multiple confusing run entries, this pitfall is active.
 
 ---
 
-### Pitfall 7: Regex Reordering Breaks Existing Clean Address Tests
+### Pitfall 7: Dashboard Settings Page Exposes API Keys in Browser
 
 **What goes wrong:**
-The design spec calls for reordering cleaning steps: "split words BEFORE expanding abbreviations" (task 1.3). The current step order in `clean_cdcms_address()` is:
+The v3.0 milestone includes "Dashboard settings (API key input)". If the Google Maps API key is entered in a dashboard settings form and stored/transmitted via the browser, it becomes visible in:
+1. Browser DevTools Network tab (the POST request body)
+2. Browser history/autofill
+3. React state (inspectable via React DevTools)
+4. Any XSS vulnerability exposes the key
 
-1. Remove phone numbers
-2. Remove CDCMS artifacts
-3. Normalize backticks
-4. Expand abbreviations (NR -> Near, PO -> P.O., (H) -> House)
-5. Add spaces before uppercase after digits
-6. Collapse whitespace
-7. Remove dangling punctuation
-8. Title case
-9. Fix title-case artifacts
-10. Append area suffix
-
-The proposed reorder moves step 5 before step 4. But the abbreviation expansion in step 4 depends on the text NOT having spaces inserted yet. For example:
-
-- Input: `KUNIYILNR.EK GOPALAN`
-- Current step 4: `NR.` matched as abbreviation -> `KUNIYIL Near EK GOPALAN`
-- Proposed step 5 first: `(\d)([A-Z])` and `([a-z])([A-Z])` regexes -> no match (NR. has period, not case transition)
-
-But consider: `CHEKKIPURATHPO.`
-- Current step 4: `([a-zA-Z])PO\.` matches -> `CHEKKIPURATH P.O.`
-- Proposed step 5 first: `([a-z])([A-Z])` on uppercase text -> no match (all uppercase)
-
-The reordering seems safe for the specific examples in the design spec, but there are edge cases where abbreviation patterns like `NR` or `PO` appear at positions that interact with the word-splitting regex. The existing 426 unit tests include tests for `clean_cdcms_address()` that may fail if the step order changes.
+The current architecture keeps `GOOGLE_MAPS_API_KEY` as a server-side environment variable, never sent to the frontend. The dashboard has NO access to it. Moving key management to the browser breaks this security boundary.
 
 **Why it happens:**
-Text processing pipelines are order-dependent. Each regex assumes a specific input format produced by the previous step. Changing the order is equivalent to changing the input contract for each subsequent step. The design spec identifies the happy-path cases but does not exhaustively test all combinations.
+The desire to let office staff configure the API key without editing `.env` files or restarting Docker containers is legitimate. But the implementation must keep the key server-side.
 
-**How to avoid:**
-1. **Run existing tests BEFORE and AFTER the reorder.** The test suite has tests for `clean_cdcms_address()` in `tests/core/data_import/test_cdcms_preprocessor.py`. Run them first to establish a baseline, then after reordering.
-2. **Add the new `lowercase -> uppercase` regex as an ADDITIONAL step, not a replacement.** The design spec says "Also add: `re.sub(r"([a-z])([A-Z])", r"\1 \2", addr)`" -- keep this as a new step 5b alongside the existing step 5, not as a replacement.
-3. **Do NOT reorder abbreviation expansion.** The existing abbreviation expansion (PO -> P.O., NR -> Near) works correctly on concatenated text because the regex patterns handle inline detection (`([a-zA-Z])PO\.`). Moving word splitting before abbreviation expansion would break this inline detection because the text would already have spaces inserted.
-4. **Test with ALL 27 sample CDCMS addresses**, not just the 4 examples in the design spec. Edge cases will surface with real data.
+**Consequences:**
+- Compromised API key leads to unauthorized Google Maps usage (billing to the customer's account)
+- Google's security best practices explicitly warn against client-side key exposure
+- If the key is stored in localStorage, any XSS attack can exfiltrate it
 
-**Warning signs:**
-- Existing `test_cdcms_preprocessor.py` tests start failing after the reorder
-- Addresses that previously cleaned correctly now have garbled abbreviations ("P.o." instead of "P.O.", "Nr." not expanding)
-- The `clean_cdcms_address()` function grows beyond 50 lines with interleaved regex steps that are hard to reason about
+**Prevention:**
+1. The settings page should POST the API key to a backend endpoint (e.g., `POST /api/settings`). The backend stores it in the database (encrypted at rest) or writes it to a Docker secret/env file.
+2. The settings page should NEVER display the full API key. Show only the last 4 characters: `****...Xk9M`.
+3. The backend validates the key by making a test geocoding request and returns the result (valid/invalid/quota status) without sending the key back.
+4. Use the existing `verify_api_key` dependency to protect the settings endpoint.
+5. Consider whether this feature is even needed. If the API key rarely changes, `.env` file editing with Docker restart may be acceptable. Over-engineering settings UI for a rarely-changed value adds attack surface.
 
-**Phase to address:**
-Phase 1 (Foundation) -- tasks 1.2 through 1.5 must be done carefully with full test coverage before AND after changes. Do NOT change step order unless tests prove it is necessary and safe.
+**Detection:**
+Open browser DevTools, navigate to the settings page, and check if the full API key appears in any network request response, localStorage, or React component state.
 
 ---
 
-## Technical Debt Patterns
+### Pitfall 8: Address Preprocessing Changes Invalidate Geocode Cache
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Hardcoding 85% fuzzy threshold | Simple, one value to tune | False positives on short names; need per-length thresholds | Never for place name matching -- use length-dependent thresholds from the start |
-| Committing a dictionary built from one-time API fetch | Quick, no ongoing maintenance | Dictionary becomes stale as new addresses appear; misses localities not in OSM/India Post | Acceptable for MVP if combined with a logging-and-augment workflow for missed names |
-| Multiplying confidence scores (0.7 * 0.6 = 0.42) | Simple arithmetic | Confidence values become meaningless products; hard to interpret or set thresholds against | Never -- use discrete confidence levels or clearly defined multiplier semantics |
-| Storing area centroid fallback with same Location model | No model changes needed | Centroid locations are fundamentally different from geocoded locations (100m accuracy vs 5km accuracy) but stored identically | Acceptable if `geocode_confidence` clearly distinguishes them (0.3 for centroid vs 0.6+ for geocoded) |
-| Skipping Alembic migration for confidence field exposure | No DB schema change needed (field already exists) | Future developers assume no migration means no DB impact; may miss that the field was NULL for old records | Acceptable here -- the field exists and is nullable. Document that old records have NULL confidence. |
-| Using `order.address_raw` directly as `address_display` | One-line fix, eliminates the display inconsistency | `address_raw` may contain CDCMS artifacts not caught by preprocessing; driver sees semi-raw text | Acceptable if preprocessing is thorough enough; add a "cleaned but unrecognizable" safety net |
+**What goes wrong:**
+v3.0 includes "Address preprocessing improvements." The geocode cache is keyed by `normalize_address(cleaned_address)`. Any change to `clean_cdcms_address()` -- adding new word splits, changing abbreviation expansion, fixing garbling -- produces a DIFFERENT cleaned address for the same raw CDCMS input. The normalized key changes, causing cache misses for all previously-cached addresses.
 
-## Integration Gotchas
+This was already identified in the v2.2 research (previous PITFALLS.md, Pitfall 1), but it is MORE dangerous now because:
+1. The cache has grown larger since v2.2 (more addresses cached)
+2. The system may now have driver-verified coordinates in the cache (source='driver_verified'), which are more valuable than Google results
+3. A cache miss means re-geocoding at $0.005/request. 200 cached addresses becoming misses = $1.00 per upload until re-cached
 
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| AddressSplitter + CachedGeocoder | Initializing the splitter inside the geocoder (tight coupling); if dictionary file is missing, geocoder crashes | Splitter is initialized in `cdcms_preprocessor.py` (preprocessing layer), not in the geocoder. Geocoder receives already-split text. Splitter is `None` if dictionary missing -- graceful degradation. |
-| GeocodeValidator + CachedGeocoder | Validator calls upstream geocoder for retry, creating a recursive loop (cached -> validate -> retry via cached -> validate again) | Validator retries must go through the UPSTREAM geocoder directly (GoogleGeocoder), not through CachedGeocoder. Otherwise the retry result gets cached with wrong confidence before validation completes. |
-| Dictionary JSON + Docker volume | Dictionary file in `data/` directory is bind-mounted in Docker; rebuilding dictionary on host requires container restart to pick up changes | The dictionary is loaded lazily on first use per the design spec. Add a reload mechanism or document that container restart is needed after dictionary rebuild. |
-| RapidFuzz + Docker image | `rapidfuzz` has C++ extensions that need compilation; `python:3.12-slim` may lack build tools | Use `rapidfuzz` wheel (pre-compiled for linux/x86_64) or install `gcc` in the Dockerfile build stage. Test the Docker build BEFORE deploying -- a missing wheel causes `pip install` failure. |
-| Haversine validator + PostGIS | Implementing haversine in Python when PostGIS already provides `ST_DistanceSphere` for the same calculation | The Python haversine is correct here -- the validator runs BEFORE saving to the database, so PostGIS is not available. But if validation is ever moved to a DB query, use `ST_DistanceSphere` instead. |
-| New `location_approximate` field + existing API consumers | Adding a new field to the API response that the dashboard does not expect; dashboard TypeScript types may need updating | The driver PWA (vanilla JS) handles unknown fields gracefully. The dashboard (TypeScript) will NOT break on extra fields but will not display them either. Update TypeScript types if dashboard should show confidence. |
-| Driver-verified geocode + preprocessing pipeline | Driver confirms delivery at GPS coordinates; `save_driver_verified()` stores with confidence 0.95. Next upload preprocesses the same address differently, creates a new cache key, and geocodes again -- ignoring the driver-verified entry. | Ensure `save_driver_verified()` uses the SAME normalized key that the preprocessing pipeline produces. If preprocessing changes the cleaned address, the driver-verified entry becomes orphaned. Consider linking driver-verified entries by physical proximity (within 50m), not just by text match. |
+**Why it happens:**
+The cache normalization function (`normalize_address`) operates on the CLEANED address, not the raw CDCMS text. Cleaning changes propagate through to cache keys.
 
-## Performance Traps
+**Consequences:**
+- Spike in Google Maps API costs on first upload after preprocessing changes
+- Loss of driver-verified geocode matches (high-confidence entries become orphaned in the cache)
+- Potential duplicate cache entries: old key pointing to old coordinates, new key pointing to new coordinates for the same physical address
 
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| Loading full dictionary JSON on every request | 200-300 entry JSON parsed and fuzzy index rebuilt per geocode call; adds ~50ms per address | Load dictionary once at startup (module-level or singleton); the design spec calls for lazy initialization -- do it exactly once, not per-call | Immediately noticeable at 50 addresses/batch (~2.5s overhead) |
-| RapidFuzz `extractOne` on full dictionary for every word in an address | O(N*M) where N = words in address, M = dictionary entries; ~10ms per word * 8 words * 50 addresses = 4 seconds | Pre-sort dictionary by length (longest first) for greedy matching; use `rapidfuzz.process.extractOne` with `score_cutoff` parameter to skip low-score comparisons early | At 300+ dictionary entries with 8+ word addresses |
-| Haversine calculation per validation | Negligible (~0.1ms per call) | Not a performance concern at this scale | Never at 50 addresses/day; would matter at 10K+/day |
-| Fallback retry doubles geocode time for out-of-zone results | Addresses that fail validation take 2x as long (two API calls instead of one); if 30% fail, batch takes 30% longer | Acceptable at current scale (extra 15 API calls * 1 sec rate limit = 15 extra seconds). Would be a problem at 500+ addresses where 150 retries = 2.5 extra minutes. | At 200+ addresses per batch with >20% validation failure rate |
+**Prevention:**
+1. Before deploying preprocessing changes, run a cache migration script: for each existing cache entry, re-clean the raw address with the NEW preprocessing logic, re-normalize, and INSERT a duplicate entry with the new key pointing to the same coordinates.
+2. Build a cache export/import feature BEFORE changing preprocessing. Export all cached geocodes, deploy the preprocessing change, import the cache with re-normalized keys.
+3. Add a `address_raw_original` column to `geocode_cache` that stores the completely unprocessed CDCMS text. Normalization can then operate on the original text, making cache keys stable across preprocessing changes.
+4. Log cache miss rates after deployment. If cache hits drop below 50%, the preprocessing change may have invalidated too many entries.
 
-## Security Mistakes
+**Detection:**
+Compare cache hit rates before and after preprocessing changes. A sudden drop from 70%+ to <30% indicates mass cache invalidation.
 
-| Mistake | Risk | Prevention |
-|---------|------|------------|
-| Dictionary JSON containing exact delivery zone boundary (depot lat/lon + 30km radius) | Reveals the business's operational area to anyone with repo access; competitive intelligence risk | The dictionary is committed to the repo (by design). If the repo is private, this is acceptable. If public/shared, strip depot coordinates from the dictionary metadata and store them only in `config.py`. |
-| Logging full addresses in fuzzy match debug output | CDCMS addresses contain customer names, house names, and potentially phone numbers; logging them violates privacy | Log only the address fragment being matched (first 30 chars) and the match score, not the full address. The existing codebase follows this pattern (`address[:50]` in log messages). |
-| Area centroid coordinates hardcoded in dictionary | If dictionary is leaked, reveals exact delivery area boundaries | Acceptable risk -- OSM data is public. The centroid coordinates are derived from publicly available OpenStreetMap data. |
+---
 
-## UX Pitfalls
+### Pitfall 9: Driver Auto-Creation from CSV Creates Ghost Drivers
 
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| "Approx. location" badge on EVERY stop when API key is invalid | Drivers lose trust in the system; badge becomes meaningless noise; drivers stop paying attention to it | When ALL stops are approximate, show a SINGLE banner at the top ("Location data unavailable -- all locations are approximate today") instead of per-stop badges. |
-| Orange badge color on orange/saffron-themed dark PWA | The design spec uses `tw:badge-warning` (DaisyUI warning = amber/orange). The driver PWA already uses saffron as an accent color for buttons. Orange badge blends with orange buttons -- low visual contrast. | Use a distinct color for the approximate badge. Consider `tw:badge-info` (blue) or a custom color that stands out against the dark theme. Test on a real phone screen in sunlight. |
-| "Approx. location" text without actionable guidance | Driver sees "approximate" but does not know what to do. Call the customer? Navigate anyway? Report to office? | Add a tap action to the badge that shows a tooltip or small dialog: "Location is approximate. Navigate to this area, then call customer for exact directions." Link to the Call Office FAB. |
-| Confidence score displayed as a number (0.42) | Numbers below 1.0 are meaningless to delivery drivers. "0.42 confidence" means nothing. | Never show the raw confidence number to drivers. Map it to simple categories: green check (> 0.7), orange tilde (0.3-0.7), red question mark (< 0.3). Only show the icon, not the number. |
+**What goes wrong:**
+v3.0 includes "Zero-start driver management (auto-create from CSV DeliveryMan column)". The `DeliveryMan` column in CDCMS exports contains driver names like "RAJESH", "SURESH K", "MUJEEB". Auto-creating driver records from these names seems straightforward, but:
 
-## "Looks Done But Isn't" Checklist
+1. **Name variations**: The same driver may appear as "RAJESH", "RAJESH K", "RAJESH KUMAR" across different CDCMS exports. Each creates a separate driver record. The system ends up with 3 "Rajesh" drivers who are actually the same person.
+2. **Temporary drivers**: Substitute drivers appear in one export and never again. They become permanent records in the `drivers` table.
+3. **Name encoding issues**: CDCMS names are ALL-CAPS ASCII. When Title-cased for display ("Rajesh K"), they look different from the original CDCMS value. Subsequent uploads comparing "RAJESH K" (from CSV) to "Rajesh K" (from DB) may or may not match depending on comparison logic.
+4. **No unique identifier**: CDCMS does not provide a driver ID, only a name string. Name is a terrible unique key.
 
-- [ ] **address_display fix:** Often changes `vroom_adapter.py:278` but forgets to update `scripts/import_orders.py:219-220` which also sets `address_display` from `order.location.address_text` -- the script still uses the old logic.
-- [ ] **Dictionary build script:** Often fetches OSM data and commits JSON but forgets to validate against real CDCMS area names -- dictionary may miss 30% of actual delivery areas.
-- [ ] **Fuzzy matching:** Often tests with the 4 examples from the design spec but forgets to test with short names (4-5 chars) where false positive rate is highest.
-- [ ] **Geocode validation:** Often tests the happy path (address within zone) and the fallback (centroid) but forgets to test the intermediate case (area-only retry succeeds) -- the retry confidence multiplier may produce unexpected values.
-- [ ] **API confidence field:** Often adds `geocode_confidence` to the route response but forgets that OLD routes (before this feature) have `NULL` confidence -- driver PWA must handle `null` without crashing.
-- [ ] **Driver PWA badge:** Often adds the badge HTML but forgets to test with `location_approximate: false` (badge should be hidden) and with missing field (pre-upgrade API responses) -- badge must default to hidden.
-- [ ] **RapidFuzz in Docker:** Often adds `rapidfuzz` to `requirements.txt` but forgets to verify the Docker build succeeds -- `rapidfuzz` C++ extensions may need build tools in the Docker image.
-- [ ] **Haversine formula:** Often implements the formula correctly but uses degrees instead of radians in the `math.sin()`/`math.cos()` calls -- produces wildly wrong distances. Always convert lat/lon to radians first.
-- [ ] **Existing tests:** Often adds new preprocessing tests but forgets to run the existing 426 unit tests -- regex reordering may break tests for `clean_cdcms_address()` that passed before.
-- [ ] **Cache key consistency:** Often changes preprocessing but forgets that `normalize_address()` is a SEPARATE function from `clean_cdcms_address()` -- changes to cleaning do NOT automatically update cache keys, which is correct but must be understood.
+**Why it happens:**
+CDCMS is a customer management system, not a driver management system. The DeliveryMan field is a free-text entry, not a foreign key to a driver database. Different office employees may type the same driver's name differently.
 
-## Recovery Strategies
+**Consequences:**
+- Driver list grows with duplicates over time
+- Route history fragments across duplicate driver records
+- Office staff must manually merge/deactivate ghost drivers
+- Per-driver analytics (routes/day, average stops) are skewed by fragmented data
 
-| Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|----------------|
-| Cache poisoning (duplicate entries for same address) | LOW | Run deduplication query: find geocode_cache entries where `address_norm` values differ but locations are within 50m. Keep the highest-confidence entry. No data loss -- addresses re-geocode on next upload with new preprocessing. |
-| address_display truncation in DB | LOW | Alter column: `ALTER TABLE orders ALTER COLUMN address_display TYPE TEXT;` (removes 255 char limit). Re-upload affected CSV to populate correct values. |
-| Fuzzy matching false positive (wrong place assigned) | MEDIUM | Identify affected addresses in the geocode cache by checking if cached location is far from the dictionary's coordinates for the matched place name. Delete incorrect cache entries. Re-geocode on next upload. Driver-verified entries override any cache errors over time. |
-| Inconsistent confidence scores across uploads | LOW | Redefine confidence as a simple function of the final state, not a product of intermediate scores. Update existing cache entries with recalculated confidence. No delivery impact -- confidence is informational only. |
-| Dictionary missing critical place names | LOW | Add missing names manually to the JSON file and re-commit. No code change needed. The splitter picks up new entries on next lazy load (container restart). |
-| Regex reordering breaks existing tests | LOW | Revert to original step order. Add the new regex as an ADDITIONAL step at the end (before title case) rather than reordering. Run test suite to confirm. |
-| All addresses show "approximate" due to API key failure | MEDIUM | Fix the Google API key (enable Geocoding API, set up billing). Re-upload the CSV. Addresses will geocode correctly this time and cache will be populated. Until the key is fixed, the centroid fallback provides serviceable (not perfect) locations. |
+**Prevention:**
+1. Auto-create drivers with a REVIEW step: "Found new driver names: RAJESH K, MUJEEB. Create as new drivers?" with an option to map to existing drivers.
+2. Use fuzzy matching (case-insensitive, whitespace-normalized) when checking if a driver already exists. "RAJESH K" matches "Rajesh K" matches "RAJESH  K".
+3. Add a `cdcms_names` array field to the `drivers` table that stores all name variations seen for this driver. Matching checks all aliases.
+4. Provide a "Merge Drivers" UI in the dashboard for post-hoc cleanup.
+5. Consider a "driver code" field that office staff assigns once (e.g., "D01" for Rajesh) and map CDCMS names to codes via a settings table.
 
-## Pitfall-to-Phase Mapping
+**Detection:**
+After 2-3 weeks of uploads, query `SELECT name, COUNT(*) FROM drivers GROUP BY LOWER(TRIM(name)) HAVING COUNT(*) > 1`. If duplicates exist, the auto-creation logic needs fuzzy matching.
 
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| Cache poisoning from preprocessing changes | Phase 1: Foundation | Monitor cache miss count on first upload after deployment; verify no duplicate cache entries within 50m |
-| address_display downstream breakage | Phase 1: Foundation | Grep for `address_display` in all `.py`, `.tsx`, `.html` files; verify max length of `address_raw` < 255 chars |
-| Fuzzy matching false positives | Phase 2: Place Name Dictionary | Test with ALL sample addresses; log all fuzzy matches with scores; manual review of matches below 90% |
-| Inconsistent confidence across re-uploads | Phase 3: Geocode Validation | Upload same CSV twice; verify confidence scores are identical for all addresses |
-| Dictionary incompleteness | Phase 2: Place Name Dictionary | Compare dictionary place names against `SELECT DISTINCT area_name FROM orders`; coverage must be > 80% |
-| Validator retry doubling API cost | Phase 3: Geocode Validation | Add circuit breaker for `REQUEST_DENIED`; test with invalid API key -- verify retry count is bounded |
-| Regex reordering breaking tests | Phase 1: Foundation | Run full test suite before AND after changes; zero regressions allowed |
-| "Approx. location" badge UX problems | Phase 4: API + Driver UI | Test on real phone in sunlight; verify badge contrast ratio; test with all-approximate scenario |
-| RapidFuzz Docker build failure | Phase 2: Place Name Dictionary | Rebuild Docker image from scratch after adding rapidfuzz to requirements.txt; verify successful `import rapidfuzz` inside container |
-| Haversine implementation error | Phase 3: Geocode Validation | Test with known distance pairs: Vatakara depot to Kozhikode city (~37km), depot to Mahe (~12km); compare with Google Maps distance |
-| Driver-verified entries orphaned by preprocessing changes | Phase 3: Geocode Validation | Verify that driver-verified entries are accessible after preprocessing changes; test the proximity-based lookup path |
+---
+
+### Pitfall 10: Changing Routes Table `vehicle_id` Type Breaks Driver PWA Route Fetching
+
+**What goes wrong:**
+The driver PWA fetches routes via `GET /api/routes/{vehicle_id}` using the human-readable string like "VEH-01". The `routes.vehicle_id` column is `VARCHAR(20)`. If the new model changes this to a UUID FK to the `drivers` table, or changes the stored value from "VEH-01" to "RAJESH", every existing QR code, bookmarked URL, and offline-cached route in the driver PWA breaks.
+
+The driver PWA (`apps/kerala_delivery/driver_app/index.html`) has 67 references to "vehicle" concepts. It stores the current vehicle_id in memory and uses it for API calls. Changing the identifier format requires updating both the API route parameter AND the PWA's state management.
+
+**Why it happens:**
+The temptation to make the API "clean" by using driver IDs everywhere conflicts with the reality that drivers access routes via printed QR codes and saved bookmarks that encode the old URL format.
+
+**Consequences:**
+- Printed QR code sheets from previous days stop working
+- Drivers' PWA offline cache has routes keyed by "VEH-01" that don't match new "DRIVER-UUID" keys
+- The service worker's cached responses become invalid
+
+**Prevention:**
+1. Keep the endpoint path as `/api/routes/{vehicle_id}`. Accept BOTH vehicle IDs ("VEH-01") and driver identifiers in the same parameter.
+2. In the API handler, try lookup by driver name/code first, then fall back to vehicle_id. This makes the transition transparent.
+3. When generating new QR codes, use the driver identifier. Old QR codes with vehicle IDs continue to work via the fallback.
+4. Add a redirect: if someone accesses `/api/routes/VEH-01` and VEH-01 is now assigned to driver "RAJESH", the response includes both vehicle_id and driver_name so the PWA can update its display.
+
+**Detection:**
+Scan an old QR code after the transition. If it returns 404, the backward compatibility is broken.
+
+---
+
+## Minor Pitfalls
+
+### Pitfall 11: VROOM Single-Vehicle TSP Returns Different Distance Format
+
+**What goes wrong:**
+When VROOM receives 1 vehicle and N jobs (TSP mode), its response structure is identical to CVRP, but there is only one route in `routes[]`. The `_parse_response()` method in `vroom_adapter.py` already handles this correctly (it iterates `vroom_result["routes"]`). However, VROOM's step-level `distance` and `duration` fields behave slightly differently with a single vehicle: the route always starts and ends at the depot, so the first and last legs include depot travel. With CVRP, multiple vehicles share the depot, and VROOM may optimize depot assignments differently.
+
+The practical impact is small but can cause test failures if tests assert exact distance values for a CVRP setup and then run the same data through TSP.
+
+**Prevention:**
+Update test assertions to be approximate (within 5%) rather than exact when switching between CVRP and TSP modes.
+
+---
+
+### Pitfall 12: Google Maps Directions API 25-Waypoint Limit vs Route Size
+
+**What goes wrong:**
+The Google Maps Directions API allows a maximum of 25 intermediate waypoints per request. Kerala delivery routes can have 20-44 stops per driver. Routes with >25 stops must be split into segments, validated separately, and then reassembled. The existing `split_route_into_segments()` function in `qr_helpers.py` (used for Google Maps URL generation) already handles this for QR codes -- but the validation logic needs the same splitting, and the sum of segment distances may not equal the total route distance due to segment overlap (each segment's start/end adds extra depot<->split-point travel).
+
+**Prevention:**
+1. Reuse the existing `split_route_into_segments()` logic from `qr_helpers.py` for Directions API validation.
+2. When comparing VROOM distance to Google distance for a multi-segment route, compare per-segment, not total. Or accept a 10-15% tolerance for segment boundary effects.
+3. Document that routes with >25 stops require multiple API calls (cost implications from Pitfall 4).
+
+---
+
+### Pitfall 13: Settings Persistence Without Database Migration
+
+**What goes wrong:**
+Dashboard settings (API key, cache preferences, upload history) need server-side persistence. If settings are stored in a new database table, that requires an Alembic migration. If stored in a config file on the Docker volume, they survive container restarts but not volume recreations. If stored in environment variables, they require Docker restart to take effect.
+
+The project currently uses `.env` for API keys and `config.py` for business constants. Adding a `settings` table is the right approach but adds migration complexity to an already migration-heavy milestone.
+
+**Prevention:**
+1. Create a simple `settings` key-value table: `(key VARCHAR PRIMARY KEY, value TEXT, updated_at TIMESTAMPTZ)`. This is flexible enough for API keys, cache preferences, and feature flags.
+2. Add this table in the FIRST migration of the milestone, before any other schema changes. This minimizes migration ordering conflicts.
+3. The API reads settings from DB on startup and caches in memory. Changes require an API restart OR an explicit cache-invalidation endpoint.
+
+---
+
+### Pitfall 14: Cache Export/Import Loses PostGIS Geometry Data
+
+**What goes wrong:**
+Building a geocode cache export feature (for backup or migration) requires serializing PostGIS `geometry(Point, 4326)` columns. A naive `SELECT * FROM geocode_cache` exports WKB (Well-Known Binary) blobs that are unreadable in CSV/JSON. The import side needs to parse these blobs back into PostGIS geometries, requiring `ST_GeomFromWKB()` or coordinate extraction.
+
+**Prevention:**
+1. Export as JSON with explicit `latitude`, `longitude` fields extracted via `ST_Y(location)` and `ST_X(location)`.
+2. Import using `ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)` -- the same pattern used throughout `repository.py`.
+3. Include `address_raw`, `address_norm`, `source`, `confidence`, and `hit_count` in the export. Skip `id` (regenerate UUIDs on import).
+4. Handle the `UNIQUE(address_norm, source)` constraint on import: use `ON CONFLICT DO UPDATE` to merge rather than fail.
+
+---
+
+### Pitfall 15: Driver PWA Vehicle Selector Must Become Driver Selector
+
+**What goes wrong:**
+The driver PWA currently shows a vehicle selector after upload ("Select your vehicle: VEH-01, VEH-02..."). In the driver-centric model, this should show driver names. But the selector is populated from the API response, which returns `vehicle_id` values. Changing the selector to show driver names requires:
+1. The upload response to include driver name mappings
+2. The PWA to use driver name (or driver ID) as the route fetch key
+3. The route fetch endpoint to accept driver identifiers
+
+If the API changes the response format but the PWA is cached by the service worker, drivers see the OLD selector UI with the NEW data format, causing JavaScript errors.
+
+**Prevention:**
+1. Update the service worker cache version when changing API response formats. This forces a re-download of the PWA.
+2. Add defensive parsing in the PWA: if `vehicle_id` exists, use it; if `driver_name` exists, prefer it for display.
+3. Include both `vehicle_id` and `driver_name` in the API response during the transition period.
+
+---
+
+## Phase-Specific Warnings
+
+| Phase Topic | Likely Pitfall | Mitigation | Severity |
+|-------------|---------------|------------|----------|
+| Vehicle-to-Driver DB migration | Pitfall 1 (semantic minefield), Pitfall 5 (Alembic drops data) | Add columns, do not rename. Hand-write migrations. | CRITICAL |
+| Per-driver TSP optimization | Pitfall 2 (optimizer interface), Pitfall 6 (fleet metrics) | Wrap in PerDriverOptimizer, single run per batch | CRITICAL |
+| CDCMS .xlsx support | Pitfall 3 (binary detection) | Fix `_is_cdcms_format()` to handle binary files | CRITICAL |
+| Google Maps Directions validation | Pitfall 4 (cost explosion), Pitfall 12 (25-waypoint limit) | User-triggered only, budget caps, reuse segment logic | MODERATE |
+| Dashboard settings page | Pitfall 7 (API key exposure), Pitfall 13 (persistence) | Server-side storage, never send full key to browser | MODERATE |
+| Address preprocessing | Pitfall 8 (cache invalidation) | Cache migration script, export/import before changes | MODERATE |
+| Driver auto-creation | Pitfall 9 (ghost drivers) | Fuzzy matching, review step, alias tracking | MODERATE |
+| API URL changes | Pitfall 10 (PWA breakage) | Keep old endpoints working, accept both ID formats | MODERATE |
+| Driver PWA updates | Pitfall 15 (cached old version) | Bump SW cache version, include both identifiers | MINOR |
+| Cache export/import | Pitfall 14 (PostGIS serialization) | Export as lat/lng JSON, import with ST_MakePoint | MINOR |
+| Test updates | Pitfall 11 (distance assertions) | Approximate assertions for TSP vs CVRP | MINOR |
+
+---
 
 ## Sources
 
-- [Google Geocoding API Best Practices](https://developers.google.com/maps/documentation/geocoding/best-practices) -- official guidance on handling ambiguous results, not parsing formatted_address
-- [Indian Address Geocoding Challenges](https://thebangaloreguy.com/problem-of-geocoding-non-standardised-addresses-in-india-an-nlp-problem/) -- non-standardized Indian address formats as NLP problem
-- [RapidFuzz Documentation](https://rapidfuzz.github.io/RapidFuzz/Usage/fuzz.html) -- fuzzy matching functions and score behavior on different string lengths
-- [RapidFuzz GitHub](https://github.com/rapidfuzz/RapidFuzz) -- C++ extension build requirements, wheel availability
-- [OSM Overpass API Rate Limiting](https://wiki.openstreetmap.org/wiki/Overpass_API) -- 10,000 requests/day guideline, 429 rate limit responses
-- [India Post PIN Code API](http://www.postalpincode.in/Api-Details) -- 1000 requests/hour rate limit, post office names (not localities)
-- [Haversine vs OSRM for Routing](https://www.nextmv.io/blog/haversine-vs-osrm-distance-and-cost-experiments-on-a-vehicle-routing-problem-vrp) -- haversine accuracy limitations for actual road distance
-- [Geocoding Tips for Last-Mile Delivery](https://routinguk.descartes.com/resources/geocoding-best-practices-delivery-management) -- inaccurate geocode knock-on effect on all routes
-- [Google Geocoding Request/Response](https://developers.google.com/maps/documentation/geocoding/requests-geocoding) -- formatted_address field semantics, location_type confidence mapping
-- Codebase analysis: `.planning/codebase/ARCHITECTURE.md`, `CONCERNS.md`, `INTEGRATIONS.md` -- existing system architecture and known issues
-- Design spec: `docs/superpowers/specs/2026-03-10-address-preprocessing-design.md` -- the plan being evaluated for pitfalls
-- Source code: `core/geocoding/cache.py`, `core/geocoding/normalize.py`, `core/data_import/cdcms_preprocessor.py`, `core/optimizer/vroom_adapter.py`, `core/database/models.py` -- actual implementation being modified
-
----
-*Pitfalls research for: v2.2 Address Preprocessing Pipeline*
-*Researched: 2026-03-10*
+- Codebase analysis: `core/database/models.py` (8 ORM models), `core/optimizer/vroom_adapter.py` (CVRP implementation), `core/database/repository.py` (all CRUD), `apps/kerala_delivery/api/main.py` (upload + route endpoints), `core/data_import/cdcms_preprocessor.py` (address cleaning pipeline)
+- Database schema: `infra/postgres/init.sql` (7 tables, 10 indexes), 6 existing Alembic migrations
+- Frontend coupling: 371 "vehicle" references in dashboard, 67 in driver PWA, 129 in Python tests, 80 in E2E specs
+- [Alembic autogenerate documentation](https://alembic.sqlalchemy.org/en/latest/autogenerate.html) -- column rename limitations (HIGH confidence)
+- [VROOM API documentation](https://github.com/VROOM-Project/vroom/blob/master/docs/API.md) -- TSP as special case of CVRP (HIGH confidence)
+- [Google Maps Directions API usage and billing](https://developers.google.com/maps/documentation/directions/usage-and-billing) -- 25 waypoint limit, Advanced SKU pricing (MEDIUM confidence, pricing may shift)
+- [Google Maps API pricing restructure March 2025](https://masterconcept.ai/news/google-maps-api-changes-2025-migration-guide-for-directions-api-distance-matrix-api/) -- new billing tiers (MEDIUM confidence)
+- [API key security best practices 2025](https://dev.to/hamd_writer_8c77d9c88c188/api-keys-the-complete-2025-guide-to-security-management-and-best-practices-3980) -- never expose keys client-side (HIGH confidence)
+- [Google Maps Platform security guidance](https://developers.google.com/maps/api-security-best-practices) -- server-side key storage (HIGH confidence)
