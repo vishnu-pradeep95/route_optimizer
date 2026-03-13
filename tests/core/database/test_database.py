@@ -152,6 +152,121 @@ class TestColumnPresence:
         assert "source" in columns, "Missing source column"
         assert "confidence" in columns, "Missing confidence column"
 
+    def test_driver_columns_phase16(self):
+        """DriverDB has reshaped columns: name_normalized, updated_at, no phone/vehicle_id."""
+        columns = {c.name for c in DriverDB.__table__.columns}
+        expected = {"id", "name", "name_normalized", "is_active", "created_at", "updated_at"}
+        assert expected.issubset(columns), f"Missing: {expected - columns}"
+        assert "phone" not in columns, "phone column should be removed (Phase 16)"
+        assert "vehicle_id" not in columns, "vehicle_id FK should be removed (Phase 16)"
+
+    def test_driver_has_no_vehicle_relationship(self):
+        """DriverDB does NOT have a vehicle relationship (Phase 16: standalone entity)."""
+        assert not hasattr(DriverDB, "vehicle") or not isinstance(
+            getattr(DriverDB, "vehicle", None),
+            property
+        ), "DriverDB should not have a vehicle relationship"
+
+    def test_route_has_driver_id_column(self):
+        """RouteDB has a nullable driver_id UUID FK column (Phase 16)."""
+        columns = {c.name for c in RouteDB.__table__.columns}
+        assert "driver_id" in columns, "Missing driver_id FK column on RouteDB"
+        assert "driver_name" in columns, "driver_name string column should still exist"
+
+    def test_route_driver_id_is_nullable(self):
+        """RouteDB.driver_id is nullable (existing routes have no driver_id)."""
+        col = RouteDB.__table__.columns["driver_id"]
+        assert col.nullable is True, "driver_id should be nullable"
+
+    def test_route_driver_id_is_fk_to_drivers(self):
+        """RouteDB.driver_id has a FK constraint to drivers.id."""
+        col = RouteDB.__table__.columns["driver_id"]
+        fk_targets = [fk.target_fullname for fk in col.foreign_keys]
+        assert "drivers.id" in fk_targets, (
+            f"driver_id should FK to drivers.id, got: {fk_targets}"
+        )
+
+
+# =============================================================================
+# init.sql Schema Validation Tests
+# =============================================================================
+
+
+class TestInitSqlSchema:
+    """Verify init.sql matches ORM model for fresh database installs."""
+
+    def _read_init_sql(self) -> str:
+        """Read the init.sql file content."""
+        import pathlib
+        init_path = pathlib.Path(__file__).parents[3] / "infra" / "postgres" / "init.sql"
+        return init_path.read_text()
+
+    def test_init_sql_drivers_has_name_normalized(self):
+        """init.sql drivers table includes name_normalized column."""
+        sql = self._read_init_sql()
+        assert "name_normalized" in sql, "init.sql should have name_normalized column"
+
+    def test_init_sql_drivers_has_updated_at(self):
+        """init.sql drivers table includes updated_at column."""
+        # Find the drivers table section and check for updated_at
+        sql = self._read_init_sql()
+        # Find drivers CREATE TABLE block
+        import re
+        drivers_block = re.search(
+            r'CREATE TABLE IF NOT EXISTS drivers\s*\((.*?)\);',
+            sql, re.DOTALL
+        )
+        assert drivers_block is not None, "Could not find drivers table in init.sql"
+        assert "updated_at" in drivers_block.group(1), (
+            "init.sql drivers table should have updated_at column"
+        )
+
+    def test_init_sql_drivers_no_phone(self):
+        """init.sql drivers table should NOT have phone column."""
+        sql = self._read_init_sql()
+        import re
+        drivers_block = re.search(
+            r'CREATE TABLE IF NOT EXISTS drivers\s*\((.*?)\);',
+            sql, re.DOTALL
+        )
+        assert drivers_block is not None
+        assert "phone" not in drivers_block.group(1), (
+            "init.sql drivers table should NOT have phone column"
+        )
+
+    def test_init_sql_drivers_no_vehicle_id(self):
+        """init.sql drivers table should NOT have vehicle_id FK."""
+        sql = self._read_init_sql()
+        import re
+        drivers_block = re.search(
+            r'CREATE TABLE IF NOT EXISTS drivers\s*\((.*?)\);',
+            sql, re.DOTALL
+        )
+        assert drivers_block is not None
+        assert "vehicle_id" not in drivers_block.group(1), (
+            "init.sql drivers table should NOT have vehicle_id FK"
+        )
+
+    def test_init_sql_routes_has_driver_id(self):
+        """init.sql routes table includes driver_id UUID REFERENCES drivers(id)."""
+        sql = self._read_init_sql()
+        import re
+        routes_block = re.search(
+            r'CREATE TABLE IF NOT EXISTS routes\s*\((.*?)\);',
+            sql, re.DOTALL
+        )
+        assert routes_block is not None, "Could not find routes table in init.sql"
+        assert "driver_id" in routes_block.group(1), (
+            "init.sql routes table should have driver_id column"
+        )
+
+    def test_init_sql_no_vehicle_seed_data(self):
+        """init.sql should NOT have vehicle seed INSERT statements (DRV-07)."""
+        sql = self._read_init_sql()
+        assert "INSERT INTO vehicles" not in sql, (
+            "init.sql should not seed vehicle data (DRV-07: zero pre-loaded fleet)"
+        )
+
 
 # =============================================================================
 # Relationship Tests
@@ -177,9 +292,12 @@ class TestRelationships:
         """RouteStopDB has an 'order' relationship to OrderDB."""
         assert hasattr(RouteStopDB, "order")
 
-    def test_vehicle_has_drivers_relationship(self):
-        """VehicleDB has a 'drivers' relationship to DriverDB."""
-        assert hasattr(VehicleDB, "drivers")
+    def test_vehicle_has_no_drivers_relationship(self):
+        """VehicleDB does NOT have a 'drivers' relationship (Phase 16: standalone drivers)."""
+        assert not hasattr(VehicleDB, "drivers"), (
+            "VehicleDB should not have a 'drivers' relationship -- "
+            "drivers are standalone entities, not vehicle accessories"
+        )
 
 
 # =============================================================================
