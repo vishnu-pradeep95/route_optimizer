@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: unknown
-stopped_at: Completed quick-4 docs audit
-last_updated: "2026-03-12T23:43:58.872Z"
+milestone: v3.0
+milestone_name: Driver-Centric Model
+status: planning
+stopped_at: Defining requirements
+last_updated: "2026-03-12"
 progress:
   total_phases: 0
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
-  percent: 100
+  percent: 0
 ---
 
 # Project State
@@ -20,17 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** All milestones complete (v1.0-v1.4, v2.0-v2.2). Planning next milestone.
+**Current focus:** v3.0 Driver-Centric Model — replacing vehicle-fleet model with driver-centric model.
 
 ## Current Position
 
-All milestones shipped through v2.2.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-12 — Milestone v3.0 started
 
-Latest milestones:
-- v2.1 Licensing & Distribution Security -- SHIPPED 2026-03-11
-- v2.2 Address Preprocessing Pipeline -- SHIPPED 2026-03-12
-
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -62,7 +61,7 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ### Blockers/Concerns
 
-(None -- all milestones shipped.)
+(None)
 
 ### Quick Tasks Completed
 
@@ -72,6 +71,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last activity: 2026-03-12 - Completed quick task 4: Audit docs for new-computer setup freshness
-Stopped at: Completed quick-4 docs audit
+Last activity: 2026-03-12 - Started milestone v3.0 Driver-Centric Model
+Stopped at: Defining requirements
 Resume file: None

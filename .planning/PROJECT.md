@@ -102,7 +102,19 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 
 ### Active
 
-(No active requirements — next milestone not yet defined)
+## Current Milestone: v3.0 Driver-Centric Model
+
+**Goal:** Replace the vehicle-fleet model with a driver-centric model where drivers are created from CDCMS CSV uploads, optimization runs per-driver (TSP), and the dashboard becomes the primary interface for office staff.
+
+**Target features:**
+- Vehicle → Driver conceptual rename across DB, API, dashboard
+- Zero-start driver management (auto-create from CSV DeliveryMan column, manual add)
+- Per-driver route optimization (TSP within each driver's assigned orders)
+- Improved CSV upload flow with driver selection and multi-format support
+- CDCMS preprocessing fixes (address garbling, .xlsx detection)
+- Geocode validation tightening (20km radius, Vatakara depot centroid)
+- Google Maps route validation as confidence comparison
+- Dashboard settings (API key input, cache stats, upload history)
 
 ### Out of Scope
 
@@ -201,4 +213,4 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | RapidFuzz for fuzzy matching | Length-dependent thresholds prevent false positives on short names | ✓ Good — handles VATAKARA/VADAKARA without matching EDAPPAL/EDAPALLI |
 
 ---
-*Last updated: 2026-03-12 after v2.1 + v2.2 milestones (Licensing & Distribution Security + Address Preprocessing Pipeline shipped)*
+*Last updated: 2026-03-12 after v3.0 milestone started (Driver-Centric Model)*
