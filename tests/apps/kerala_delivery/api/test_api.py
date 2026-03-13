@@ -3071,3 +3071,435 @@ class TestDriverManagement:
         app.dependency_overrides.clear()
 
         assert resp.status_code == 401
+
+
+# =============================================================================
+# Driver Auto-Creation During Upload (Phase 16, Plan 03)
+# =============================================================================
+
+
+class TestUploadAutoCreatesDrivers:
+    """Tests for driver auto-creation from CSV DeliveryMan column during upload.
+
+    When a CDCMS-format CSV is uploaded with a DeliveryMan column, the system
+    auto-creates new drivers or matches existing ones via fuzzy matching.
+    The upload response includes a drivers summary.
+    """
+
+    def _make_cdcms_csv(self, delivery_men: list[str]) -> bytes:
+        """Build a minimal CDCMS tab-separated file with DeliveryMan column.
+
+        Each delivery man gets one order with coordinates (to skip geocoding).
+        """
+        header = "OrderNo\tOrderStatus\tConsumerAddress\tOrderQuantity\tAreaName\tDeliveryMan\tMobileNo\tOrderDate"
+        rows = []
+        for i, dm in enumerate(delivery_men, start=1):
+            rows.append(
+                f"ORD-{i:03d}\tAllocated-Printed\t"
+                f"Test Address {i} Vatakara\t1\tVatakara\t{dm}\t9876543210\t2026-03-13"
+            )
+        return (header + "\n" + "\n".join(rows) + "\n").encode("utf-8")
+
+    def _make_vroom_response(self, num_orders: int) -> dict:
+        """Build a VROOM response for N orders."""
+        steps = [
+            {"type": "start", "location": [75.5796, 11.6244], "arrival": 0,
+             "distance": 0, "duration": 0},
+        ]
+        for i in range(num_orders):
+            steps.append({
+                "type": "job", "id": i,
+                "location": [75.5700 + i * 0.001, 11.5950],
+                "arrival": 200 * (i + 1), "duration": 200 * (i + 1),
+                "distance": 1500 * (i + 1), "service": 300,
+            })
+        steps.append({
+            "type": "end", "location": [75.5796, 11.6244],
+            "arrival": 200 * (num_orders + 1),
+            "distance": 1500 * (num_orders + 1),
+            "duration": 200 * (num_orders + 1),
+        })
+        return {
+            "code": 0,
+            "routes": [{
+                "vehicle": 0,
+                "distance": 1500 * num_orders,
+                "duration": 200 * num_orders,
+                "steps": steps,
+            }],
+            "unassigned": [],
+        }
+
+    def test_upload_auto_creates_drivers_from_csv(
+        self, client, mock_run_id
+    ):
+        """Upload CSV with DeliveryMan column creates new drivers in database.
+
+        When driver names in the CSV don't match any existing drivers,
+        new DriverDB records should be created, and the response should
+        include them in the drivers summary as new_drivers.
+        """
+        cdcms_csv = self._make_cdcms_csv(["SURESH KUMAR", "RAJESH P"])
+
+        with (
+            patch("core.optimizer.vroom_adapter.httpx.post") as mock_post,
+            patch("apps.kerala_delivery.api.main.repo") as mock_repo,
+        ):
+            mock_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: self._make_vroom_response(2),
+                raise_for_status=lambda: None,
+            )
+            # Mock DB operations
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = MOCK_VEHICLE
+            mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
+
+            # No existing drivers -- all names are new
+            mock_repo.get_all_drivers = AsyncMock(return_value=[])
+            mock_repo.find_similar_drivers = AsyncMock(return_value=[])
+
+            async def mock_create_driver(session, name):
+                driver = MagicMock()
+                driver.id = uuid.uuid4()
+                driver.name = name.strip().title()
+                driver.is_active = True
+                return driver
+
+            mock_repo.create_driver = AsyncMock(side_effect=mock_create_driver)
+
+            resp = client.post(
+                "/api/upload-orders",
+                files={"file": ("cdcms_export.csv", cdcms_csv, "text/csv")},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "drivers" in data
+        drivers = data["drivers"]
+        assert len(drivers["new_drivers"]) == 2
+        assert "Suresh Kumar" in drivers["new_drivers"]
+        assert "Rajesh P" in drivers["new_drivers"]
+
+    def test_upload_fuzzy_match_prevents_duplicate(
+        self, client, mock_run_id
+    ):
+        """Upload CSV where DeliveryMan matches existing driver records as matched.
+
+        Fuzzy matching should find the existing driver and NOT create a duplicate.
+        """
+        cdcms_csv = self._make_cdcms_csv(["MOHAN L"])
+
+        existing_driver = MagicMock()
+        existing_driver.id = uuid.uuid4()
+        existing_driver.name = "Mohan Lal"
+        existing_driver.name_normalized = "MOHAN LAL"
+        existing_driver.is_active = True
+
+        with (
+            patch("core.optimizer.vroom_adapter.httpx.post") as mock_post,
+            patch("apps.kerala_delivery.api.main.repo") as mock_repo,
+        ):
+            mock_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: self._make_vroom_response(1),
+                raise_for_status=lambda: None,
+            )
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = MOCK_VEHICLE
+            mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
+
+            # Existing driver returned for fuzzy match
+            mock_repo.get_all_drivers = AsyncMock(return_value=[existing_driver])
+            mock_repo.find_similar_drivers = AsyncMock(
+                return_value=[(existing_driver, 87.5)]
+            )
+            mock_repo.create_driver = AsyncMock()
+
+            resp = client.post(
+                "/api/upload-orders",
+                files={"file": ("cdcms_export.csv", cdcms_csv, "text/csv")},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        drivers = data["drivers"]
+        # Should NOT have created a new driver
+        mock_repo.create_driver.assert_not_called()
+        # Should report as matched
+        assert len(drivers["matched_drivers"]) == 1
+        assert drivers["matched_drivers"][0]["csv_name"] == "Mohan L"
+        assert drivers["matched_drivers"][0]["matched_to"] == "Mohan Lal"
+        assert drivers["matched_drivers"][0]["score"] == 87.5
+
+    def test_upload_reactivates_deactivated_driver(
+        self, client, mock_run_id
+    ):
+        """Upload CSV where DeliveryMan fuzzy-matches a deactivated driver reactivates it."""
+        cdcms_csv = self._make_cdcms_csv(["MOHAN L"])
+
+        deactivated_driver = MagicMock()
+        deactivated_driver.id = uuid.uuid4()
+        deactivated_driver.name = "Mohan Lal"
+        deactivated_driver.name_normalized = "MOHAN LAL"
+        deactivated_driver.is_active = False
+
+        with (
+            patch("core.optimizer.vroom_adapter.httpx.post") as mock_post,
+            patch("apps.kerala_delivery.api.main.repo") as mock_repo,
+        ):
+            mock_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: self._make_vroom_response(1),
+                raise_for_status=lambda: None,
+            )
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = MOCK_VEHICLE
+            mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
+
+            # Deactivated driver returned for fuzzy match
+            mock_repo.get_all_drivers = AsyncMock(return_value=[deactivated_driver])
+            mock_repo.find_similar_drivers = AsyncMock(
+                return_value=[(deactivated_driver, 87.5)]
+            )
+            mock_repo.reactivate_driver = AsyncMock(return_value=True)
+            mock_repo.create_driver = AsyncMock()
+
+            resp = client.post(
+                "/api/upload-orders",
+                files={"file": ("cdcms_export.csv", cdcms_csv, "text/csv")},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        drivers = data["drivers"]
+        # Should reactivate, not create
+        mock_repo.create_driver.assert_not_called()
+        mock_repo.reactivate_driver.assert_called_once()
+        assert "Mohan Lal" in drivers["reactivated_drivers"]
+
+    def test_upload_intra_csv_names_create_separate_drivers(
+        self, client, mock_run_id
+    ):
+        """Upload CSV with two similar names creates BOTH as separate drivers.
+
+        No intra-CSV merging per locked decision -- "SURESH K" and "SURESH KUMAR"
+        in the same CSV both get created as separate drivers.
+        """
+        cdcms_csv = self._make_cdcms_csv(["SURESH K", "SURESH KUMAR"])
+
+        with (
+            patch("core.optimizer.vroom_adapter.httpx.post") as mock_post,
+            patch("apps.kerala_delivery.api.main.repo") as mock_repo,
+        ):
+            mock_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: self._make_vroom_response(2),
+                raise_for_status=lambda: None,
+            )
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = MOCK_VEHICLE
+            mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
+
+            # No existing drivers -- both are new
+            mock_repo.get_all_drivers = AsyncMock(return_value=[])
+            mock_repo.find_similar_drivers = AsyncMock(return_value=[])
+
+            async def mock_create_driver(session, name):
+                driver = MagicMock()
+                driver.id = uuid.uuid4()
+                driver.name = name.strip().title()
+                driver.is_active = True
+                return driver
+
+            mock_repo.create_driver = AsyncMock(side_effect=mock_create_driver)
+
+            resp = client.post(
+                "/api/upload-orders",
+                files={"file": ("cdcms_export.csv", cdcms_csv, "text/csv")},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        drivers = data["drivers"]
+        # Both should be created separately (no intra-CSV merge)
+        assert len(drivers["new_drivers"]) == 2
+        assert "Suresh K" in drivers["new_drivers"]
+        assert "Suresh Kumar" in drivers["new_drivers"]
+
+    def test_upload_without_deliveryman_column_backward_compatible(
+        self, client, mock_run_id
+    ):
+        """Upload CSV without DeliveryMan column still works -- no driver auto-creation.
+
+        Standard CSVs (non-CDCMS) have no DeliveryMan column. The system should
+        skip driver auto-creation and the drivers field should be None.
+        """
+        # Standard CSV format (no DeliveryMan column)
+        csv_content = (
+            "order_id,address,customer_id,cylinder_type,quantity,priority,latitude,longitude\n"
+            'ORD-001,"Vatakara Bus Stand, Vatakara",CUST-001,domestic,1,2,11.5950,75.5700\n'
+            'ORD-002,"Vatakara Railway Station, Vatakara",CUST-002,domestic,2,1,11.6100,75.5650\n'
+        )
+
+        with (
+            patch("core.optimizer.vroom_adapter.httpx.post") as mock_post,
+            patch("apps.kerala_delivery.api.main.repo") as mock_repo,
+        ):
+            mock_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: self._make_vroom_response(2),
+                raise_for_status=lambda: None,
+            )
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = MOCK_VEHICLE
+            mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
+
+            resp = client.post(
+                "/api/upload-orders",
+                files={"file": ("orders.csv", csv_content.encode(), "text/csv")},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        # No drivers auto-creation for non-CDCMS CSVs
+        assert data.get("drivers") is None
+
+    def test_upload_driver_summary_includes_existing_drivers(
+        self, client, mock_run_id
+    ):
+        """Upload response includes existing_drivers for exact/active matches."""
+        cdcms_csv = self._make_cdcms_csv(["RAJESH P"])
+
+        existing_driver = MagicMock()
+        existing_driver.id = uuid.uuid4()
+        existing_driver.name = "Rajesh P"
+        existing_driver.name_normalized = "RAJESH P"
+        existing_driver.is_active = True
+
+        with (
+            patch("core.optimizer.vroom_adapter.httpx.post") as mock_post,
+            patch("apps.kerala_delivery.api.main.repo") as mock_repo,
+        ):
+            mock_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: self._make_vroom_response(1),
+                raise_for_status=lambda: None,
+            )
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = MOCK_VEHICLE
+            mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
+
+            # Active driver with exact match (score 100)
+            mock_repo.get_all_drivers = AsyncMock(return_value=[existing_driver])
+            mock_repo.find_similar_drivers = AsyncMock(
+                return_value=[(existing_driver, 100.0)]
+            )
+
+            resp = client.post(
+                "/api/upload-orders",
+                files={"file": ("cdcms_export.csv", cdcms_csv, "text/csv")},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        drivers = data["drivers"]
+        assert "Rajesh P" in drivers["existing_drivers"]
+
+    def test_upload_driver_names_title_cased_in_summary(
+        self, client, mock_run_id
+    ):
+        """Driver names in summary are title-cased."""
+        cdcms_csv = self._make_cdcms_csv(["SURESH KUMAR"])
+
+        with (
+            patch("core.optimizer.vroom_adapter.httpx.post") as mock_post,
+            patch("apps.kerala_delivery.api.main.repo") as mock_repo,
+        ):
+            mock_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: self._make_vroom_response(1),
+                raise_for_status=lambda: None,
+            )
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = MOCK_VEHICLE
+            mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
+
+            mock_repo.get_all_drivers = AsyncMock(return_value=[])
+            mock_repo.find_similar_drivers = AsyncMock(return_value=[])
+
+            async def mock_create_driver(session, name):
+                driver = MagicMock()
+                driver.id = uuid.uuid4()
+                driver.name = name.strip().title()
+                driver.is_active = True
+                return driver
+
+            mock_repo.create_driver = AsyncMock(side_effect=mock_create_driver)
+
+            resp = client.post(
+                "/api/upload-orders",
+                files={"file": ("cdcms_export.csv", cdcms_csv, "text/csv")},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        drivers = data["drivers"]
+        # Name should be title-cased, not ALL-CAPS
+        assert "Suresh Kumar" in drivers["new_drivers"]
+        assert "SURESH KUMAR" not in drivers["new_drivers"]
+
+    def test_upload_matched_drivers_include_details(
+        self, client, mock_run_id
+    ):
+        """Matched drivers include csv_name, matched_to, and score fields."""
+        cdcms_csv = self._make_cdcms_csv(["MOHAN L"])
+
+        existing_driver = MagicMock()
+        existing_driver.id = uuid.uuid4()
+        existing_driver.name = "Mohan Lal"
+        existing_driver.name_normalized = "MOHAN LAL"
+        existing_driver.is_active = True
+
+        with (
+            patch("core.optimizer.vroom_adapter.httpx.post") as mock_post,
+            patch("apps.kerala_delivery.api.main.repo") as mock_repo,
+        ):
+            mock_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: self._make_vroom_response(1),
+                raise_for_status=lambda: None,
+            )
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = MOCK_VEHICLE
+            mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
+
+            mock_repo.get_all_drivers = AsyncMock(return_value=[existing_driver])
+            mock_repo.find_similar_drivers = AsyncMock(
+                return_value=[(existing_driver, 87.5)]
+            )
+
+            resp = client.post(
+                "/api/upload-orders",
+                files={"file": ("cdcms_export.csv", cdcms_csv, "text/csv")},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        drivers = data["drivers"]
+        assert len(drivers["matched_drivers"]) == 1
+        match = drivers["matched_drivers"][0]
+        assert "csv_name" in match
+        assert "matched_to" in match
+        assert "score" in match
+        assert match["csv_name"] == "Mohan L"
+        assert match["matched_to"] == "Mohan Lal"
+        assert isinstance(match["score"], (int, float))
