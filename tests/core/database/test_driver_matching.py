@@ -114,19 +114,33 @@ class TestFindSimilarDrivers:
 
     @pytest.mark.asyncio
     async def test_finds_similar_name(self, mock_session):
-        """find_similar_drivers matches 'SURESH K' to 'SURESH KUMAR'."""
+        """find_similar_drivers matches 'MOHAN L' to 'Mohan Lal' (score ~87.5)."""
         from core.database.repository import find_similar_drivers
 
         drivers = [
-            _make_driver("Suresh Kumar", "SURESH KUMAR"),
+            _make_driver("Mohan Lal", "MOHAN LAL"),
             _make_driver("Rajesh P", "RAJESH P"),
         ]
         self._setup_drivers(mock_session, drivers)
 
-        matches = await find_similar_drivers(mock_session, "SURESH K")
-        # Should find Suresh Kumar as a match (ratio is high enough)
+        matches = await find_similar_drivers(mock_session, "MOHAN L")
+        # Should find Mohan Lal as a match (ratio ~87.5, above 85 threshold)
         matched_names = [d.name for d, score in matches]
-        assert "Suresh Kumar" in matched_names
+        assert "Mohan Lal" in matched_names
+
+    @pytest.mark.asyncio
+    async def test_borderline_below_threshold(self, mock_session):
+        """find_similar_drivers('SURESH K') does NOT match 'SURESH KUMAR' (score 80 < 85)."""
+        from core.database.repository import find_similar_drivers
+
+        drivers = [
+            _make_driver("Suresh Kumar", "SURESH KUMAR"),
+        ]
+        self._setup_drivers(mock_session, drivers)
+
+        matches = await find_similar_drivers(mock_session, "SURESH K")
+        # fuzz.ratio("SURESH K", "SURESH KUMAR") = 80.0, below 85 threshold
+        assert len(matches) == 0
 
     @pytest.mark.asyncio
     async def test_does_not_match_different_names(self, mock_session):

@@ -15,6 +15,7 @@ All methods accept an AsyncSession — the caller (FastAPI dependency)
 controls transaction boundaries.
 """
 
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -26,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from core.database.models import (
+    DriverDB,
     GeocodeCacheDB,
     OptimizationRunDB,
     OrderDB,
@@ -723,6 +725,224 @@ async def deactivate_vehicle(session: AsyncSession, vehicle_id: str) -> bool:
     rows_updated: int = result.rowcount  # type: ignore[attr-defined]
     await session.flush()
     return rows_updated > 0
+
+
+# =============================================================================
+# Drivers
+# =============================================================================
+
+# Fuzzy matching threshold for driver name deduplication.
+# 85 catches "SURESH K" vs "SURESH KUMAR" while avoiding false merges
+# between genuinely different drivers like "SURESH" vs "SUDESH".
+DRIVER_MATCH_THRESHOLD = 85
+
+
+def normalize_driver_name(name: str) -> str:
+    """Normalize a driver name for fuzzy matching.
+
+    Converts to uppercase, strips leading/trailing whitespace, and collapses
+    multiple internal spaces to a single space. This normalized form is stored
+    in the name_normalized column for indexed lookups and fuzzy comparison.
+
+    Args:
+        name: Raw driver name (any casing, any whitespace).
+
+    Returns:
+        Normalized name (uppercase, single-spaced, trimmed).
+    """
+    return re.sub(r"\s+", " ", name.strip().upper())
+
+
+async def get_all_drivers(
+    session: AsyncSession, active_only: bool = False
+) -> list[DriverDB]:
+    """Get all drivers, optionally filtered to active-only.
+
+    Args:
+        session: Async DB session.
+        active_only: If True, only return drivers with is_active=True.
+
+    Returns:
+        List of DriverDB objects, ordered by name.
+    """
+    query = select(DriverDB).order_by(DriverDB.name)
+    if active_only:
+        query = query.where(DriverDB.is_active == True)  # noqa: E712
+    result = await session.execute(query)
+    return list(result.scalars().all())
+
+
+async def get_driver_by_id(
+    session: AsyncSession, driver_id: uuid.UUID
+) -> DriverDB | None:
+    """Look up a driver by UUID primary key.
+
+    Args:
+        session: Async DB session.
+        driver_id: UUID of the driver.
+
+    Returns:
+        DriverDB if found, None otherwise.
+    """
+    result = await session.execute(
+        select(DriverDB).where(DriverDB.id == driver_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def create_driver(session: AsyncSession, name: str) -> DriverDB:
+    """Create a new driver with title-cased name and normalized name.
+
+    The display name is stored title-cased (e.g., "Suresh Kumar").
+    The name_normalized column stores the uppercase, trimmed version
+    for fuzzy matching (e.g., "SURESH KUMAR").
+
+    Args:
+        session: Async DB session (caller commits).
+        name: Driver's full name (any casing).
+
+    Returns:
+        The created DriverDB ORM object.
+    """
+    driver = DriverDB(
+        name=name.strip().title(),
+        name_normalized=normalize_driver_name(name),
+        is_active=True,
+    )
+    session.add(driver)
+    await session.flush()
+    return driver
+
+
+async def update_driver_name(
+    session: AsyncSession, driver_id: uuid.UUID, new_name: str
+) -> bool:
+    """Update a driver's name (both display and normalized).
+
+    Args:
+        session: Async DB session.
+        driver_id: UUID of the driver to update.
+        new_name: New name (will be title-cased for display, uppercased for matching).
+
+    Returns:
+        True if the driver was found and updated, False if not found.
+    """
+    driver = await get_driver_by_id(session, driver_id)
+    if driver is None:
+        return False
+
+    driver.name = new_name.strip().title()
+    driver.name_normalized = normalize_driver_name(new_name)
+    await session.flush()
+    return True
+
+
+async def deactivate_driver(
+    session: AsyncSession, driver_id: uuid.UUID
+) -> bool:
+    """Soft-delete a driver by setting is_active=False.
+
+    Why soft-delete? Routes reference driver_id FK -- hard delete would
+    break referential integrity. Deactivated drivers can be reactivated later.
+
+    Args:
+        session: Async DB session.
+        driver_id: UUID of the driver to deactivate.
+
+    Returns:
+        True if the driver was found and deactivated, False if not found.
+    """
+    driver = await get_driver_by_id(session, driver_id)
+    if driver is None:
+        return False
+
+    driver.is_active = False
+    await session.flush()
+    return True
+
+
+async def reactivate_driver(
+    session: AsyncSession, driver_id: uuid.UUID
+) -> bool:
+    """Reactivate a previously deactivated driver.
+
+    Args:
+        session: Async DB session.
+        driver_id: UUID of the driver to reactivate.
+
+    Returns:
+        True if the driver was found and reactivated, False if not found.
+    """
+    driver = await get_driver_by_id(session, driver_id)
+    if driver is None:
+        return False
+
+    driver.is_active = True
+    await session.flush()
+    return True
+
+
+async def find_similar_drivers(
+    session: AsyncSession,
+    name: str,
+    exclude_id: uuid.UUID | None = None,
+) -> list[tuple[DriverDB, float]]:
+    """Find existing drivers with similar names using fuzzy matching.
+
+    Checks ALL drivers (including deactivated) because deactivated drivers
+    should be reactivated rather than duplicated. Uses RapidFuzz fuzz.ratio
+    with DRIVER_MATCH_THRESHOLD (85) for scoring.
+
+    Args:
+        session: Async DB session.
+        name: Name to match against (will be normalized before comparison).
+        exclude_id: If provided, skip this driver (used when editing a driver's name).
+
+    Returns:
+        List of (DriverDB, score) tuples sorted by score descending.
+        Only includes matches above DRIVER_MATCH_THRESHOLD.
+    """
+    from rapidfuzz import fuzz
+
+    normalized = normalize_driver_name(name)
+
+    # Fetch all drivers for fuzzy comparison
+    result = await session.execute(select(DriverDB))
+    all_drivers = list(result.scalars().all())
+
+    matches: list[tuple[DriverDB, float]] = []
+    for driver in all_drivers:
+        if exclude_id and driver.id == exclude_id:
+            continue
+        score = fuzz.ratio(normalized, driver.name_normalized)
+        if score >= DRIVER_MATCH_THRESHOLD:
+            matches.append((driver, score))
+
+    # Sort by score descending
+    matches.sort(key=lambda x: x[1], reverse=True)
+    return matches
+
+
+async def get_driver_route_counts(
+    session: AsyncSession,
+) -> dict[uuid.UUID, int]:
+    """Get route counts per driver (how many routes each driver has been assigned).
+
+    Uses a GROUP BY query on the routes table, counting rows per driver_id.
+    Only counts routes that have a non-null driver_id.
+
+    Args:
+        session: Async DB session.
+
+    Returns:
+        Dict mapping driver_id (UUID) to route count (int).
+    """
+    result = await session.execute(
+        select(RouteDB.driver_id, func.count(RouteDB.id))
+        .where(RouteDB.driver_id.isnot(None))
+        .group_by(RouteDB.driver_id)
+    )
+    return {row[0]: row[1] for row in result.all()}
 
 
 # =============================================================================
