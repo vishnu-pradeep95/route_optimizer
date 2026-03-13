@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Driver-Centric Model
-status: completed
-stopped_at: Phase 17 context gathered
-last_updated: "2026-03-13T09:59:57.748Z"
-last_activity: 2026-03-13 -- Completed 16-03 (Upload pipeline driver auto-creation)
+status: executing
+stopped_at: Completed 17-01-PLAN.md
+last_updated: "2026-03-13T15:19:51.170Z"
+last_activity: 2026-03-13 -- Completed 17-01 (XLSX detection fix and parse-upload endpoint)
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
-  percent: 8
+  percent: 15
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** v3.0 Driver-Centric Model -- Phase 16: Driver Database Foundation
+**Current focus:** v3.0 Driver-Centric Model -- Phase 17: CSV Upload and XLSX Detection
 
 ## Current Position
 
-Phase: 16 of 22 (Driver Database Foundation) -- first of 7 phases in v3.0
-Plan: 3 of 3 (COMPLETE)
-Status: Phase 16 complete
-Last activity: 2026-03-13 -- Completed 16-03 (Upload pipeline driver auto-creation)
+Phase: 17 of 22 (CSV Upload and XLSX Detection) -- second of 7 phases in v3.0
+Plan: 1 of 2 (COMPLETE)
+Status: Phase 17 in progress
+Last activity: 2026-03-13 -- Completed 17-01 (XLSX detection fix and parse-upload endpoint)
 
-Progress: [▓░░░░░░░░░] 8%
+Progress: [▓▓░░░░░░░░] 15%
 
 ## Performance Metrics
 
@@ -49,8 +49,9 @@ Progress: [▓░░░░░░░░░] 8%
 | v2.0 Doc & Error Handling | 4 (1-4) | 9 | 2026-03-09 -> 2026-03-10 |
 | v2.1 Licensing Security | 6 (5-10) | 13 | 2026-03-10 -> 2026-03-11 |
 | v2.2 Address Preprocessing | 5 (11-15) | 13 | 2026-03-10 -> 2026-03-12 |
-| v3.0 Driver-Centric Model | 7 (16-22) | 3/3 (phase 16) | In progress |
+| v3.0 Driver-Centric Model | 7 (16-22) | 4/5+ (phases 16-17) | In progress |
 | Phase 16 P03 | 9min | 1 tasks | 2 files |
+| Phase 17 P01 | 7min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,9 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 - **Phase 16-03:** Snapshot pattern for intra-CSV driver isolation (no cross-matching within same CSV)
 - **Phase 16-03:** Driver auto-creation runs before geocoding so drivers are created even if geocoding fails
 - [Phase 16]: Snapshot pattern for intra-CSV driver isolation (process against pre-existing DB, not against newly created drivers)
+- **Phase 17-01:** pandas import moved to module level in main.py (was local in auto_create_drivers_from_csv)
+- **Phase 17-01:** Upload token TTL set to 30 minutes for parse-upload flow
+- **Phase 17-01:** Parse endpoint runs driver auto-creation to provide accurate status categories in preview
 
 ### Pending Todos
 
@@ -83,6 +87,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last activity: 2026-03-13 - Completed 16-03 (Upload pipeline driver auto-creation) -- Phase 16 complete
-Stopped at: Phase 17 context gathered
-Resume file: .planning/milestones/v3.0-phases/17-csv-upload-and-xlsx-detection/17-CONTEXT.md
+Last activity: 2026-03-13 - Completed 17-01 (XLSX detection fix and parse-upload endpoint)
+Stopped at: Completed 17-01-PLAN.md
+Resume file: .planning/milestones/v3.0-phases/17-csv-upload-and-xlsx-detection/17-02-PLAN.md
