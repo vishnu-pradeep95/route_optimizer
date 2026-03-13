@@ -3887,3 +3887,345 @@ class TestParseUploadEndpoint:
 
         # Clean up
         del _upload_tokens[fresh_token]
+
+
+class TestUploadTokenBasedProcessing:
+    """Tests for POST /api/upload-orders with upload_token and selected_drivers.
+
+    Phase 17 Plan 02: The upload-orders endpoint now accepts optional
+    upload_token (from parse-upload) and selected_drivers (JSON array)
+    to support the two-step upload flow: parse -> preview -> process.
+    """
+
+    @staticmethod
+    def _make_cdcms_xlsx_bytes(drivers=None, orders_per_driver=3):
+        """Create a CDCMS xlsx file as bytes for upload testing."""
+        import io
+
+        if drivers is None:
+            drivers = ["GIREESHAN ( C )", "SURESH KUMAR"]
+
+        rows = []
+        order_no = 517827
+        for driver in drivers:
+            for i in range(orders_per_driver):
+                rows.append({
+                    "OrderNo": str(order_no),
+                    "OrderStatus": "Allocated-Printed",
+                    "OrderDate": "14-02-2026 9:41",
+                    "OrderQuantity": "1",
+                    "AreaName": "VALLIKKADU",
+                    "DeliveryMan": driver,
+                    "ConsumerAddress": f"Address {order_no}",
+                })
+                order_no += 1
+
+        df = pd.DataFrame(rows)
+        buf = io.BytesIO()
+        df.to_excel(buf, index=False)
+        buf.seek(0)
+        return buf.read(), "cdcms_export.xlsx"
+
+    def _setup_token_in_store(self, drivers=None, orders_per_driver=3):
+        """Create a real temp file and register it in the token store.
+
+        Returns (token, tmp_path) for use in tests.
+        """
+        import tempfile
+        import io
+
+        from apps.kerala_delivery.api.main import _upload_tokens
+
+        if drivers is None:
+            drivers = ["GIREESHAN ( C )", "SURESH KUMAR"]
+
+        rows = []
+        order_no = 517827
+        for driver in drivers:
+            for i in range(orders_per_driver):
+                rows.append({
+                    "OrderNo": str(order_no),
+                    "OrderStatus": "Allocated-Printed",
+                    "OrderDate": "14-02-2026 9:41",
+                    "OrderQuantity": "1",
+                    "AreaName": "VALLIKKADU",
+                    "DeliveryMan": driver,
+                    "ConsumerAddress": f"Address {order_no}",
+                })
+                order_no += 1
+
+        df = pd.DataFrame(rows)
+        buf = io.BytesIO()
+        df.to_excel(buf, index=False)
+        buf.seek(0)
+
+        # Write to a real temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+            tmp.write(buf.read())
+            tmp_path = tmp.name
+
+        token = str(uuid.uuid4())
+        _upload_tokens[token] = {
+            "path": tmp_path,
+            "filename": "cdcms_export.xlsx",
+            "created_at": datetime.now(timezone.utc),
+        }
+
+        return token, tmp_path
+
+    def test_upload_with_token_works(self, client, mock_session):
+        """POST /api/upload-orders with upload_token loads stored file."""
+        import json
+
+        token, tmp_path = self._setup_token_in_store()
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
+             patch("core.optimizer.vroom_adapter.httpx.post") as mock_vroom_post:
+            mock_repo.get_all_drivers = AsyncMock(return_value=[])
+            mock_repo.find_similar_drivers = AsyncMock(return_value=[])
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = Vehicle(
+                vehicle_id="VEH-01",
+                depot=Location(latitude=11.25, longitude=75.78),
+                max_weight_kg=500.0,
+            )
+            mock_repo.save_optimization_run = AsyncMock(return_value=uuid.uuid4())
+
+            async def mock_create_driver(session, name):
+                driver = MagicMock()
+                driver.id = uuid.uuid4()
+                driver.name = name.strip().title()
+                driver.is_active = True
+                return driver
+
+            mock_repo.create_driver = AsyncMock(side_effect=mock_create_driver)
+
+            # VROOM mock response
+            mock_vroom_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: {
+                    "code": 0,
+                    "summary": {"cost": 100, "duration": 600, "computing_times": {"loading": 1, "solving": 5, "routing": 2}},
+                    "routes": [{
+                        "vehicle": 0,
+                        "cost": 100,
+                        "duration": 600,
+                        "distance": 5000,
+                        "steps": [
+                            {"type": "start", "location": [75.78, 11.25], "arrival": 0, "duration": 0, "distance": 0},
+                            {"type": "job", "job": 0, "location": [75.79, 11.26], "arrival": 300, "duration": 300, "distance": 2500, "service": 120},
+                            {"type": "end", "location": [75.78, 11.25], "arrival": 600, "duration": 600, "distance": 5000},
+                        ],
+                    }],
+                    "unassigned": [],
+                },
+                raise_for_status=lambda: None,
+            )
+
+            resp = client.post(
+                "/api/upload-orders",
+                data={"upload_token": token},
+            )
+
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+        data = resp.json()
+        assert data["total_orders"] >= 1
+
+    def test_upload_with_invalid_token_returns_400(self, client, mock_session):
+        """POST /api/upload-orders with invalid token returns 400."""
+        resp = client.post(
+            "/api/upload-orders",
+            data={"upload_token": "nonexistent-token-12345"},
+        )
+
+        assert resp.status_code == 400
+        data = resp.json()
+        assert "expired" in data.get("user_message", "").lower() or "re-upload" in data.get("user_message", "").lower()
+
+    def test_upload_token_consumed_after_use(self, client, mock_session):
+        """Upload token is deleted after successful use (one-time)."""
+        import json
+        from apps.kerala_delivery.api.main import _upload_tokens
+
+        token, tmp_path = self._setup_token_in_store()
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
+             patch("core.optimizer.vroom_adapter.httpx.post") as mock_vroom_post:
+            mock_repo.get_all_drivers = AsyncMock(return_value=[])
+            mock_repo.find_similar_drivers = AsyncMock(return_value=[])
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = Vehicle(
+                vehicle_id="VEH-01",
+                depot=Location(latitude=11.25, longitude=75.78),
+                max_weight_kg=500.0,
+            )
+            mock_repo.save_optimization_run = AsyncMock(return_value=uuid.uuid4())
+
+            async def mock_create_driver(session, name):
+                driver = MagicMock()
+                driver.id = uuid.uuid4()
+                driver.name = name.strip().title()
+                driver.is_active = True
+                return driver
+
+            mock_repo.create_driver = AsyncMock(side_effect=mock_create_driver)
+
+            mock_vroom_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: {
+                    "code": 0,
+                    "summary": {"cost": 100, "duration": 600, "computing_times": {"loading": 1, "solving": 5, "routing": 2}},
+                    "routes": [{
+                        "vehicle": 0, "cost": 100, "duration": 600, "distance": 5000,
+                        "steps": [
+                            {"type": "start", "location": [75.78, 11.25], "arrival": 0, "duration": 0, "distance": 0},
+                            {"type": "job", "job": 0, "location": [75.79, 11.26], "arrival": 300, "duration": 300, "distance": 2500, "service": 120},
+                            {"type": "end", "location": [75.78, 11.25], "arrival": 600, "duration": 600, "distance": 5000},
+                        ],
+                    }],
+                    "unassigned": [],
+                },
+                raise_for_status=lambda: None,
+            )
+
+            # First use should succeed
+            resp = client.post(
+                "/api/upload-orders",
+                data={"upload_token": token},
+            )
+            assert resp.status_code == 200
+
+        # Token should be consumed
+        assert token not in _upload_tokens
+
+        # Second use should fail
+        resp2 = client.post(
+            "/api/upload-orders",
+            data={"upload_token": token},
+        )
+        assert resp2.status_code == 400
+
+    def test_upload_with_selected_drivers_filters_optimization(self, client, mock_session):
+        """POST with selected_drivers only optimizes routes for selected drivers."""
+        import json
+
+        token, tmp_path = self._setup_token_in_store(
+            drivers=["DRIVER A", "DRIVER B", "DRIVER C"],
+            orders_per_driver=2,
+        )
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
+             patch("core.optimizer.vroom_adapter.httpx.post") as mock_vroom_post:
+            mock_repo.get_all_drivers = AsyncMock(return_value=[])
+            mock_repo.find_similar_drivers = AsyncMock(return_value=[])
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = Vehicle(
+                vehicle_id="VEH-01",
+                depot=Location(latitude=11.25, longitude=75.78),
+                max_weight_kg=500.0,
+            )
+            mock_repo.save_optimization_run = AsyncMock(return_value=uuid.uuid4())
+
+            async def mock_create_driver(session, name):
+                driver = MagicMock()
+                driver.id = uuid.uuid4()
+                driver.name = name.strip().title()
+                driver.is_active = True
+                return driver
+
+            mock_repo.create_driver = AsyncMock(side_effect=mock_create_driver)
+
+            mock_vroom_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: {
+                    "code": 0,
+                    "summary": {"cost": 100, "duration": 600, "computing_times": {"loading": 1, "solving": 5, "routing": 2}},
+                    "routes": [{
+                        "vehicle": 0, "cost": 100, "duration": 600, "distance": 5000,
+                        "steps": [
+                            {"type": "start", "location": [75.78, 11.25], "arrival": 0, "duration": 0, "distance": 0},
+                            {"type": "job", "job": 0, "location": [75.79, 11.26], "arrival": 300, "duration": 300, "distance": 2500, "service": 120},
+                            {"type": "end", "location": [75.78, 11.25], "arrival": 600, "duration": 600, "distance": 5000},
+                        ],
+                    }],
+                    "unassigned": [],
+                },
+                raise_for_status=lambda: None,
+            )
+
+            # Only select DRIVER A -- DRIVER B and C should NOT be in optimization
+            selected = json.dumps(["DRIVER A"])
+            resp = client.post(
+                "/api/upload-orders",
+                data={"upload_token": token, "selected_drivers": selected},
+            )
+
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+
+    def test_upload_without_token_still_works(self, client, mock_session):
+        """POST /api/upload-orders with file (no token) still works as before (backward compat)."""
+        xlsx_bytes, filename = self._make_cdcms_xlsx_bytes(
+            drivers=["DRIVER X"], orders_per_driver=2,
+        )
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
+             patch("core.optimizer.vroom_adapter.httpx.post") as mock_vroom_post:
+            mock_repo.get_all_drivers = AsyncMock(return_value=[])
+            mock_repo.find_similar_drivers = AsyncMock(return_value=[])
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = Vehicle(
+                vehicle_id="VEH-01",
+                depot=Location(latitude=11.25, longitude=75.78),
+                max_weight_kg=500.0,
+            )
+            mock_repo.save_optimization_run = AsyncMock(return_value=uuid.uuid4())
+
+            async def mock_create_driver(session, name):
+                driver = MagicMock()
+                driver.id = uuid.uuid4()
+                driver.name = name.strip().title()
+                driver.is_active = True
+                return driver
+
+            mock_repo.create_driver = AsyncMock(side_effect=mock_create_driver)
+
+            mock_vroom_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: {
+                    "code": 0,
+                    "summary": {"cost": 100, "duration": 600, "computing_times": {"loading": 1, "solving": 5, "routing": 2}},
+                    "routes": [{
+                        "vehicle": 0, "cost": 100, "duration": 600, "distance": 5000,
+                        "steps": [
+                            {"type": "start", "location": [75.78, 11.25], "arrival": 0, "duration": 0, "distance": 0},
+                            {"type": "job", "job": 0, "location": [75.79, 11.26], "arrival": 300, "duration": 300, "distance": 2500, "service": 120},
+                            {"type": "end", "location": [75.78, 11.25], "arrival": 600, "duration": 600, "distance": 5000},
+                        ],
+                    }],
+                    "unassigned": [],
+                },
+                raise_for_status=lambda: None,
+            )
+
+            resp = client.post(
+                "/api/upload-orders",
+                files={"file": (filename, xlsx_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_orders"] >= 1
+
+    def test_upload_no_token_no_file_returns_400(self, client, mock_session):
+        """POST /api/upload-orders with neither token nor file returns 400."""
+        resp = client.post(
+            "/api/upload-orders",
+            data={"upload_token": ""},  # empty token, no file
+        )
+
+        # Should return 400 because no valid token and no file
+        assert resp.status_code == 400
