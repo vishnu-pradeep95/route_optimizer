@@ -19,13 +19,14 @@ import pathlib
 import tempfile
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, time as dt_time, timezone
+from datetime import datetime, time as dt_time, timedelta, timezone
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
+import pandas as pd
 from pydantic import BaseModel, Field
 import httpx
 from Secweb import SecWeb
@@ -625,19 +626,32 @@ def _get_geocoder() -> GoogleGeocoder | None:
 
 
 def _is_cdcms_format(file_path: str) -> bool:
-    """Detect whether a file is a raw CDCMS tab-separated export.
+    """Detect whether a file is a raw CDCMS export (tab-separated CSV or Excel).
 
-    Checks the first line of the file for CDCMS-specific column names
-    (OrderNo, ConsumerAddress) separated by tabs. This lets the upload
-    endpoint auto-detect the format and run the preprocessor when needed,
-    so employees can upload CDCMS exports directly without manual conversion.
+    For CSV files: checks the first line for CDCMS-specific column names
+    (OrderNo, ConsumerAddress) separated by tabs.
 
-    Why check for tabs AND column names?
-    A regular CSV could coincidentally have tabs, so we check for at least
-    two CDCMS-specific column names to be sure. If someone already pre-
-    processed the file (has 'order_id' and 'address' columns), we skip
-    preprocessing and let CsvImporter handle it directly.
+    For Excel files (.xlsx/.xls): reads headers via pandas and checks
+    for CDCMS marker columns. This fixes the previous bug where .xlsx
+    files (ZIP-based binary) were opened as UTF-8 text and failed silently.
+
+    This lets the upload endpoint auto-detect the format and run the
+    preprocessor when needed, so employees can upload CDCMS exports
+    directly without manual conversion.
     """
+    ext = pathlib.Path(file_path).suffix.lower()
+
+    # For Excel files: read headers via pandas and check column names
+    if ext in (".xlsx", ".xls"):
+        try:
+            df = pd.read_excel(file_path, nrows=0, dtype=str)
+            columns = set(df.columns)
+            cdcms_markers = {CDCMS_COL_ORDER_NO, CDCMS_COL_ADDRESS}
+            return cdcms_markers.issubset(columns)
+        except Exception:
+            return False
+
+    # For CSV/text files: existing logic (check for tabs + column names)
     try:
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
             header_line = f.readline().strip()
@@ -757,6 +771,71 @@ class OptimizationSummary(BaseModel):
 
 
 # =============================================================================
+# Phase 17: Parse-upload models and upload token store
+# =============================================================================
+
+
+class DriverPreview(BaseModel):
+    """One driver found in a parsed CDCMS upload file.
+
+    Returned as part of ParsePreviewResponse to show which drivers
+    are in the file, how many orders each has, and whether they're
+    new or already exist in the database.
+    """
+
+    csv_name: str = Field(description="Original name from the CSV/CDCMS DeliveryMan column")
+    display_name: str = Field(description="Title-cased display name for UI")
+    order_count: int = Field(description="Number of Allocated-Printed orders for this driver")
+    status: Literal["existing", "new", "matched", "reactivated"] = Field(
+        description="Driver status: existing (exact match), new (no match), "
+        "matched (fuzzy match to active driver), reactivated (inactive driver reactivated)"
+    )
+    matched_to: str | None = Field(default=None, description="DB driver name if matched/reactivated")
+    match_score: float | None = Field(default=None, description="Fuzzy match score (0-100)")
+
+
+class ParsePreviewResponse(BaseModel):
+    """Response from POST /api/parse-upload.
+
+    Contains a driver preview list and an upload_token that references
+    the parsed file on disk. The client sends this token to the process
+    endpoint to avoid re-uploading the file.
+    """
+
+    upload_token: str = Field(description="UUID referencing the temp file on disk (30-min TTL)")
+    filename: str = Field(description="Original uploaded filename")
+    total_rows: int = Field(description="Total rows in the uploaded file (before filtering)")
+    filtered_rows: int = Field(description="Rows after Allocated-Printed filter")
+    drivers: list[DriverPreview] = Field(description="Per-driver preview data")
+
+
+# In-memory upload token store. Tokens map to temp file paths and metadata.
+# Tokens expire after 30 minutes. Cleanup runs on every new parse request.
+_upload_tokens: dict[str, dict] = {}
+_TOKEN_TTL = timedelta(minutes=30)
+
+
+def _cleanup_expired_tokens() -> None:
+    """Remove expired upload tokens and their associated temp files.
+
+    Called on every parse request to prevent memory leaks from abandoned
+    parse sessions (user closes browser, clicks Back, etc.).
+    """
+    now = datetime.now(timezone.utc)
+    expired = [k for k, v in _upload_tokens.items() if now - v["created_at"] > _TOKEN_TTL]
+    for k in expired:
+        path = _upload_tokens[k].get("path")
+        if path and os.path.exists(path):
+            try:
+                os.unlink(path)
+            except OSError:
+                logger.warning("Failed to clean up temp file: %s", path)
+        del _upload_tokens[k]
+    if expired:
+        logger.info("Cleaned up %d expired upload token(s)", len(expired))
+
+
+# =============================================================================
 # API Endpoints
 # =============================================================================
 
@@ -869,8 +948,6 @@ async def auto_create_drivers_from_csv(
     Returns:
         Dict with new_drivers, matched_drivers, reactivated_drivers, existing_drivers.
     """
-    import pandas as pd
-
     if "delivery_man" not in preprocessed_df.columns:
         return None
 
@@ -924,6 +1001,239 @@ async def auto_create_drivers_from_csv(
         "reactivated_drivers": reactivated_drivers,
         "existing_drivers": existing_drivers,
     }
+
+
+@app.post("/api/parse-upload", response_model=ParsePreviewResponse, dependencies=[Depends(verify_api_key)])
+@limiter.limit("10/minute")
+async def parse_upload(
+    request: Request,
+    file: UploadFile = File(...),
+    session: AsyncSession = SessionDep,
+):
+    """Parse a CDCMS upload file and return driver preview data (Phase 17).
+
+    This is step 1 of the two-step upload flow:
+    1. parse_upload() -- fast parse, returns driver list for selection
+    2. upload_and_optimize() -- runs geocoding + optimization for selected drivers
+
+    The file is validated, saved to a temp location, and parsed with the
+    CDCMS preprocessor. Driver auto-creation runs to categorize each driver
+    as new/matched/reactivated/existing. An upload_token is returned to
+    reference the parsed file for the subsequent process step.
+
+    Returns 400 if the file is not a recognized CDCMS export or has no
+    Allocated-Printed orders after filtering.
+    """
+    # --- File validation (same as upload-orders) ---
+    filename = file.filename or ""
+    ext = pathlib.Path(filename).suffix.lower()
+
+    if ext not in ALLOWED_EXTENSIONS:
+        return error_response(
+            status_code=400,
+            error_code=ErrorCode.UPLOAD_INVALID_FORMAT,
+            user_message=f"Unsupported file type ({ext or 'none'}) -- use .csv, .xlsx, or .xls",
+            technical_message=f"Expected one of {sorted(ALLOWED_EXTENSIONS)}, got '{ext}'",
+            request_id=request_id_var.get(""),
+        )
+
+    content_type = file.content_type or ""
+    if content_type and content_type not in ALLOWED_CONTENT_TYPES:
+        return error_response(
+            status_code=400,
+            error_code=ErrorCode.UPLOAD_INVALID_FORMAT,
+            user_message=f"Unexpected content type ({content_type}) -- upload a CSV or Excel file",
+            technical_message=f"Allowed types: {sorted(ALLOWED_CONTENT_TYPES)}",
+            request_id=request_id_var.get(""),
+        )
+
+    suffix = ".csv" if ext == ".csv" else ".xlsx"
+    tmp_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            content = await file.read()
+            if len(content) > MAX_UPLOAD_SIZE_BYTES:
+                size_mb = len(content) / (1024 * 1024)
+                max_mb = MAX_UPLOAD_SIZE_BYTES / (1024 * 1024)
+                return error_response(
+                    status_code=413,
+                    error_code=ErrorCode.UPLOAD_FILE_TOO_LARGE,
+                    user_message=f"File too large ({size_mb:.1f} MB) -- maximum is {max_mb:.0f} MB",
+                    technical_message=f"{len(content)} bytes exceeds {MAX_UPLOAD_SIZE_BYTES} byte limit",
+                    request_id=request_id_var.get(""),
+                )
+            if len(content) == 0:
+                return error_response(
+                    status_code=400,
+                    error_code=ErrorCode.UPLOAD_INVALID_FORMAT,
+                    user_message="File is empty -- upload a CDCMS export with delivery orders",
+                    technical_message="Uploaded file has 0 bytes",
+                    request_id=request_id_var.get(""),
+                )
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        # --- CDCMS detection ---
+        is_cdcms = _is_cdcms_format(tmp_path)
+        if not is_cdcms:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            return error_response(
+                status_code=400,
+                error_code=ErrorCode.UPLOAD_INVALID_FORMAT,
+                user_message="File is not a recognized CDCMS export -- ensure the file has OrderNo and ConsumerAddress columns",
+                technical_message="CDCMS format detection failed: missing required marker columns",
+                request_id=request_id_var.get(""),
+            )
+
+        # --- Preprocess CDCMS file ---
+        # Count total rows before filtering (read raw file for count)
+        try:
+            if suffix == ".xlsx":
+                raw_df = pd.read_excel(tmp_path, dtype=str)
+            else:
+                raw_df = pd.read_csv(tmp_path, sep="\t", dtype=str)
+            total_rows = len(raw_df)
+        except Exception:
+            total_rows = 0
+
+        preprocessed_df = preprocess_cdcms(
+            tmp_path,
+            area_suffix=config.CDCMS_AREA_SUFFIX,
+        )
+
+        if preprocessed_df.empty:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            return error_response(
+                status_code=400,
+                error_code=ErrorCode.UPLOAD_NO_VALID_ORDERS,
+                user_message="No Allocated-Printed orders found in this file -- check that the CDCMS export contains pending orders",
+                technical_message=f"preprocess_cdcms returned empty DataFrame from {total_rows} total rows",
+                request_id=request_id_var.get(""),
+            )
+
+        filtered_rows = len(preprocessed_df)
+
+        # --- Driver auto-creation and categorization ---
+        driver_summary = await auto_create_drivers_from_csv(session, preprocessed_df)
+
+        # --- Build per-driver order counts ---
+        driver_order_counts: dict[str, int] = {}
+        if "delivery_man" in preprocessed_df.columns:
+            for name, group in preprocessed_df.groupby("delivery_man"):
+                if pd.notna(name) and str(name).strip():
+                    driver_order_counts[str(name).strip()] = len(group)
+
+        # --- Build DriverPreview list ---
+        driver_previews: list[DriverPreview] = []
+
+        if driver_summary:
+            # Map csv_name -> status based on driver_summary categories
+            csv_name_status: dict[str, dict] = {}
+
+            for name in driver_summary.get("new_drivers", []):
+                # Find the original csv_name from order counts
+                for csv_name in driver_order_counts:
+                    if csv_name.strip().title() == name:
+                        csv_name_status[csv_name] = {"status": "new", "display_name": name}
+                        break
+                else:
+                    # Fallback: use the name as-is
+                    csv_name_status[name] = {"status": "new", "display_name": name}
+
+            for match_info in driver_summary.get("matched_drivers", []):
+                csv_title = match_info["csv_name"]
+                for csv_name in driver_order_counts:
+                    if csv_name.strip().title() == csv_title:
+                        csv_name_status[csv_name] = {
+                            "status": "existing",
+                            "display_name": match_info["matched_to"],
+                            "matched_to": match_info["matched_to"],
+                            "match_score": match_info["score"],
+                        }
+                        break
+
+            for name in driver_summary.get("reactivated_drivers", []):
+                for csv_name in driver_order_counts:
+                    if csv_name.strip().title() == name or csv_name.strip().upper() == name.upper():
+                        csv_name_status[csv_name] = {
+                            "status": "reactivated",
+                            "display_name": name,
+                            "matched_to": name,
+                        }
+                        break
+                else:
+                    csv_name_status[name] = {"status": "reactivated", "display_name": name, "matched_to": name}
+
+            for name in driver_summary.get("existing_drivers", []):
+                for csv_name in driver_order_counts:
+                    if csv_name.strip().title() == name or csv_name.strip().upper() == name.upper():
+                        if csv_name not in csv_name_status:
+                            csv_name_status[csv_name] = {
+                                "status": "existing",
+                                "display_name": name,
+                            }
+                        break
+
+            # Build preview list from all drivers in order counts
+            for csv_name, count in driver_order_counts.items():
+                info = csv_name_status.get(csv_name, {})
+                driver_previews.append(DriverPreview(
+                    csv_name=csv_name,
+                    display_name=info.get("display_name", csv_name.strip().title()),
+                    order_count=count,
+                    status=info.get("status", "new"),
+                    matched_to=info.get("matched_to"),
+                    match_score=info.get("match_score"),
+                ))
+        else:
+            # No driver_summary (no delivery_man column) -- single unnamed driver
+            for csv_name, count in driver_order_counts.items():
+                driver_previews.append(DriverPreview(
+                    csv_name=csv_name,
+                    display_name=csv_name.strip().title(),
+                    order_count=count,
+                    status="new",
+                ))
+
+        # --- Generate upload token ---
+        _cleanup_expired_tokens()
+        token = str(uuid.uuid4())
+        _upload_tokens[token] = {
+            "path": tmp_path,
+            "filename": filename,
+            "created_at": datetime.now(timezone.utc),
+        }
+
+        logger.info(
+            "Parse-upload complete: %d total rows, %d filtered, %d drivers, token=%s",
+            total_rows, filtered_rows, len(driver_previews), token[:8],
+        )
+
+        return ParsePreviewResponse(
+            upload_token=token,
+            filename=filename,
+            total_rows=total_rows,
+            filtered_rows=filtered_rows,
+            drivers=driver_previews,
+        )
+
+    except Exception as exc:
+        # Clean up temp file on unexpected errors
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+        logger.exception("Parse-upload failed: %s", exc)
+        return error_response(
+            status_code=500,
+            error_code=ErrorCode.INTERNAL_ERROR,
+            user_message="Failed to parse file -- please try again or contact IT",
+            technical_message=str(exc),
+            request_id=request_id_var.get(""),
+        )
 
 
 @app.post("/api/upload-orders", response_model=OptimizationSummary, dependencies=[Depends(verify_api_key)])
