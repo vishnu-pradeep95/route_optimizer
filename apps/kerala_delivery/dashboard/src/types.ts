@@ -13,6 +13,8 @@ export interface RouteStop {
   sequence: number;
   order_id: string;
   address: string;
+  /** Original unprocessed address from CDCMS source data. */
+  address_raw: string | null;
   latitude: number;
   longitude: number;
   weight_kg: number;
@@ -96,6 +98,34 @@ export interface TelemetryResponse {
 export interface FleetTelemetryResponse {
   count: number;
   vehicles: Record<string, TelemetryPing>;
+}
+
+// --- Driver types ---
+
+/** A driver in the system. Mirrors _driver_to_dict() response from the API. */
+export interface Driver {
+  id: string;
+  name: string;
+  is_active: boolean;
+  route_count: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** Response from GET /api/drivers. */
+export interface DriversResponse {
+  count: number;
+  drivers: Driver[];
+}
+
+/** Response from GET /api/drivers/check-name. */
+export interface DriverCheckResponse {
+  similar_drivers: Array<{
+    id: string;
+    name: string;
+    score: number;
+    is_active: boolean;
+  }>;
 }
 
 // --- Vehicle / Fleet types ---

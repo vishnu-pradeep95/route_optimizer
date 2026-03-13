@@ -23,6 +23,9 @@ import type {
   HealthResponse,
   Vehicle,
   VehiclesResponse,
+  Driver,
+  DriversResponse,
+  DriverCheckResponse,
   ImportFailure,
   DuplicateLocationWarning,
 } from "../types";
@@ -186,6 +189,44 @@ export async function updateVehicle(
 /** Soft-delete (deactivate) a vehicle. */
 export async function deleteVehicle(vehicleId: string): Promise<{ message: string }> {
   return apiWrite(`/api/vehicles/${encodeURIComponent(vehicleId)}`, "DELETE");
+}
+
+// --- Driver endpoints ---
+
+/** Fetch all drivers with route counts. */
+export async function fetchDrivers(activeOnly: boolean = false): Promise<DriversResponse> {
+  const qs = activeOnly ? "?active_only=true" : "";
+  return apiFetch<DriversResponse>(`/api/drivers${qs}`);
+}
+
+/** Create a new driver by name. */
+export async function createDriver(
+  name: string
+): Promise<{ message: string; driver: Driver; similar_drivers: Array<{ id: string; name: string; score: number; is_active: boolean }> }> {
+  return apiWrite(`/api/drivers`, "POST", { name });
+}
+
+/** Update a driver's name and/or active status. */
+export async function updateDriver(
+  id: string,
+  data: { name?: string; is_active?: boolean }
+): Promise<{ message: string; similar_drivers?: Array<{ id: string; name: string; score: number; is_active: boolean }> }> {
+  return apiWrite(`/api/drivers/${encodeURIComponent(id)}`, "PUT", data);
+}
+
+/** Soft-delete (deactivate) a driver. */
+export async function deleteDriver(id: string): Promise<{ message: string }> {
+  return apiWrite(`/api/drivers/${encodeURIComponent(id)}`, "DELETE");
+}
+
+/** Check if a driver name has similar matches. */
+export async function checkDriverName(
+  name: string,
+  excludeId?: string
+): Promise<DriverCheckResponse> {
+  let qs = `?name=${encodeURIComponent(name)}`;
+  if (excludeId) qs += `&exclude_id=${encodeURIComponent(excludeId)}`;
+  return apiFetch<DriverCheckResponse>(`/api/drivers/check-name${qs}`);
 }
 
 // --- Route endpoints ---
