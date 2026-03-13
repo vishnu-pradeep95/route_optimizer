@@ -792,3 +792,69 @@ class TestAllocatedPrintedDefaultFilter:
         sig = inspect.signature(preprocess_cdcms)
         filter_status_param = sig.parameters["filter_status"]
         assert filter_status_param.default == "Allocated-Printed"
+
+
+# =============================================================================
+# Phase 17 Gap Closure: Placeholder driver name filtering
+# =============================================================================
+
+
+class TestPlaceholderDriverFiltering:
+    """Tests for filtering out CDCMS placeholder driver names.
+
+    CDCMS uses placeholder values like 'Allocation Pending' in the DeliveryMan
+    column for unassigned orders. These should be filtered out so they don't
+    appear as real drivers in the preview or get geocoded.
+    """
+
+    def test_allocation_pending_filtered(self, tmp_path):
+        """Orders with DeliveryMan='Allocation Pending' should be excluded."""
+        content = "\n".join([
+            SAMPLE_CDCMS_HEADER,
+            _make_cdcms_row("100", delivery_man="GIREESHAN ( C )"),
+            _make_cdcms_row("101", delivery_man="Allocation Pending"),
+            _make_cdcms_row("102", delivery_man="SURESH KUMAR"),
+        ])
+        filepath = tmp_path / "placeholder_test.csv"
+        filepath.write_text(content)
+
+        df = preprocess_cdcms(filepath, area_suffix="")
+        assert len(df) == 2
+        driver_names = df["delivery_man"].str.upper().tolist()
+        assert "ALLOCATION PENDING" not in driver_names
+
+    def test_allocation_pending_case_insensitive(self, tmp_path):
+        """Placeholder filter should be case-insensitive."""
+        content = "\n".join([
+            SAMPLE_CDCMS_HEADER,
+            _make_cdcms_row("100", delivery_man="GIREESHAN ( C )"),
+            _make_cdcms_row("101", delivery_man="ALLOCATION PENDING"),
+            _make_cdcms_row("102", delivery_man="allocation pending"),
+        ])
+        filepath = tmp_path / "case_insensitive_test.csv"
+        filepath.write_text(content)
+
+        df = preprocess_cdcms(filepath, area_suffix="")
+        assert len(df) == 1
+        assert df.iloc[0]["delivery_man"] == "GIREESHAN ( C )"
+
+    def test_blank_delivery_man_filtered(self, tmp_path):
+        """Orders with blank DeliveryMan should be excluded."""
+        content = "\n".join([
+            SAMPLE_CDCMS_HEADER,
+            _make_cdcms_row("100", delivery_man="GIREESHAN ( C )"),
+            _make_cdcms_row("101", delivery_man=""),
+            _make_cdcms_row("102", delivery_man="   "),
+        ])
+        filepath = tmp_path / "blank_driver_test.csv"
+        filepath.write_text(content)
+
+        df = preprocess_cdcms(filepath, area_suffix="")
+        assert len(df) == 1
+        assert df.iloc[0]["delivery_man"] == "GIREESHAN ( C )"
+
+    def test_real_drivers_not_affected(self, cdcms_tsv_file):
+        """Real driver names should not be affected by placeholder filtering."""
+        df = preprocess_cdcms(cdcms_tsv_file, area_suffix="")
+        # All 5 orders in the fixture have GIREESHAN ( C ) as driver
+        assert len(df) == 5

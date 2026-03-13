@@ -3860,6 +3860,47 @@ class TestParseUploadEndpoint:
         assert new_found, f"Expected a 'new' driver status, got: {statuses}"
         assert matched_found, f"Expected a 'matched' driver status, got: {statuses}"
 
+    def test_parse_upload_excludes_allocation_pending(self, client, mock_session):
+        """Parse-upload should NOT include 'Allocation Pending' as a driver.
+
+        CDCMS uses 'Allocation Pending' as a placeholder for unassigned orders.
+        These should be filtered out by the preprocessor so they never appear
+        in the driver preview list.
+        """
+        xlsx_bytes, filename = self._make_cdcms_xlsx_bytes(
+            drivers=["GIREESHAN ( C )", "Allocation Pending", "SURESH KUMAR"],
+            orders_per_driver=2,
+        )
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_all_drivers = AsyncMock(return_value=[])
+            mock_repo.find_similar_drivers = AsyncMock(return_value=[])
+
+            async def mock_create_driver(session, name):
+                driver = MagicMock()
+                driver.id = uuid.uuid4()
+                driver.name = name.strip().title()
+                driver.is_active = True
+                return driver
+
+            mock_repo.create_driver = AsyncMock(side_effect=mock_create_driver)
+
+            resp = client.post(
+                "/api/parse-upload",
+                files={"file": (filename, xlsx_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        driver_names = [d["csv_name"] for d in data["drivers"]]
+        # 'Allocation Pending' should NOT be in the driver list
+        for name in driver_names:
+            assert "allocation pending" not in name.lower(), (
+                f"Placeholder 'Allocation Pending' appeared in driver preview: {driver_names}"
+            )
+        # Should only have 2 real drivers
+        assert len(data["drivers"]) == 2
+
     def test_upload_token_cleanup(self):
         """Expired upload tokens are cleaned up."""
         from apps.kerala_delivery.api.main import _upload_tokens, _cleanup_expired_tokens, _TOKEN_TTL
@@ -4219,6 +4260,94 @@ class TestUploadTokenBasedProcessing:
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_orders"] >= 1
+
+    def test_upload_selected_drivers_filters_before_geocoding(self, client, mock_session):
+        """When selected_drivers is provided, only those drivers' orders are geocoded.
+
+        Gap closure: Previously, ALL orders were geocoded and then filtered
+        by driver selection. This wasted Google Maps API calls. Now filtering
+        happens BEFORE the geocoding loop.
+        """
+        import json
+
+        # 3 drivers, 2 orders each = 6 total orders
+        token, tmp_path = self._setup_token_in_store(
+            drivers=["DRIVER A", "DRIVER B", "DRIVER C"],
+            orders_per_driver=2,
+        )
+
+        geocode_calls = []
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo, \
+             patch("core.optimizer.vroom_adapter.httpx.post") as mock_vroom_post, \
+             patch("apps.kerala_delivery.api.main.CachedGeocoder") as mock_cached_cls:
+            mock_repo.get_all_drivers = AsyncMock(return_value=[])
+            mock_repo.find_similar_drivers = AsyncMock(return_value=[])
+            mock_repo.get_cached_geocode = AsyncMock(return_value=None)
+            mock_repo.get_active_vehicles = AsyncMock(return_value=[MagicMock()])
+            mock_repo.vehicle_db_to_pydantic.return_value = Vehicle(
+                vehicle_id="VEH-01",
+                depot=Location(latitude=11.25, longitude=75.78),
+                max_weight_kg=500.0,
+            )
+            mock_repo.save_optimization_run = AsyncMock(return_value=uuid.uuid4())
+
+            async def mock_create_driver(session, name):
+                driver = MagicMock()
+                driver.id = uuid.uuid4()
+                driver.name = name.strip().title()
+                driver.is_active = True
+                return driver
+
+            mock_repo.create_driver = AsyncMock(side_effect=mock_create_driver)
+
+            # Track geocode calls to verify only selected drivers' orders are geocoded
+            mock_geocoder_instance = MagicMock()
+            mock_geocoder_instance.stats = {"hits": 0, "misses": 0}
+
+            async def mock_geocode(address, area_name=None):
+                geocode_calls.append(address)
+                mock_geocoder_instance.stats["misses"] += 1
+                result = MagicMock()
+                result.success = True
+                result.location = Location(latitude=11.26, longitude=75.79)
+                result.confidence = 0.9
+                result.method = "api"
+                return result
+
+            mock_geocoder_instance.geocode = mock_geocode
+            mock_cached_cls.return_value = mock_geocoder_instance
+
+            mock_vroom_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: {
+                    "code": 0,
+                    "summary": {"cost": 100, "duration": 600, "computing_times": {"loading": 1, "solving": 5, "routing": 2}},
+                    "routes": [{
+                        "vehicle": 0, "cost": 100, "duration": 600, "distance": 5000,
+                        "steps": [
+                            {"type": "start", "location": [75.78, 11.25], "arrival": 0, "duration": 0, "distance": 0},
+                            {"type": "job", "job": 0, "location": [75.79, 11.26], "arrival": 300, "duration": 300, "distance": 2500, "service": 120},
+                            {"type": "end", "location": [75.78, 11.25], "arrival": 600, "duration": 600, "distance": 5000},
+                        ],
+                    }],
+                    "unassigned": [],
+                },
+                raise_for_status=lambda: None,
+            )
+
+            # Only select DRIVER A — should only geocode 2 orders (not all 6)
+            selected = json.dumps(["DRIVER A"])
+            resp = client.post(
+                "/api/upload-orders",
+                data={"upload_token": token, "selected_drivers": selected},
+            )
+
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+        # Key assertion: only 2 orders geocoded (DRIVER A's), not 6 (all drivers')
+        assert len(geocode_calls) == 2, (
+            f"Expected 2 geocode calls (DRIVER A only), got {len(geocode_calls)}: {geocode_calls}"
+        )
 
     def test_upload_no_token_no_file_returns_400(self, client, mock_session):
         """POST /api/upload-orders with neither token nor file returns 400."""
