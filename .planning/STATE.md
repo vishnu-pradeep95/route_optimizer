@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Driver-Centric Model
 status: completed
-stopped_at: Completed 17-03-PLAN.md
-last_updated: "2026-03-13T21:54:47.083Z"
-last_activity: 2026-03-13 -- Completed 17-03 (fix matched driver status bug)
+stopped_at: Completed 17-04-PLAN.md
+last_updated: "2026-03-13T23:05:47.065Z"
+last_activity: "2026-03-13 -- Completed 17-04 (UAT gap closure: geocoding filter, placeholder filter, button fix)"
 progress:
   total_phases: 7
   completed_phases: 0
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 17 of 22 (CSV Upload and XLSX Detection) -- second of 7 phases in v3.0
-Plan: 3 of 3 (COMPLETE)
+Plan: 4 of 4 (COMPLETE)
 Status: Phase 17 COMPLETE
-Last activity: 2026-03-13 -- Completed 17-03 (fix matched driver status bug)
+Last activity: 2026-03-13 -- Completed 17-04 (UAT gap closure: geocoding filter, placeholder filter, button fix)
 
 Progress: [▓▓▓░░░░░░░] 28%
 
@@ -54,6 +54,7 @@ Progress: [▓▓▓░░░░░░░] 28%
 | Phase 17 P01 | 7min | 2 tasks | 5 files |
 | Phase 17 P02 | 7min | 3 tasks | 5 files |
 | Phase 17 P03 | 2min | 1 tasks | 2 files |
+| Phase 17 P04 | 6min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,8 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 - **Phase 17-02:** Upload token consumed immediately on lookup (before processing) to prevent replay
 - **Phase 17-02:** Upload button renamed to "Upload & Preview" for two-step flow clarity
 - [Phase 17]: No new patterns needed -- single-line status string fix to emit matched instead of existing for fuzzy-matched drivers
+- [Phase 17]: Placeholder filtering at preprocessor level (both parse-upload and upload-and-optimize benefit)
+- [Phase 17]: Driver selection filter moved before geocoding to save Google Maps API costs
 
 ### Pending Todos
 
@@ -94,5 +97,5 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 ## Session Continuity
 
 Last activity: 2026-03-13 - Completed 17-03 (fix matched driver status bug)
-Stopped at: Completed 17-03-PLAN.md
+Stopped at: Completed 17-04-PLAN.md
 Resume file: None
