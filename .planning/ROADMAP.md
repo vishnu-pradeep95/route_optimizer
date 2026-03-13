@@ -10,6 +10,7 @@
 - ✅ **v2.0 Documentation & Error Handling** -- Phases 1-4 (shipped 2026-03-10)
 - ✅ **v2.1 Licensing & Distribution Security** -- Phases 5-10 (shipped 2026-03-11)
 - ✅ **v2.2 Address Preprocessing Pipeline** -- Phases 11-15 (shipped 2026-03-12)
+- 🚧 **v3.0 Driver-Centric Model** -- Phases 16-22 (in progress)
 
 ## Phases
 
@@ -104,7 +105,100 @@
 
 </details>
 
+### 🚧 v3.0 Driver-Centric Model (In Progress)
+
+**Milestone Goal:** Replace the vehicle-fleet model with a driver-centric model where drivers are created from CDCMS CSV uploads, optimization runs per-driver (TSP), and the dashboard becomes the primary interface for office staff.
+
+- [ ] **Phase 16: Driver Database Foundation** - Driver entity with CRUD, fuzzy name matching, auto-creation from CSV, and driver management page
+- [ ] **Phase 17: CSV Upload and XLSX Detection** - Fix .xlsx detection bug, add driver preview step, driver selection before processing
+- [ ] **Phase 18: Address Preprocessing Fixes** - Fix trailing-letter split garbling, (H) expansion, PO concatenation, and tighten geocode validation
+- [ ] **Phase 19: Per-Driver TSP Optimization** - Group orders by driver, run VROOM TSP per driver, store all routes under single optimization run
+- [ ] **Phase 20: UI Terminology Rename** - Change "Vehicle" to "Driver" in all dashboard labels while keeping API field names backward-compatible
+- [ ] **Phase 21: Dashboard Settings and Cache Management** - Settings page with API key management, upload history, geocode cache stats and export/import
+- [ ] **Phase 22: Google Routes Validation** - User-triggered OSRM vs Google Routes distance/time comparison with cost warning and confidence indicator
+
+## Phase Details
+
+### Phase 16: Driver Database Foundation
+**Goal**: Users can manage drivers as first-class entities -- view, create, edit, deactivate -- and the system auto-creates drivers from CSV uploads without duplicates
+**Depends on**: Phase 15 (v2.2 complete)
+**Requirements**: DRV-01, DRV-02, DRV-03, DRV-04, DRV-05, DRV-06, DRV-07
+**Success Criteria** (what must be TRUE):
+  1. User can open the Driver Management page and see a list of all drivers with their name and active/inactive status
+  2. User can add a new driver by name, edit an existing driver's name, and deactivate a driver -- all from the dashboard
+  3. When a CSV with a DeliveryMan column is uploaded, any new driver names are auto-created in the database without duplicates (fuzzy matching catches "SURESH K" vs "SURESH KUMAR")
+  4. The system starts with zero drivers -- no pre-loaded fleet data -- and the driver list grows organically from CSV uploads and manual additions
+**Plans**: TBD
+
+### Phase 17: CSV Upload and XLSX Detection
+**Goal**: Users can upload both .csv and .xlsx CDCMS files, see which drivers are in the file, and select which drivers to process before optimization runs
+**Depends on**: Phase 16
+**Requirements**: CSV-01, CSV-02, CSV-03, CSV-04, CSV-05
+**Success Criteria** (what must be TRUE):
+  1. User can upload a CDCMS .xlsx file and have it correctly detected and parsed (not rejected as invalid format)
+  2. After uploading a multi-driver CSV/XLSX, user sees a list of drivers found in the file with order counts before processing begins
+  3. User can select a subset of drivers from the uploaded file to generate routes for (deselected drivers are skipped)
+  4. System filters to "Allocated-Printed" OrderStatus by default and correctly parses columns regardless of column order in the file
+**Plans**: TBD
+
+### Phase 18: Address Preprocessing Fixes
+**Goal**: Address cleaning produces correct results for known garbling patterns and geocode validation uses a tighter geographic boundary
+**Depends on**: Phase 15 (v2.2 complete, independent of Phases 16-17)
+**Requirements**: ADDR-01, ADDR-02, ADDR-03, ADDR-04, ADDR-05
+**Success Criteria** (what must be TRUE):
+  1. Address containing "MUTTUNGAL" is preserved as one word (not split into "MUTTUN GAL" or similar by trailing-letter heuristic)
+  2. Address containing "(H)" expands correctly to "House" without splitting or garbling adjacent words
+  3. Address containing concatenated "PO" abbreviation (e.g., "MUTTUNGALPOBALAVADI") correctly separates "P.O." without mangling surrounding text
+  4. Geocode results outside a 20km radius from the Vatakara depot (from config) are flagged as out-of-zone, using Vatakara depot as the centroid
+**Plans**: TBD
+
+### Phase 19: Per-Driver TSP Optimization
+**Goal**: Each driver's assigned orders are optimized independently as a TSP problem, producing optimal stop ordering per driver while maintaining fleet-wide visibility
+**Depends on**: Phase 16, Phase 17
+**Requirements**: OPT-01, OPT-02, OPT-03, OPT-04, OPT-05
+**Success Criteria** (what must be TRUE):
+  1. After CSV upload and driver selection, each driver's orders are grouped separately and optimized via VROOM with 1 vehicle (TSP), producing an optimal stop sequence per driver
+  2. All per-driver routes from a single upload are stored under one optimization_run, visible together in the dashboard route list
+  3. No order appears in more than one driver's route -- the system validates zero overlap post-optimization
+  4. If geographic anomalies are detected across drivers (e.g., two drivers with interleaving delivery areas), validation warnings are surfaced in the optimization results
+**Plans**: TBD
+
+### Phase 20: UI Terminology Rename
+**Goal**: The dashboard speaks in "Driver" terms everywhere users see text, while API field names remain backward-compatible for the Driver PWA
+**Depends on**: Phase 16, Phase 19
+**Requirements**: UI-01, UI-02, UI-03
+**Success Criteria** (what must be TRUE):
+  1. All dashboard headers, labels, navigation items, and table columns show "Driver" instead of "Vehicle" (e.g., "Driver Management", "Driver Routes", driver name in route cards)
+  2. API responses continue to include vehicle_id fields -- the Driver PWA works without any changes
+  3. The Fleet Management page is now the Driver Management page with driver-centric layout (driver names, not vehicle IDs, as primary identifiers)
+**Plans**: TBD
+
+### Phase 21: Dashboard Settings and Cache Management
+**Goal**: Office staff can manage the Google Maps API key, review upload history, and inspect/export/import the geocode cache -- all from the dashboard
+**Depends on**: Phase 16
+**Requirements**: SET-01, SET-02, SET-03, SET-04, SET-05, SET-06
+**Success Criteria** (what must be TRUE):
+  1. User can enter or update the Google Maps API key on the Settings page, and it is stored server-side with only a masked version (e.g., "AIza...****1234") visible in the UI
+  2. User can view upload history showing date, filename, driver count, and order count for each past upload
+  3. User can view geocode cache statistics (total cached addresses, API calls made, estimated cost) on the Settings page
+  4. User can export the entire geocode cache to a JSON file and import a cache JSON file from another machine
+**Plans**: TBD
+
+### Phase 22: Google Routes Validation
+**Goal**: Users can manually compare a generated route against Google Routes API to assess OSRM routing accuracy, with clear cost transparency before each call
+**Depends on**: Phase 19
+**Requirements**: VAL-01, VAL-02, VAL-03, VAL-04
+**Success Criteria** (what must be TRUE):
+  1. User can click a "Validate with Google" button on a route card to trigger a Google Routes API comparison for that route
+  2. After validation, the route card shows a side-by-side comparison of VROOM/OSRM vs Google distance and time, with a confidence indicator (green/amber/red based on delta percentage)
+  3. Before the Google API call is made, a cost warning is displayed showing the estimated cost of the validation request
+  4. Google Routes validation is never triggered automatically -- it only runs when the user explicitly clicks the validate button
+**Plans**: TBD
+
 ## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -147,6 +241,13 @@
 | 13. Geocode Validation and Fallback Chain | v2.2 | 3/3 | Complete | 2026-03-12 |
 | 14. API Confidence Fields and Driver PWA Badge | v2.2 | 2/2 | Complete | 2026-03-12 |
 | 15. Integration Testing and Accuracy Metrics | v2.2 | 2/2 | Complete | 2026-03-12 |
+| 16. Driver Database Foundation | v3.0 | 0/TBD | Not started | - |
+| 17. CSV Upload and XLSX Detection | v3.0 | 0/TBD | Not started | - |
+| 18. Address Preprocessing Fixes | v3.0 | 0/TBD | Not started | - |
+| 19. Per-Driver TSP Optimization | v3.0 | 0/TBD | Not started | - |
+| 20. UI Terminology Rename | v3.0 | 0/TBD | Not started | - |
+| 21. Dashboard Settings and Cache Management | v3.0 | 0/TBD | Not started | - |
+| 22. Google Routes Validation | v3.0 | 0/TBD | Not started | - |
 
 ---
-*Full phase details archived in `.planning/milestones/`*
+*Full phase details for v1.x and v2.x archived in `.planning/milestones/`*

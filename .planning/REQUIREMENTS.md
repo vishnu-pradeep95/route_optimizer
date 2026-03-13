@@ -1,7 +1,7 @@
 # Requirements: Kerala LPG Delivery Route Optimizer
 
 **Defined:** 2026-03-12
-**Core Value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route — no silent drops, no missing stops.
+**Core Value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
 
 ## v3.0 Requirements
 
@@ -87,10 +87,10 @@ Deferred to stage two or future milestones.
 
 | Feature | Reason |
 |---------|--------|
-| Drag-and-drop route reordering | Undermines VROOM optimizer — established out-of-scope |
+| Drag-and-drop route reordering | Undermines VROOM optimizer -- established out-of-scope |
 | Cross-driver route reassignment (CVRP) | Replaced by per-driver TSP per business requirements |
 | Driver vehicle assignment management | Drivers identified by name only, no vehicle tracking this milestone |
-| Automatic Google Routes validation | Cost risk — must be user-triggered only |
+| Automatic Google Routes validation | Cost risk -- must be user-triggered only |
 | API field name renames (vehicle_id → driver_id) | Would break Driver PWA and existing QR codes |
 | Real-time route tracking | Out of scope for dashboard-focused milestone |
 
@@ -100,47 +100,47 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DRV-01 | Pending | Pending |
-| DRV-02 | Pending | Pending |
-| DRV-03 | Pending | Pending |
-| DRV-04 | Pending | Pending |
-| DRV-05 | Pending | Pending |
-| DRV-06 | Pending | Pending |
-| DRV-07 | Pending | Pending |
-| OPT-01 | Pending | Pending |
-| OPT-02 | Pending | Pending |
-| OPT-03 | Pending | Pending |
-| OPT-04 | Pending | Pending |
-| OPT-05 | Pending | Pending |
-| CSV-01 | Pending | Pending |
-| CSV-02 | Pending | Pending |
-| CSV-03 | Pending | Pending |
-| CSV-04 | Pending | Pending |
-| CSV-05 | Pending | Pending |
-| ADDR-01 | Pending | Pending |
-| ADDR-02 | Pending | Pending |
-| ADDR-03 | Pending | Pending |
-| ADDR-04 | Pending | Pending |
-| ADDR-05 | Pending | Pending |
-| VAL-01 | Pending | Pending |
-| VAL-02 | Pending | Pending |
-| VAL-03 | Pending | Pending |
-| VAL-04 | Pending | Pending |
-| SET-01 | Pending | Pending |
-| SET-02 | Pending | Pending |
-| SET-03 | Pending | Pending |
-| SET-04 | Pending | Pending |
-| SET-05 | Pending | Pending |
-| SET-06 | Pending | Pending |
-| UI-01 | Pending | Pending |
-| UI-02 | Pending | Pending |
-| UI-03 | Pending | Pending |
+| DRV-01 | Phase 16 | Pending |
+| DRV-02 | Phase 16 | Pending |
+| DRV-03 | Phase 16 | Pending |
+| DRV-04 | Phase 16 | Pending |
+| DRV-05 | Phase 16 | Pending |
+| DRV-06 | Phase 16 | Pending |
+| DRV-07 | Phase 16 | Pending |
+| OPT-01 | Phase 19 | Pending |
+| OPT-02 | Phase 19 | Pending |
+| OPT-03 | Phase 19 | Pending |
+| OPT-04 | Phase 19 | Pending |
+| OPT-05 | Phase 19 | Pending |
+| CSV-01 | Phase 17 | Pending |
+| CSV-02 | Phase 17 | Pending |
+| CSV-03 | Phase 17 | Pending |
+| CSV-04 | Phase 17 | Pending |
+| CSV-05 | Phase 17 | Pending |
+| ADDR-01 | Phase 18 | Pending |
+| ADDR-02 | Phase 18 | Pending |
+| ADDR-03 | Phase 18 | Pending |
+| ADDR-04 | Phase 18 | Pending |
+| ADDR-05 | Phase 18 | Pending |
+| VAL-01 | Phase 22 | Pending |
+| VAL-02 | Phase 22 | Pending |
+| VAL-03 | Phase 22 | Pending |
+| VAL-04 | Phase 22 | Pending |
+| SET-01 | Phase 21 | Pending |
+| SET-02 | Phase 21 | Pending |
+| SET-03 | Phase 21 | Pending |
+| SET-04 | Phase 21 | Pending |
+| SET-05 | Phase 21 | Pending |
+| SET-06 | Phase 21 | Pending |
+| UI-01 | Phase 20 | Pending |
+| UI-02 | Phase 20 | Pending |
+| UI-03 | Phase 20 | Pending |
 
 **Coverage:**
 - v3.0 requirements: 35 total
-- Mapped to phases: 0
-- Unmapped: 35 ⚠️
+- Mapped to phases: 35
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-12*
-*Last updated: 2026-03-12 after initial definition*
+*Last updated: 2026-03-12 after roadmap creation (all 35 requirements mapped to phases 16-22)*
