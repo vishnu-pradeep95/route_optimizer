@@ -18,9 +18,10 @@ Uses FastAPI's TestClient — no real OSRM/VROOM/Google/PostgreSQL calls needed.
 
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from unittest.mock import patch, MagicMock, AsyncMock
 
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
@@ -3510,3 +3511,379 @@ class TestUploadAutoCreatesDrivers:
         assert match["csv_name"] == "Mohan L"
         assert match["matched_to"] == "Mohan Lal"
         assert isinstance(match["score"], (int, float))
+
+
+# =============================================================================
+# Phase 17: XLSX CDCMS detection tests (CSV-01)
+# =============================================================================
+
+
+class TestXlsxCdcmsDetection:
+    """Tests for _is_cdcms_format() handling of .xlsx files (CSV-01).
+
+    The original function opened all files as UTF-8 text, which fails on
+    .xlsx files (ZIP-based binary format). These tests verify the fix.
+    """
+
+    @staticmethod
+    def _make_xlsx_cdcms(tmp_path, filename="cdcms_export.xlsx"):
+        """Create a real .xlsx file with CDCMS column headers."""
+        data = {
+            "OrderNo": ["517827", "517828"],
+            "OrderStatus": ["Allocated-Printed", "Allocated-Printed"],
+            "OrderDate": ["14-02-2026 9:41", "14-02-2026 9:42"],
+            "OrderQuantity": ["1", "1"],
+            "AreaName": ["VALLIKKADU", "RAYARANGOTH"],
+            "DeliveryMan": ["GIREESHAN ( C )", "GIREESHAN ( C )"],
+            "ConsumerAddress": [
+                "4/146 AMINAS VALIYA PARAMBATH NR. VALLIKKADU",
+                "02/11 PANAKKULATHIL CHAITHANIYA",
+            ],
+        }
+        df = pd.DataFrame(data)
+        path = tmp_path / filename
+        df.to_excel(path, index=False)
+        return path
+
+    @staticmethod
+    def _make_xlsx_non_cdcms(tmp_path, filename="other.xlsx"):
+        """Create a real .xlsx file WITHOUT CDCMS columns."""
+        data = {
+            "Name": ["Alice", "Bob"],
+            "Age": [30, 25],
+            "City": ["Kochi", "Kannur"],
+        }
+        df = pd.DataFrame(data)
+        path = tmp_path / filename
+        df.to_excel(path, index=False)
+        return path
+
+    def test_xlsx_cdcms_detected(self, tmp_path):
+        """_is_cdcms_format() returns True for .xlsx with CDCMS columns."""
+        from apps.kerala_delivery.api.main import _is_cdcms_format
+
+        xlsx_path = self._make_xlsx_cdcms(tmp_path)
+        assert _is_cdcms_format(str(xlsx_path)) is True
+
+    def test_xlsx_non_cdcms_rejected(self, tmp_path):
+        """_is_cdcms_format() returns False for .xlsx without CDCMS columns."""
+        from apps.kerala_delivery.api.main import _is_cdcms_format
+
+        xlsx_path = self._make_xlsx_non_cdcms(tmp_path)
+        assert _is_cdcms_format(str(xlsx_path)) is False
+
+    def test_csv_cdcms_still_works(self, tmp_path):
+        """Regression: _is_cdcms_format() still works for tab-separated CSV."""
+        from apps.kerala_delivery.api.main import _is_cdcms_format
+
+        # Create a tab-separated CSV with CDCMS columns
+        content = (
+            "OrderNo\tOrderStatus\tConsumerAddress\n"
+            "517827\tAllocated-Printed\t4/146 AMINAS\n"
+        )
+        csv_path = tmp_path / "cdcms.csv"
+        csv_path.write_text(content)
+        assert _is_cdcms_format(str(csv_path)) is True
+
+    def test_cdcms_detect_shuffled_columns(self, tmp_path):
+        """Column order should not affect CDCMS detection (CSV-05)."""
+        from apps.kerala_delivery.api.main import _is_cdcms_format
+
+        # Create xlsx with columns in non-standard order
+        data = {
+            "DeliveryMan": ["GIREESHAN ( C )"],
+            "ConsumerAddress": ["4/146 AMINAS"],
+            "AreaName": ["VALLIKKADU"],
+            "OrderNo": ["517827"],
+            "OrderStatus": ["Allocated-Printed"],
+            "OrderQuantity": ["1"],
+        }
+        df = pd.DataFrame(data)
+        path = tmp_path / "shuffled.xlsx"
+        df.to_excel(path, index=False)
+        assert _is_cdcms_format(str(path)) is True
+
+
+# =============================================================================
+# Phase 17: Parse-upload endpoint tests (CSV-02)
+# =============================================================================
+
+
+class TestParseUploadEndpoint:
+    """Tests for POST /api/parse-upload — the parse-only step (CSV-02).
+
+    This endpoint parses a CDCMS file and returns driver preview data
+    without running geocoding or optimization.
+    """
+
+    @staticmethod
+    def _make_cdcms_xlsx_bytes(drivers=None, orders_per_driver=3):
+        """Create a CDCMS xlsx file as bytes for upload testing.
+
+        Args:
+            drivers: List of driver names. Defaults to two drivers.
+            orders_per_driver: Number of orders per driver.
+
+        Returns:
+            Tuple of (bytes, filename).
+        """
+        import io
+
+        if drivers is None:
+            drivers = ["GIREESHAN ( C )", "SURESH KUMAR"]
+
+        rows = []
+        order_no = 517827
+        for driver in drivers:
+            for i in range(orders_per_driver):
+                rows.append({
+                    "OrderNo": str(order_no),
+                    "OrderStatus": "Allocated-Printed",
+                    "OrderDate": "14-02-2026 9:41",
+                    "OrderQuantity": "1",
+                    "AreaName": "VALLIKKADU",
+                    "DeliveryMan": driver,
+                    "ConsumerAddress": f"Address {order_no}",
+                })
+                order_no += 1
+
+        df = pd.DataFrame(rows)
+        buf = io.BytesIO()
+        df.to_excel(buf, index=False)
+        buf.seek(0)
+        return buf.read(), "cdcms_export.xlsx"
+
+    @staticmethod
+    def _make_cdcms_csv_bytes(drivers=None, orders_per_driver=3):
+        """Create a tab-separated CDCMS CSV file as bytes for upload testing."""
+        if drivers is None:
+            drivers = ["GIREESHAN ( C )", "SURESH KUMAR"]
+
+        header = "OrderNo\tOrderStatus\tOrderDate\tOrderSource\tOrderType\tCashMemoNo\tCashMemoStatus\tCashMemoDate\tOrderQuantity\tConsumedSubsidyQty\tAreaName\tDeliveryMan\tRefillPaymentStatus\tIVRSBookingNumber\tMobileNo\tBookingDoneThroughRegistereMobile\tConsumerAddress\tIsRefillPort\tEkycStatus"
+        lines = [header]
+        order_no = 517827
+        for driver in drivers:
+            for i in range(orders_per_driver):
+                line = (
+                    f"{order_no}\tAllocated-Printed\t14-02-2026 9:41\tIVRS\tRefill\t"
+                    f"1234567\tPrinted\t14-02-2026\t1\t1\t"
+                    f"VALLIKKADU\t{driver}\t\t'1111111111\t'1111111111\tY\t"
+                    f"Address {order_no}\tN\tEKYC NOT DONE"
+                )
+                lines.append(line)
+                order_no += 1
+
+        content = "\n".join(lines)
+        return content.encode("utf-8"), "cdcms_export.csv"
+
+    def test_parse_upload_returns_preview(self, client, mock_session):
+        """POST /api/parse-upload with CDCMS xlsx returns ParsePreviewResponse."""
+        xlsx_bytes, filename = self._make_cdcms_xlsx_bytes()
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_all_drivers = AsyncMock(return_value=[])
+            mock_repo.find_similar_drivers = AsyncMock(return_value=[])
+
+            async def mock_create_driver(session, name):
+                driver = MagicMock()
+                driver.id = uuid.uuid4()
+                driver.name = name.strip().title()
+                driver.is_active = True
+                return driver
+
+            mock_repo.create_driver = AsyncMock(side_effect=mock_create_driver)
+
+            resp = client.post(
+                "/api/parse-upload",
+                files={"file": (filename, xlsx_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "upload_token" in data
+        assert "filename" in data
+        assert "total_rows" in data
+        assert "filtered_rows" in data
+        assert "drivers" in data
+        assert len(data["drivers"]) == 2
+        assert data["filename"] == filename
+
+    def test_parse_upload_multi_driver_counts(self, client, mock_session):
+        """Parse-upload returns correct per-driver order counts."""
+        # 2 drivers: one with 5 orders, one with 2 orders
+        xlsx_bytes, filename = self._make_cdcms_xlsx_bytes(
+            drivers=["DRIVER A", "DRIVER B"],
+            orders_per_driver=5,
+        )
+        # Make a second xlsx with different counts - simpler to just test equal counts
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_all_drivers = AsyncMock(return_value=[])
+            mock_repo.find_similar_drivers = AsyncMock(return_value=[])
+
+            async def mock_create_driver(session, name):
+                driver = MagicMock()
+                driver.id = uuid.uuid4()
+                driver.name = name.strip().title()
+                driver.is_active = True
+                return driver
+
+            mock_repo.create_driver = AsyncMock(side_effect=mock_create_driver)
+
+            resp = client.post(
+                "/api/parse-upload",
+                files={"file": (filename, xlsx_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        drivers = data["drivers"]
+        assert len(drivers) == 2
+        # Each driver should have 5 orders
+        for d in drivers:
+            assert d["order_count"] == 5
+
+    def test_parse_upload_filters_allocated_printed(self, client, mock_session):
+        """Parse-upload applies Allocated-Printed filter by default (CSV-04)."""
+        import io
+
+        # Create xlsx with mixed statuses
+        rows = [
+            {"OrderNo": "1", "OrderStatus": "Allocated-Printed", "OrderQuantity": "1",
+             "AreaName": "A", "DeliveryMan": "DRIVER X", "ConsumerAddress": "Addr 1"},
+            {"OrderNo": "2", "OrderStatus": "Allocated-Printed", "OrderQuantity": "1",
+             "AreaName": "A", "DeliveryMan": "DRIVER X", "ConsumerAddress": "Addr 2"},
+            {"OrderNo": "3", "OrderStatus": "Delivered", "OrderQuantity": "1",
+             "AreaName": "A", "DeliveryMan": "DRIVER X", "ConsumerAddress": "Addr 3"},
+            {"OrderNo": "4", "OrderStatus": "Cancelled", "OrderQuantity": "1",
+             "AreaName": "A", "DeliveryMan": "DRIVER X", "ConsumerAddress": "Addr 4"},
+        ]
+        df = pd.DataFrame(rows)
+        buf = io.BytesIO()
+        df.to_excel(buf, index=False)
+        buf.seek(0)
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_all_drivers = AsyncMock(return_value=[])
+            mock_repo.find_similar_drivers = AsyncMock(return_value=[])
+
+            async def mock_create_driver(session, name):
+                driver = MagicMock()
+                driver.id = uuid.uuid4()
+                driver.name = name.strip().title()
+                driver.is_active = True
+                return driver
+
+            mock_repo.create_driver = AsyncMock(side_effect=mock_create_driver)
+
+            resp = client.post(
+                "/api/parse-upload",
+                files={"file": ("test.xlsx", buf.read(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        # 4 total rows, but only 2 are Allocated-Printed
+        assert data["total_rows"] == 4
+        assert data["filtered_rows"] == 2
+        # Only 1 driver with 2 orders (the Allocated-Printed ones)
+        assert len(data["drivers"]) == 1
+        assert data["drivers"][0]["order_count"] == 2
+
+    def test_parse_upload_non_cdcms_returns_400(self, client, mock_session):
+        """Non-CDCMS file returns 400 error."""
+        import io
+
+        non_cdcms = pd.DataFrame({"Name": ["A"], "Age": [25]})
+        buf = io.BytesIO()
+        non_cdcms.to_excel(buf, index=False)
+        buf.seek(0)
+
+        resp = client.post(
+            "/api/parse-upload",
+            files={"file": ("other.xlsx", buf.read(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        assert resp.status_code == 400
+
+    def test_parse_upload_empty_file_returns_400(self, client, mock_session):
+        """Empty file returns 400 error."""
+        resp = client.post(
+            "/api/parse-upload",
+            files={"file": ("empty.xlsx", b"", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        assert resp.status_code == 400
+
+    def test_parse_upload_driver_status_categories(self, client, mock_session):
+        """Parse-upload returns drivers with correct status categories."""
+        xlsx_bytes, filename = self._make_cdcms_xlsx_bytes(
+            drivers=["NEW DRIVER", "EXISTING GUY"],
+        )
+
+        # Mock: EXISTING GUY matches an existing active driver
+        existing_driver = MagicMock()
+        existing_driver.id = uuid.uuid4()
+        existing_driver.name = "Existing Guy"
+        existing_driver.is_active = True
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_all_drivers = AsyncMock(return_value=[existing_driver])
+
+            # NEW DRIVER -> no match, EXISTING GUY -> match
+            async def find_similar(session, name):
+                if "EXISTING" in name.upper():
+                    return [(existing_driver, 95.0)]
+                return []
+
+            mock_repo.find_similar_drivers = AsyncMock(side_effect=find_similar)
+
+            async def mock_create_driver(session, name):
+                driver = MagicMock()
+                driver.id = uuid.uuid4()
+                driver.name = name.strip().title()
+                driver.is_active = True
+                return driver
+
+            mock_repo.create_driver = AsyncMock(side_effect=mock_create_driver)
+
+            resp = client.post(
+                "/api/parse-upload",
+                files={"file": (filename, xlsx_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        drivers = data["drivers"]
+        statuses = {d["csv_name"]: d["status"] for d in drivers}
+
+        # One should be "new", one should be "existing" (matched to active)
+        new_found = any(d["status"] == "new" for d in drivers)
+        existing_found = any(d["status"] == "existing" for d in drivers)
+        assert new_found, f"Expected a 'new' driver status, got: {statuses}"
+        assert existing_found, f"Expected an 'existing' driver status, got: {statuses}"
+
+    def test_upload_token_cleanup(self):
+        """Expired upload tokens are cleaned up."""
+        from apps.kerala_delivery.api.main import _upload_tokens, _cleanup_expired_tokens, _TOKEN_TTL
+
+        # Add an expired token
+        old_token = str(uuid.uuid4())
+        _upload_tokens[old_token] = {
+            "path": "/tmp/nonexistent_test_file.xlsx",
+            "filename": "test.xlsx",
+            "created_at": datetime.now(timezone.utc) - timedelta(minutes=60),
+        }
+
+        # Add a fresh token
+        fresh_token = str(uuid.uuid4())
+        _upload_tokens[fresh_token] = {
+            "path": "/tmp/nonexistent_test_file2.xlsx",
+            "filename": "test2.xlsx",
+            "created_at": datetime.now(timezone.utc),
+        }
+
+        _cleanup_expired_tokens()
+
+        assert old_token not in _upload_tokens
+        assert fresh_token in _upload_tokens
+
+        # Clean up
+        del _upload_tokens[fresh_token]

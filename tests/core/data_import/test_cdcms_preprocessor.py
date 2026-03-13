@@ -710,3 +710,85 @@ class TestDictionaryCoverage:
             f"Dictionary coverage is {coverage:.0f}% ({covered}/{len(area_names)} areas). "
             f"Must be >= 80%. Missing: {area_names - dict_names}"
         )
+
+
+# =============================================================================
+# Phase 17: Column order independence (CSV-05)
+# =============================================================================
+
+
+class TestColumnOrderIndependence:
+    """Tests verifying that column order does not affect CDCMS parsing (CSV-05).
+
+    CDCMS detection and preprocessing should match columns by name,
+    not position. This ensures files with shuffled column order still work.
+    """
+
+    def test_shuffled_column_order_still_parses(self, tmp_path):
+        """CDCMS file with shuffled columns should preprocess correctly."""
+        # Create a CDCMS file with columns in non-standard order
+        # Standard order starts with OrderNo, but here we shuffle
+        header = (
+            "DeliveryMan\tConsumerAddress\tAreaName\tOrderNo\tOrderStatus\t"
+            "OrderDate\tOrderSource\tOrderType\tCashMemoNo\tCashMemoStatus\t"
+            "CashMemoDate\tOrderQuantity\tConsumedSubsidyQty\tRefillPaymentStatus\t"
+            "IVRSBookingNumber\tMobileNo\tBookingDoneThroughRegistereMobile\t"
+            "IsRefillPort\tEkycStatus"
+        )
+        row = (
+            "GIREESHAN ( C )\t4/146 AMINAS VALIYA PARAMBATH\tVALLIKKADU\t517827\t"
+            "Allocated-Printed\t14-02-2026 9:41\tIVRS\tRefill\t1234567\tPrinted\t"
+            "14-02-2026\t1\t1\t\t'1111111111\t'1111111111\tY\tN\tEKYC NOT DONE"
+        )
+        content = f"{header}\n{row}\n"
+        filepath = tmp_path / "shuffled_cdcms.csv"
+        filepath.write_text(content)
+
+        df = preprocess_cdcms(filepath, area_suffix="")
+        assert len(df) == 1
+        assert df.iloc[0]["order_id"] == "517827"
+        assert "Aminas" in df.iloc[0]["address"] or "aminas" in df.iloc[0]["address"].lower()
+
+    def test_shuffled_xlsx_column_order(self, tmp_path):
+        """CDCMS xlsx file with shuffled columns should preprocess correctly."""
+        data = {
+            "DeliveryMan": ["GIREESHAN ( C )"],
+            "ConsumerAddress": ["4/146 AMINAS VALIYA PARAMBATH"],
+            "AreaName": ["VALLIKKADU"],
+            "OrderNo": ["517827"],
+            "OrderStatus": ["Allocated-Printed"],
+            "OrderQuantity": ["1"],
+        }
+        df = pd.DataFrame(data)
+        filepath = tmp_path / "shuffled_cdcms.xlsx"
+        df.to_excel(filepath, index=False)
+
+        result_df = preprocess_cdcms(filepath, area_suffix="")
+        assert len(result_df) == 1
+        assert result_df.iloc[0]["order_id"] == "517827"
+
+
+# =============================================================================
+# Phase 17: Allocated-Printed default filter verification (CSV-04)
+# =============================================================================
+
+
+class TestAllocatedPrintedDefaultFilter:
+    """Verify the Allocated-Printed filter is applied by default (CSV-04).
+
+    The preprocess_cdcms() function should filter to Allocated-Printed
+    status by default, excluding Delivered, Cancelled, and other statuses.
+    """
+
+    def test_default_filter_excludes_non_allocated_printed(self, cdcms_mixed_status_file):
+        """Default call to preprocess_cdcms should only keep Allocated-Printed rows."""
+        df = preprocess_cdcms(cdcms_mixed_status_file, area_suffix="")
+        # cdcms_mixed_status_file has 2 Allocated-Printed, 1 Delivered, 1 Cancelled
+        assert len(df) == 2
+
+    def test_allocated_printed_is_default_parameter(self):
+        """Verify the default filter_status parameter is 'Allocated-Printed'."""
+        import inspect
+        sig = inspect.signature(preprocess_cdcms)
+        filter_status_param = sig.parameters["filter_status"]
+        assert filter_status_param.default == "Allocated-Printed"
