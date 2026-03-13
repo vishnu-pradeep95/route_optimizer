@@ -2142,6 +2142,13 @@ class TestCdcmsAutoDetection:
             mock_repo.vehicle_db_to_pydantic.return_value = MOCK_VEHICLE
             mock_repo.save_optimization_run = AsyncMock(return_value=mock_run_id)
 
+            # Phase 16: Mock driver auto-creation (CDCMS uploads trigger this)
+            mock_repo.get_all_drivers = AsyncMock(return_value=[])
+            mock_repo.find_similar_drivers = AsyncMock(return_value=[])
+            mock_repo.create_driver = AsyncMock(return_value=MagicMock(
+                id=uuid.uuid4(), name="Driver1", is_active=True,
+            ))
+
             # Mock geocoder to return a valid location
             mock_geocoder = MagicMock()
             mock_geocoder.geocode.return_value = MagicMock(

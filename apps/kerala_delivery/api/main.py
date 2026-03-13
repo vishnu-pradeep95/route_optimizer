@@ -746,6 +746,15 @@ class OptimizationSummary(BaseModel):
         description="Groups of orders with suspiciously close GPS coordinates",
     )
 
+    # Phase 16: Driver auto-creation summary from CSV DeliveryMan column
+    drivers: dict | None = Field(
+        default=None,
+        description="Driver auto-creation summary from CSV upload. "
+        "Shape: {new_drivers: [str], matched_drivers: [{csv_name, matched_to, score}], "
+        "reactivated_drivers: [str], existing_drivers: [str]}. "
+        "None for non-CDCMS uploads.",
+    )
+
 
 # =============================================================================
 # API Endpoints
@@ -833,6 +842,88 @@ async def get_app_config():
         safety_multiplier=config.SAFETY_MULTIPLIER,
         office_phone_number=config.OFFICE_PHONE_NUMBER,
     )
+
+
+async def auto_create_drivers_from_csv(
+    session: AsyncSession,
+    preprocessed_df: "pd.DataFrame",
+) -> dict:
+    """Auto-create drivers from CSV DeliveryMan column.
+
+    For each unique delivery_man in the DataFrame:
+    1. Fuzzy-match against ALL existing drivers (including deactivated)
+       using the snapshot taken BEFORE processing starts.
+    2. If match found and active: record as "existing"
+    3. If match found and inactive: reactivate, record as "reactivated"
+    4. If no match: create new driver, record as "new"
+
+    CRITICAL: Do NOT merge intra-CSV name variations. Process each unique
+    name independently against the EXISTING driver database at the start.
+    New drivers created from this CSV are NOT used as match targets for
+    other names in the same CSV.
+
+    Args:
+        session: Async DB session.
+        preprocessed_df: CDCMS preprocessed DataFrame with delivery_man column.
+
+    Returns:
+        Dict with new_drivers, matched_drivers, reactivated_drivers, existing_drivers.
+    """
+    import pandas as pd
+
+    if "delivery_man" not in preprocessed_df.columns:
+        return None
+
+    # Extract unique delivery_man values, dropping NaN/empty
+    unique_names = (
+        preprocessed_df["delivery_man"]
+        .dropna()
+        .str.strip()
+        .loc[lambda s: s != ""]
+        .unique()
+        .tolist()
+    )
+
+    if not unique_names:
+        return None
+
+    # Take a snapshot of existing drivers BEFORE processing
+    # so intra-CSV names don't match each other
+    existing_drivers_snapshot = await repo.get_all_drivers(session)
+
+    new_drivers: list[str] = []
+    matched_drivers: list[dict] = []
+    reactivated_drivers: list[str] = []
+    existing_drivers: list[str] = []
+
+    for csv_name in unique_names:
+        # Find fuzzy matches against the pre-existing snapshot only
+        matches = await repo.find_similar_drivers(session, csv_name)
+
+        if matches:
+            best_match, score = matches[0]
+            if best_match.is_active:
+                existing_drivers.append(best_match.name)
+                matched_drivers.append({
+                    "csv_name": csv_name.strip().title(),
+                    "matched_to": best_match.name,
+                    "score": score,
+                })
+            else:
+                # Reactivate deactivated driver
+                await repo.reactivate_driver(session, best_match.id)
+                reactivated_drivers.append(best_match.name)
+        else:
+            # No match -- create new driver
+            driver = await repo.create_driver(session, csv_name)
+            new_drivers.append(driver.name)
+
+    return {
+        "new_drivers": new_drivers,
+        "matched_drivers": matched_drivers,
+        "reactivated_drivers": reactivated_drivers,
+        "existing_drivers": existing_drivers,
+    }
 
 
 @app.post("/api/upload-orders", response_model=OptimizationSummary, dependencies=[Depends(verify_api_key)])
@@ -975,6 +1066,14 @@ async def upload_and_optimize(
                 )
             )
 
+        # Phase 16: Auto-create drivers from CDCMS DeliveryMan column.
+        # This runs early in the pipeline (before geocoding) so drivers are
+        # created even if geocoding fails for some orders. For non-CDCMS uploads,
+        # driver_summary stays None (backward compatible).
+        driver_summary = None
+        if is_cdcms and not preprocessed_df.empty:
+            driver_summary = await auto_create_drivers_from_csv(session, preprocessed_df)
+
         # Step 1a: Convert ImportResult errors/warnings to ImportFailure lists.
         # These track validation-stage failures (bad CSV data caught before geocoding).
         # Geocoding failures are collected separately in step 2 below.
@@ -1028,6 +1127,7 @@ async def upload_and_optimize(
                     free_tier_note="",
                     per_order_geocode_source={},
                     duplicate_warnings=[],
+                    drivers=driver_summary,
                 )
             # Genuinely empty file (no rows at all, no errors) — this is a user error
             return error_response(
@@ -1300,6 +1400,7 @@ async def upload_and_optimize(
                 free_tier_note=free_tier_note,
                 per_order_geocode_source=per_order_source,
                 duplicate_warnings=[],  # No geocoded orders, so no duplicates
+                drivers=driver_summary,
             )
 
         # Step 3: Build fleet and optimize
@@ -1374,6 +1475,8 @@ async def upload_and_optimize(
             per_order_geocode_source=per_order_source,
             # GEO-03: Duplicate location warnings
             duplicate_warnings=duplicate_warnings_list,
+            # Phase 16: Driver auto-creation summary
+            drivers=driver_summary,
         )
 
     except ValueError as e:
