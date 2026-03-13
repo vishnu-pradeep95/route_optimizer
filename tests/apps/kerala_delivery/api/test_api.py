@@ -2852,3 +2852,218 @@ class TestAddressRawApiField:
         assert stop["address_raw"] is None, (
             f"address_raw should be null for pre-v2.2 data but got: {stop['address_raw']}"
         )
+
+
+# =============================================================================
+# Driver Management Tests (Phase 16)
+# =============================================================================
+
+
+class TestDriverManagement:
+    """Tests for the driver management CRUD endpoints.
+
+    Operators use these endpoints to view, add, edit, and deactivate drivers.
+    Drivers are standalone entities (not vehicle accessories) with fuzzy
+    name matching to prevent duplicates.
+    """
+
+    def _mock_driver(self, **overrides):
+        """Create a mock DriverDB object with sensible defaults."""
+        from core.database.models import DriverDB
+
+        defaults = {
+            "id": uuid.uuid4(),
+            "name": "Suresh Kumar",
+            "name_normalized": "SURESH KUMAR",
+            "is_active": True,
+            "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            "updated_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+        }
+        defaults.update(overrides)
+        return MagicMock(spec=DriverDB, **defaults)
+
+    def test_list_drivers_returns_all(self, client):
+        """GET /api/drivers returns all drivers with route counts."""
+        driver1 = self._mock_driver(name="Suresh Kumar", is_active=True)
+        driver2 = self._mock_driver(name="Rajesh P", is_active=False)
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_all_drivers = AsyncMock(return_value=[driver1, driver2])
+            mock_repo.get_driver_route_counts = AsyncMock(
+                return_value={driver1.id: 5, driver2.id: 0}
+            )
+            resp = client.get("/api/drivers")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] == 2
+        assert len(data["drivers"]) == 2
+        # Verify driver shape
+        d = data["drivers"][0]
+        assert "id" in d
+        assert "name" in d
+        assert "is_active" in d
+        assert "route_count" in d
+        assert "created_at" in d
+        assert "updated_at" in d
+
+    def test_list_drivers_active_only(self, client):
+        """GET /api/drivers?active_only=true returns only active drivers."""
+        active_driver = self._mock_driver(name="Suresh Kumar", is_active=True)
+
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_all_drivers = AsyncMock(return_value=[active_driver])
+            mock_repo.get_driver_route_counts = AsyncMock(
+                return_value={active_driver.id: 3}
+            )
+            resp = client.get("/api/drivers?active_only=true")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] == 1
+        mock_repo.get_all_drivers.assert_called_once()
+
+    def test_check_driver_name_returns_similar(self, client):
+        """GET /api/drivers/check-name?name=SURESH returns similar drivers."""
+        similar_driver = self._mock_driver(name="Suresh Kumar")
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.find_similar_drivers = AsyncMock(
+                return_value=[(similar_driver, 88.0)]
+            )
+            resp = client.get("/api/drivers/check-name?name=SURESH")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "similar_drivers" in data
+        assert len(data["similar_drivers"]) == 1
+        match = data["similar_drivers"][0]
+        assert "id" in match
+        assert "name" in match
+        assert "score" in match
+        assert "is_active" in match
+
+    def test_create_driver_success(self, client):
+        """POST /api/drivers with {name: "suresh kumar"} returns 201."""
+        created_driver = self._mock_driver(name="Suresh Kumar")
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.find_similar_drivers = AsyncMock(return_value=[])
+            mock_repo.create_driver = AsyncMock(return_value=created_driver)
+            resp = client.post("/api/drivers", json={"name": "suresh kumar"})
+
+        assert resp.status_code == 201
+        data = resp.json()
+        assert "driver" in data
+        assert data["driver"]["name"] == "Suresh Kumar"
+        assert "similar_drivers" in data
+        assert data["message"] == "Driver created"
+
+    def test_create_driver_with_similar_matches(self, client):
+        """POST /api/drivers returns created driver AND similar_drivers info."""
+        similar = self._mock_driver(name="Suresh K")
+        created = self._mock_driver(name="Suresh Kumar")
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.find_similar_drivers = AsyncMock(
+                return_value=[(similar, 87.5)]
+            )
+            mock_repo.create_driver = AsyncMock(return_value=created)
+            resp = client.post("/api/drivers", json={"name": "suresh kumar"})
+
+        assert resp.status_code == 201
+        data = resp.json()
+        assert len(data["similar_drivers"]) == 1
+        assert data["similar_drivers"][0]["score"] == 87.5
+
+    def test_create_driver_empty_name_returns_422(self, client):
+        """POST /api/drivers with empty name returns 422 (Pydantic validation)."""
+        resp = client.post("/api/drivers", json={"name": ""})
+        assert resp.status_code == 422
+
+    def test_update_driver_name_success(self, client):
+        """PUT /api/drivers/{id} with {name: "new name"} returns 200."""
+        driver_id = str(uuid.uuid4())
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.update_driver_name = AsyncMock(return_value=True)
+            mock_repo.find_similar_drivers = AsyncMock(return_value=[])
+            resp = client.put(
+                f"/api/drivers/{driver_id}",
+                json={"name": "new name"},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "updated" in data["message"].lower()
+        assert "similar_drivers" in data
+
+    def test_update_driver_not_found(self, client):
+        """PUT /api/drivers/{id} on non-existent returns 404."""
+        driver_id = str(uuid.uuid4())
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.update_driver_name = AsyncMock(return_value=False)
+            mock_repo.get_driver_by_id = AsyncMock(return_value=None)
+            resp = client.put(
+                f"/api/drivers/{driver_id}",
+                json={"name": "new name"},
+            )
+
+        assert resp.status_code == 404
+
+    def test_update_driver_reactivate(self, client):
+        """PUT /api/drivers/{id} with {is_active: true} reactivates."""
+        driver_id = str(uuid.uuid4())
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.get_driver_by_id = AsyncMock(
+                return_value=self._mock_driver(is_active=False)
+            )
+            mock_repo.reactivate_driver = AsyncMock(return_value=True)
+            resp = client.put(
+                f"/api/drivers/{driver_id}",
+                json={"is_active": True},
+            )
+
+        assert resp.status_code == 200
+
+    def test_delete_driver_success(self, client):
+        """DELETE /api/drivers/{id} returns 200, driver becomes inactive."""
+        driver_id = str(uuid.uuid4())
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.deactivate_driver = AsyncMock(return_value=True)
+            resp = client.delete(f"/api/drivers/{driver_id}")
+
+        assert resp.status_code == 200
+        assert "deactivated" in resp.json()["message"].lower()
+
+    def test_delete_driver_not_found(self, client):
+        """DELETE /api/drivers/{id} on non-existent returns 404."""
+        driver_id = str(uuid.uuid4())
+        with patch("apps.kerala_delivery.api.main.repo") as mock_repo:
+            mock_repo.deactivate_driver = AsyncMock(return_value=False)
+            resp = client.delete(f"/api/drivers/{driver_id}")
+
+        assert resp.status_code == 404
+
+    def test_create_driver_requires_api_key(self):
+        """POST /api/drivers without X-API-Key header returns 401 when API_KEY is set."""
+        mock_session = AsyncMock()
+        mock_session.commit = AsyncMock()
+
+        async def override_get_session():
+            yield mock_session
+
+        mock_health = {
+            "postgresql": (True, "connected"),
+            "osrm": (True, "available"),
+            "vroom": (True, "available"),
+        }
+        app.dependency_overrides[get_session] = override_get_session
+        app.state.service_health = mock_health
+        app.state.started_at = datetime.now(timezone.utc)
+        with patch.dict(os.environ, {"API_KEY": "test-secret-key-123"}), \
+             patch("apps.kerala_delivery.api.main.wait_for_services", new_callable=AsyncMock, return_value=mock_health):
+            auth_client = TestClient(app)
+            resp = auth_client.post(
+                "/api/drivers",
+                json={"name": "Test Driver"},
+            )
+        app.dependency_overrides.clear()
+
+        assert resp.status_code == 401
