@@ -2516,6 +2516,211 @@ async def delete_vehicle(
 
 
 # =============================================================================
+# Driver Management (Phase 16)
+# =============================================================================
+
+
+class DriverCreate(BaseModel):
+    """Request body for creating a new driver."""
+
+    name: str = Field(
+        ..., min_length=1, max_length=100,
+        description="Driver's full name",
+    )
+
+
+class DriverUpdate(BaseModel):
+    """Request body for updating an existing driver.
+
+    Only provided (non-null) fields are updated.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    is_active: bool | None = Field(default=None)
+
+
+def _driver_to_dict(driver, route_count: int = 0) -> dict:
+    """Convert a DriverDB to a JSON-serializable dict.
+
+    Centralizes the DB-to-JSON conversion for driver responses.
+    """
+    return {
+        "id": str(driver.id),
+        "name": driver.name,
+        "is_active": driver.is_active,
+        "route_count": route_count,
+        "created_at": driver.created_at.isoformat() if driver.created_at else None,
+        "updated_at": driver.updated_at.isoformat() if driver.updated_at else None,
+    }
+
+
+def _similar_drivers_list(matches: list) -> list[dict]:
+    """Convert fuzzy match tuples [(DriverDB, score), ...] to JSON-safe dicts."""
+    return [
+        {
+            "id": str(driver.id),
+            "name": driver.name,
+            "score": round(score, 1),
+            "is_active": driver.is_active,
+        }
+        for driver, score in matches
+    ]
+
+
+# IMPORTANT: check-name is placed BEFORE /{id} routes so FastAPI doesn't
+# try to parse "check-name" as a UUID path parameter.
+@app.get("/api/drivers/check-name", dependencies=[Depends(verify_read_key)])
+async def check_driver_name(
+    name: str = Query(..., min_length=1, description="Name to check for similar matches"),
+    exclude_id: str | None = Query(default=None, description="UUID to exclude from results"),
+    session: AsyncSession = SessionDep,
+):
+    """Check if a driver name has similar matches in the database.
+
+    Used by the dashboard to warn operators before creating or renaming
+    a driver. Returns a list of similar existing drivers with match scores.
+    """
+    exclude_uuid = uuid.UUID(exclude_id) if exclude_id else None
+    matches = await repo.find_similar_drivers(session, name, exclude_uuid)
+    return {"similar_drivers": _similar_drivers_list(matches)}
+
+
+@app.get("/api/drivers", dependencies=[Depends(verify_read_key)])
+async def list_drivers(
+    active_only: bool = Query(default=False, description="If true, return only active drivers"),
+    session: AsyncSession = SessionDep,
+):
+    """List all drivers with route counts.
+
+    Used by the dashboard driver management page. Returns all drivers
+    by default; pass ?active_only=true for active drivers only.
+    """
+    drivers = await repo.get_all_drivers(session, active_only)
+    route_counts = await repo.get_driver_route_counts(session)
+
+    return {
+        "count": len(drivers),
+        "drivers": [
+            _driver_to_dict(d, route_counts.get(d.id, 0))
+            for d in drivers
+        ],
+    }
+
+
+@app.post("/api/drivers", dependencies=[Depends(verify_api_key)])
+@limiter.limit("20/minute")
+async def create_driver(
+    request: Request,
+    body: DriverCreate,
+    session: AsyncSession = SessionDep,
+):
+    """Create a new driver.
+
+    The name is stored title-cased (e.g., "suresh kumar" -> "Suresh Kumar").
+    Returns the created driver along with any similar existing drivers
+    as an informational warning for the operator.
+    """
+    # Check for similar names before creating
+    similar = await repo.find_similar_drivers(session, body.name)
+    driver = await repo.create_driver(session, body.name)
+    await session.commit()
+
+    return JSONResponse(
+        status_code=201,
+        content={
+            "message": "Driver created",
+            "driver": _driver_to_dict(driver),
+            "similar_drivers": _similar_drivers_list(similar),
+        },
+    )
+
+
+@app.put("/api/drivers/{driver_id}", dependencies=[Depends(verify_api_key)])
+@limiter.limit("20/minute")
+async def update_driver(
+    request: Request,
+    driver_id: str,
+    body: DriverUpdate,
+    session: AsyncSession = SessionDep,
+):
+    """Update an existing driver's name and/or active status.
+
+    If name is provided, updates the driver's display name and normalized name.
+    If is_active is provided, reactivates or deactivates the driver.
+    Returns similar_drivers only when the name was changed.
+    """
+    driver_uuid = uuid.UUID(driver_id)
+    similar_drivers = None
+
+    if body.name is not None:
+        updated = await repo.update_driver_name(session, driver_uuid, body.name)
+        if not updated:
+            return error_response(
+                status_code=404,
+                error_code=ErrorCode.DRIVER_NOT_FOUND,
+                user_message=f"Driver {driver_id} not found",
+                request_id=request_id_var.get(""),
+            )
+        similar = await repo.find_similar_drivers(session, body.name, exclude_id=driver_uuid)
+        similar_drivers = _similar_drivers_list(similar)
+
+    if body.is_active is not None:
+        driver = await repo.get_driver_by_id(session, driver_uuid)
+        if driver is None:
+            return error_response(
+                status_code=404,
+                error_code=ErrorCode.DRIVER_NOT_FOUND,
+                user_message=f"Driver {driver_id} not found",
+                request_id=request_id_var.get(""),
+            )
+        if body.is_active:
+            await repo.reactivate_driver(session, driver_uuid)
+        else:
+            await repo.deactivate_driver(session, driver_uuid)
+
+    if body.name is None and body.is_active is None:
+        return error_response(
+            status_code=400,
+            error_code=ErrorCode.DRIVER_NAME_EMPTY,
+            user_message="No fields to update -- provide name or is_active",
+            request_id=request_id_var.get(""),
+        )
+
+    await session.commit()
+    result: dict = {"message": "Driver updated"}
+    if similar_drivers is not None:
+        result["similar_drivers"] = similar_drivers
+    return result
+
+
+@app.delete("/api/drivers/{driver_id}", dependencies=[Depends(verify_api_key)])
+@limiter.limit("10/minute")
+async def delete_driver(
+    request: Request,
+    driver_id: str,
+    session: AsyncSession = SessionDep,
+):
+    """Soft-delete a driver (set is_active=false).
+
+    Why soft-delete: routes reference driver_id FK. Hard delete would
+    break foreign key constraints and lose audit trail data.
+    The driver can be reactivated with PUT is_active=true.
+    """
+    driver_uuid = uuid.UUID(driver_id)
+    deactivated = await repo.deactivate_driver(session, driver_uuid)
+    if not deactivated:
+        return error_response(
+            status_code=404,
+            error_code=ErrorCode.DRIVER_NOT_FOUND,
+            user_message=f"Driver {driver_id} not found",
+            request_id=request_id_var.get(""),
+        )
+
+    await session.commit()
+    return {"message": f"Driver {driver_id} deactivated"}
+
+
+# =============================================================================
 # Optimization History (Phase 2)
 # =============================================================================
 

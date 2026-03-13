@@ -2868,9 +2868,11 @@ class TestDriverManagement:
     """
 
     def _mock_driver(self, **overrides):
-        """Create a mock DriverDB object with sensible defaults."""
-        from core.database.models import DriverDB
+        """Create a mock DriverDB object with sensible defaults.
 
+        MagicMock's 'name' kwarg is special (sets internal descriptor),
+        so we configure it separately via configure_mock().
+        """
         defaults = {
             "id": uuid.uuid4(),
             "name": "Suresh Kumar",
@@ -2880,7 +2882,9 @@ class TestDriverManagement:
             "updated_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
         }
         defaults.update(overrides)
-        return MagicMock(spec=DriverDB, **defaults)
+        mock = MagicMock()
+        mock.configure_mock(**defaults)
+        return mock
 
     def test_list_drivers_returns_all(self, client):
         """GET /api/drivers returns all drivers with route counts."""
