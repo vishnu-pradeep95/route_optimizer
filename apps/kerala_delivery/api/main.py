@@ -1148,7 +1148,7 @@ async def parse_upload(
                 for csv_name in driver_order_counts:
                     if csv_name.strip().title() == csv_title:
                         csv_name_status[csv_name] = {
-                            "status": "existing",
+                            "status": "matched",
                             "display_name": match_info["matched_to"],
                             "matched_to": match_info["matched_to"],
                             "match_score": match_info["score"],
