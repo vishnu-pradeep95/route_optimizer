@@ -159,7 +159,11 @@ Plans:
   2. Address containing "(H)" expands correctly to "House" without splitting or garbling adjacent words
   3. Address containing concatenated "PO" abbreviation (e.g., "MUTTUNGALPOBALAVADI") correctly separates "P.O." without mangling surrounding text
   4. Geocode results outside a 20km radius from the Vatakara depot (from config) are flagged as out-of-zone, using Vatakara depot as the centroid
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 18-01-PLAN.md -- Fix (HO), (PO), and (H) regex patterns with unit tests
+- [ ] 18-02-PLAN.md -- Zone radius 30->20km, env var config, dictionary rebuild, test updates
+- [ ] 18-03-PLAN.md -- API config endpoint update, dashboard zone circle overlay
 
 ### Phase 19: Per-Driver TSP Optimization
 **Goal**: Each driver's assigned orders are optimized independently as a TSP problem, producing optimal stop ordering per driver while maintaining fleet-wide visibility
@@ -252,7 +256,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 15. Integration Testing and Accuracy Metrics | v2.2 | 2/2 | Complete | 2026-03-12 |
 | 16. Driver Database Foundation | v3.0 | 0/3 | Not started | - |
 | 17. CSV Upload and XLSX Detection | v3.0 | 3/4 | Gap closure | - |
-| 18. Address Preprocessing Fixes | v3.0 | 0/TBD | Not started | - |
+| 18. Address Preprocessing Fixes | v3.0 | 0/3 | Not started | - |
 | 19. Per-Driver TSP Optimization | v3.0 | 0/TBD | Not started | - |
 | 20. UI Terminology Rename | v3.0 | 0/TBD | Not started | - |
 | 21. Dashboard Settings and Cache Management | v3.0 | 0/TBD | Not started | - |
