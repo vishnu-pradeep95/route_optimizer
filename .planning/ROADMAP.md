@@ -105,7 +105,7 @@
 
 </details>
 
-### 🚧 v3.0 Driver-Centric Model (In Progress)
+### v3.0 Driver-Centric Model (In Progress)
 
 **Milestone Goal:** Replace the vehicle-fleet model with a driver-centric model where drivers are created from CDCMS CSV uploads, optimization runs per-driver (TSP), and the dashboard becomes the primary interface for office staff.
 
@@ -128,7 +128,11 @@
   2. User can add a new driver by name, edit an existing driver's name, and deactivate a driver -- all from the dashboard
   3. When a CSV with a DeliveryMan column is uploaded, any new driver names are auto-created in the database without duplicates (fuzzy matching catches "SURESH K" vs "SURESH KUMAR")
   4. The system starts with zero drivers -- no pre-loaded fleet data -- and the driver list grows organically from CSV uploads and manual additions
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 16-01-PLAN.md -- Schema reshape, repository CRUD, fuzzy matching with RapidFuzz
+- [ ] 16-02-PLAN.md -- Driver API endpoints, DriverManagement dashboard page, sidebar wiring
+- [ ] 16-03-PLAN.md -- CSV upload auto-creation with fuzzy matching, driver summary in response
 
 ### Phase 17: CSV Upload and XLSX Detection
 **Goal**: Users can upload both .csv and .xlsx CDCMS files, see which drivers are in the file, and select which drivers to process before optimization runs
@@ -241,7 +245,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 13. Geocode Validation and Fallback Chain | v2.2 | 3/3 | Complete | 2026-03-12 |
 | 14. API Confidence Fields and Driver PWA Badge | v2.2 | 2/2 | Complete | 2026-03-12 |
 | 15. Integration Testing and Accuracy Metrics | v2.2 | 2/2 | Complete | 2026-03-12 |
-| 16. Driver Database Foundation | v3.0 | 0/TBD | Not started | - |
+| 16. Driver Database Foundation | v3.0 | 0/3 | Not started | - |
 | 17. CSV Upload and XLSX Detection | v3.0 | 0/TBD | Not started | - |
 | 18. Address Preprocessing Fixes | v3.0 | 0/TBD | Not started | - |
 | 19. Per-Driver TSP Optimization | v3.0 | 0/TBD | Not started | - |
