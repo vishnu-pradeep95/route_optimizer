@@ -143,11 +143,12 @@ Plans:
   2. After uploading a multi-driver CSV/XLSX, user sees a list of drivers found in the file with order counts before processing begins
   3. User can select a subset of drivers from the uploaded file to generate routes for (deselected drivers are skipped)
   4. System filters to "Allocated-Printed" OrderStatus by default and correctly parses columns regardless of column order in the file
-**Plans:** 3/3 plans complete
+**Plans:** 4 plans
 Plans:
 - [x] 17-01-PLAN.md -- Fix XLSX detection, parse-upload endpoint, TypeScript types and API client
 - [x] 17-02-PLAN.md -- Upload-orders endpoint extension, driver preview UI with checkbox table and stats bar
-- [ ] 17-03-PLAN.md -- Gap closure: fix matched driver status from 'existing' to 'matched' in parse-upload
+- [x] 17-03-PLAN.md -- Gap closure: fix matched driver status from 'existing' to 'matched' in parse-upload
+- [ ] 17-04-PLAN.md -- Gap closure: geocoding filter bug, Allocation Pending filter, button alignment
 
 ### Phase 18: Address Preprocessing Fixes
 **Goal**: Address cleaning produces correct results for known garbling patterns and geocode validation uses a tighter geographic boundary
@@ -250,7 +251,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 14. API Confidence Fields and Driver PWA Badge | v2.2 | 2/2 | Complete | 2026-03-12 |
 | 15. Integration Testing and Accuracy Metrics | v2.2 | 2/2 | Complete | 2026-03-12 |
 | 16. Driver Database Foundation | v3.0 | 0/3 | Not started | - |
-| 17. CSV Upload and XLSX Detection | v3.0 | 2/3 | Gap closure | - |
+| 17. CSV Upload and XLSX Detection | v3.0 | 3/4 | Gap closure | - |
 | 18. Address Preprocessing Fixes | v3.0 | 0/TBD | Not started | - |
 | 19. Per-Driver TSP Optimization | v3.0 | 0/TBD | Not started | - |
 | 20. UI Terminology Rename | v3.0 | 0/TBD | Not started | - |
