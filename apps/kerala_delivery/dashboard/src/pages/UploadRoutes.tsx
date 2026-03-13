@@ -792,10 +792,9 @@ export function UploadRoutes() {
               <ArrowLeft size={16} /> Back
             </button>
             <button
-              className="upload-btn tw:flex-1 tw:flex tw:items-center tw:justify-center tw:gap-2"
+              className="tw:btn tw:btn-warning tw:flex-1 tw:gap-2"
               onClick={handleProcessSelected}
               disabled={selectedDrivers.size === 0}
-              style={selectedDrivers.size === 0 ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
             >
               Process Selected ({selectedDrivers.size}) <ArrowRight size={16} />
             </button>
