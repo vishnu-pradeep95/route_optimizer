@@ -89,8 +89,8 @@ class VehicleDB(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    # Relationships
-    drivers: Mapped[list["DriverDB"]] = relationship(back_populates="vehicle")
+    # Note: VehicleDB no longer has a 'drivers' relationship.
+    # Phase 16: drivers are standalone entities, not vehicle accessories.
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +99,12 @@ class VehicleDB(Base):
 class DriverDB(Base):
     """ORM model for the drivers table.
 
-    Links a driver to their currently assigned vehicle.
+    Represents a standalone driver entity. Drivers are not linked to vehicles;
+    they are matched to routes via the driver_id FK on RouteDB.
+
+    Phase 16: Reshaped from vehicle-linked to standalone. Dropped phone and
+    vehicle_id columns. Added name_normalized (uppercase, trimmed, collapsed
+    spaces) for fuzzy matching and updated_at for tracking edits.
     """
 
     __tablename__ = "drivers"
@@ -108,17 +113,14 @@ class DriverDB(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    phone: Mapped[str | None] = mapped_column(String(20))
-    vehicle_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("vehicles.id")
-    )
+    name_normalized: Mapped[str] = mapped_column(String(100), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-
-    # Relationships
-    vehicle: Mapped[VehicleDB | None] = relationship(back_populates="drivers")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +234,9 @@ class RouteDB(Base):
     )
     vehicle_id: Mapped[str] = mapped_column(String(20), nullable=False)
     driver_name: Mapped[str | None] = mapped_column(String(100))
+    driver_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("drivers.id"), nullable=True
+    )
     total_distance_km: Mapped[float] = mapped_column(Float, default=0.0)
     total_duration_minutes: Mapped[float] = mapped_column(Float, default=0.0)
     total_weight_kg: Mapped[float] = mapped_column(Float, default=0.0)

@@ -48,16 +48,24 @@ CREATE TABLE IF NOT EXISTS vehicles (
 );
 
 -- =============================================================================
--- DRIVERS — linked to vehicles for each shift
+-- DRIVERS — standalone driver entities (not linked to vehicles)
 -- =============================================================================
+-- Phase 16: Drivers are standalone entities. name_normalized stores the
+-- uppercase, trimmed, collapsed-space version of the name for fuzzy matching.
+-- No phone or vehicle_id — drivers are matched to routes via driver_id on routes.
 CREATE TABLE IF NOT EXISTS drivers (
-    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name        VARCHAR(100) NOT NULL,
-    phone       VARCHAR(20),                         -- stored only if needed
-    vehicle_id  UUID REFERENCES vehicles(id),        -- current assigned vehicle
-    is_active   BOOLEAN DEFAULT true,
-    created_at  TIMESTAMPTZ DEFAULT NOW()
+    id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name             VARCHAR(100) NOT NULL,
+    name_normalized  VARCHAR(100) NOT NULL,           -- UPPER(TRIM(name)), for fuzzy matching
+    is_active        BOOLEAN DEFAULT true,
+    created_at       TIMESTAMPTZ DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Index for fast name lookups during fuzzy matching
+CREATE INDEX IF NOT EXISTS idx_drivers_name_normalized ON drivers(name_normalized);
+-- Unique constraint prevents exact duplicate names at DB level
+CREATE UNIQUE INDEX IF NOT EXISTS idx_drivers_name_normalized_unique ON drivers(name_normalized);
 
 -- =============================================================================
 -- OPTIMIZATION RUNS — one row per optimizer invocation
@@ -125,6 +133,7 @@ CREATE TABLE IF NOT EXISTS routes (
     run_id                  UUID NOT NULL REFERENCES optimization_runs(id) ON DELETE CASCADE,
     vehicle_id              VARCHAR(20) NOT NULL,       -- "VEH-01"
     driver_name             VARCHAR(100),
+    driver_id               UUID REFERENCES drivers(id),  -- Phase 16: FK to standalone drivers table
     total_distance_km       REAL DEFAULT 0.0,
     total_duration_minutes  REAL DEFAULT 0.0,
     total_weight_kg         REAL DEFAULT 0.0,
@@ -228,30 +237,8 @@ CREATE INDEX IF NOT EXISTS idx_geocode_cache_address ON geocode_cache(address_no
 CREATE INDEX IF NOT EXISTS idx_geocode_cache_location ON geocode_cache USING gist(location);
 
 -- =============================================================================
--- Seed initial vehicle fleet from Kerala config
+-- Seed data
 -- =============================================================================
--- These match apps/kerala_delivery/config.py values.
--- Depot: 9.9716°N, 76.2846°E (Kochi area)
---
--- Why seed data in SQL instead of Python?
--- The database should be usable immediately after `docker compose up`.
--- If a developer forgets to run a Python seed script, the API would fail
--- with "no vehicles found". Putting seeds in init.sql guarantees they
--- exist as soon as PostgreSQL starts.
---
--- Note: ST_MakePoint takes (longitude, latitude) — NOT (lat, lon)!
--- This is the most common spatial data bug. PostgreSQL/PostGIS follows
--- the mathematical convention (x=lon, y=lat), not the human convention.
--- generate_series(1, 13) creates 13 rows in a single INSERT statement.
--- ON CONFLICT DO NOTHING: if you restart the container with existing data,
--- it won't create duplicate vehicles.
-INSERT INTO vehicles (vehicle_id, vehicle_type, max_weight_kg, max_items, depot_location, speed_limit_kmh)
-SELECT
-    'VEH-' || LPAD(i::text, 2, '0'),
-    'diesel',
-    446.0,
-    30,
-    ST_SetSRID(ST_MakePoint(76.2846, 9.9716), 4326),
-    40.0
-FROM generate_series(1, 13) AS i
-ON CONFLICT (vehicle_id) DO NOTHING;
+-- Phase 16 (DRV-07): No pre-loaded fleet or driver data.
+-- Vehicles and drivers are created via the dashboard or CSV upload.
+-- Fresh database starts with zero vehicles and zero drivers.
