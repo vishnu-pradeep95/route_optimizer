@@ -128,7 +128,7 @@
   2. User can add a new driver by name, edit an existing driver's name, and deactivate a driver -- all from the dashboard
   3. When a CSV with a DeliveryMan column is uploaded, any new driver names are auto-created in the database without duplicates (fuzzy matching catches "SURESH K" vs "SURESH KUMAR")
   4. The system starts with zero drivers -- no pre-loaded fleet data -- and the driver list grows organically from CSV uploads and manual additions
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 Plans:
 - [ ] 16-01-PLAN.md -- Schema reshape, repository CRUD, fuzzy matching with RapidFuzz
 - [ ] 16-02-PLAN.md -- Driver API endpoints, DriverManagement dashboard page, sidebar wiring
@@ -221,7 +221,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 13. Bootstrap Installation | v1.3 | 1/1 | Complete | 2026-03-05 |
 | 14. Daily Startup | v1.3 | 2/2 | Complete | 2026-03-05 |
 | 15. CSV Documentation | v1.3 | 1/1 | Complete | 2026-03-05 |
-| 16. Documentation Corrections | v1.3 | 2/2 | Complete | 2026-03-05 |
+| 16. Documentation Corrections | 1/3 | In Progress|  | 2026-03-05 |
 | 17. Error Message Humanization | v1.3 | 1/1 | Complete | 2026-03-06 |
 | 18. Distribution Build | v1.3 | 1/1 | Complete | 2026-03-06 |
 | 19. Pin OSRM Docker Image | v1.3 | 1/1 | Complete | 2026-03-07 |

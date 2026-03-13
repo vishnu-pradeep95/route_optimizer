@@ -14,8 +14,8 @@ Requirements for v3.0 Driver-Centric Model. Each maps to roadmap phases.
 - [ ] **DRV-03**: User can edit an existing driver's name
 - [ ] **DRV-04**: User can deactivate a driver (soft delete)
 - [ ] **DRV-05**: System auto-creates new drivers from CSV DeliveryMan column on upload
-- [ ] **DRV-06**: System uses fuzzy name matching (RapidFuzz) to avoid creating duplicate drivers from CDCMS name variations (e.g., "SURESH K" vs "SURESH KUMAR")
-- [ ] **DRV-07**: System starts with zero drivers (no pre-loaded fleet)
+- [x] **DRV-06**: System uses fuzzy name matching (RapidFuzz) to avoid creating duplicate drivers from CDCMS name variations (e.g., "SURESH K" vs "SURESH KUMAR")
+- [x] **DRV-07**: System starts with zero drivers (no pre-loaded fleet)
 
 ### Route Optimization
 
@@ -105,8 +105,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DRV-03 | Phase 16 | Pending |
 | DRV-04 | Phase 16 | Pending |
 | DRV-05 | Phase 16 | Pending |
-| DRV-06 | Phase 16 | Pending |
-| DRV-07 | Phase 16 | Pending |
+| DRV-06 | Phase 16 | Complete |
+| DRV-07 | Phase 16 | Complete |
 | OPT-01 | Phase 19 | Pending |
 | OPT-02 | Phase 19 | Pending |
 | OPT-03 | Phase 19 | Pending |
