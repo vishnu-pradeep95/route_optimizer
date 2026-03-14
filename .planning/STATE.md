@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Driver-Centric Model
-status: completed
-stopped_at: Phase 20 context gathered
-last_updated: "2026-03-14T19:03:55.711Z"
-last_activity: 2026-03-14 -- Completed 19-03 (Driver PWA QR-only access and QR sheet driver names)
+status: in-progress
+stopped_at: Completed 20-01-PLAN.md
+last_updated: "2026-03-14T19:26:41Z"
+last_activity: 2026-03-14 -- Completed 20-01 (Rename VehicleList to RouteList + sweep Vehicle-to-Driver text)
 progress:
   total_phases: 7
   completed_phases: 0
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** v3.0 Driver-Centric Model -- Phase 19: Per-Driver TSP Optimization (COMPLETE)
+**Current focus:** v3.0 Driver-Centric Model -- Phase 20: UI Terminology Rename (In Progress)
 
 ## Current Position
 
-Phase: 19 of 22 (Per-Driver TSP Optimization) -- fourth of 7 phases in v3.0
-Plan: 3 of 3 (COMPLETE)
-Status: Phase Complete
-Last activity: 2026-03-14 -- Completed 19-03 (Driver PWA QR-only access and QR sheet driver names)
+Phase: 20 of 22 (UI Terminology Rename) -- fifth of 7 phases in v3.0
+Plan: 1 of 2 (COMPLETE)
+Status: In Progress
+Last activity: 2026-03-14 -- Completed 20-01 (Rename VehicleList to RouteList + sweep Vehicle-to-Driver text)
 
-Progress: [▓▓▓░░░░░░░] 28%
+Progress: [▓▓▓▓░░░░░░] 30%
 
 ## Performance Metrics
 
@@ -62,6 +62,7 @@ Progress: [▓▓▓░░░░░░░] 28%
 | Phase 19 P01 | 3min | 2 tasks | 5 files |
 | Phase 19 P02 | 6min | 2 tasks | 5 files |
 | Phase 19 P03 | 3min | 3 tasks | 3 files |
+| Phase 20 P01 | 4min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,9 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 - **Phase 19-03:** No backward compatibility for ?vehicle= parameter (clean break -- QR codes are the only access method)
 - **Phase 19-03:** Dual QR code layout on print sheet: top QR for PWA access, bottom QR(s) for Google Maps navigation
 - **Phase 19-03:** Driver name as sole card title on QR sheet (vehicle ID no longer displayed)
+- **Phase 20-01:** Kept internal prop names (selectedVehicleId, onSelectVehicle) unchanged for backward compatibility
+- **Phase 20-01:** Simplified route card header to show only vehicle_id (which is now driver name per Phase 19)
+- **Phase 20-01:** Renamed RunHistory detail table headers Vehicle/Driver to Driver/Name
 
 ### Pending Todos
 
@@ -121,6 +125,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last session: 2026-03-14T19:03:55.708Z
-Stopped at: Phase 20 context gathered
-Resume file: .planning/milestones/v3.0-phases/20-ui-terminology-rename/20-CONTEXT.md
+Last session: 2026-03-14T19:26:41Z
+Stopped at: Completed 20-01-PLAN.md
+Resume file: .planning/milestones/v3.0-phases/20-ui-terminology-rename/20-01-SUMMARY.md
