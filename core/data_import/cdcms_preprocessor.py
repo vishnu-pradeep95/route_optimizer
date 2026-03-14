@@ -77,6 +77,7 @@ _PROTECTED_WORDS = frozenset({
     "MEATHALA", "BALAVADI", "MASTERVALLIKKADU", "MALAYILVALLIKKAD",
     "SREESHYLAMMUTTUNGAL", "POBALAVADI",
     "PERATTEYATH", "POOLAKANDY", "KOLAKKOTT",
+    "MUTTUNGALPARA",
 })
 
 # Trailing suffixes that are meaningful abbreviations. When found at the end

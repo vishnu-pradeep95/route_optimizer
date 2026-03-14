@@ -229,7 +229,16 @@ class AddressSplitter:
                 return (entry_name, start + match_len)
 
             # Fuzzy match (only for candidates >= _MIN_FUZZY_LENGTH)
-            if match_len >= _MIN_FUZZY_LENGTH:
+            # Guard: first AND last characters must match to prevent false
+            # positives from off-by-one alignment. Without this guard,
+            # "LMUTTUNGA" fuzzy-matches "MUTTUNGAL" (ratio 88.9% > 85%
+            # threshold) and "MMUTTUNGA" also matches (same score, same
+            # first char). Requiring last-char match catches both cases.
+            if (
+                match_len >= _MIN_FUZZY_LENGTH
+                and candidate[0] == compact_name[0]
+                and candidate[-1] == compact_name[-1]
+            ):
                 threshold = _get_threshold(match_len)
                 score = fuzz.ratio(compact_name, candidate, score_cutoff=threshold)
                 if score > 0:
