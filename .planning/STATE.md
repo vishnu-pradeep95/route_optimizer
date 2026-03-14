@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Driver-Centric Model
-status: completed
-stopped_at: Phase 19 context gathered
-last_updated: "2026-03-14T04:17:48.857Z"
-last_activity: 2026-03-14 -- Completed 18-04 (address cleaning test coverage with Refill.xlsx)
+status: in-progress
+stopped_at: Completed 19-01-PLAN.md
+last_updated: "2026-03-14T04:49:00.000Z"
+last_activity: 2026-03-14 -- Completed 19-01 (per-driver TSP orchestrator + DB migration)
 progress:
   total_phases: 7
   completed_phases: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** v3.0 Driver-Centric Model -- Phase 18: Address Preprocessing Fixes
+**Current focus:** v3.0 Driver-Centric Model -- Phase 19: Per-Driver TSP Optimization
 
 ## Current Position
 
-Phase: 18 of 22 (Address Preprocessing Fixes) -- third of 7 phases in v3.0
-Plan: 4 of 4
-Status: Phase Complete
-Last activity: 2026-03-14 -- Completed 18-04 (address cleaning test coverage with Refill.xlsx)
+Phase: 19 of 22 (Per-Driver TSP Optimization) -- fourth of 7 phases in v3.0
+Plan: 1 of 3
+Status: In Progress
+Last activity: 2026-03-14 -- Completed 19-01 (per-driver TSP orchestrator + DB migration)
 
 Progress: [▓▓▓░░░░░░░] 28%
 
@@ -59,6 +59,7 @@ Progress: [▓▓▓░░░░░░░] 28%
 | Phase 18 P02 | 3min | 2 tasks | 8 files |
 | Phase 18 P03 | 3min | 2 tasks | 5 files |
 | Phase 18 P04 | 7min | 2 tasks | 5 files |
+| Phase 19 P01 | 3min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,9 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 - [Phase 18]: First+last char guard on fuzzy dictionary matching to prevent off-by-one false positives
 - [Phase 18]: MUTTUNGALPARA added to _PROTECTED_WORDS to prevent trailing-letter garbling
 - [Phase 18]: Focused integration testing approach for address cleaning (real data + direct function, no HTTP mocks)
+- **Phase 19-01:** Partial failure returns partial results with warnings (not full batch failure)
+- **Phase 19-01:** Shapely for convex hull computation (already installed, no DB round-trip needed)
+- **Phase 19-01:** Collinear/degenerate hulls gracefully skipped (only Polygon hulls compared)
 
 ### Pending Todos
 
@@ -109,6 +113,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last session: 2026-03-14T04:17:48.855Z
-Stopped at: Phase 19 context gathered
-Resume file: .planning/milestones/v3.0-phases/19-per-driver-tsp-optimization/19-CONTEXT.md
+Last session: 2026-03-14T04:49:00.000Z
+Stopped at: Completed 19-01-PLAN.md
+Resume file: .planning/milestones/v3.0-phases/19-per-driver-tsp-optimization/19-02-PLAN.md

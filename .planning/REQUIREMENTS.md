@@ -19,11 +19,11 @@ Requirements for v3.0 Driver-Centric Model. Each maps to roadmap phases.
 
 ### Route Optimization
 
-- [ ] **OPT-01**: System optimizes stop order within each driver's assigned orders using per-driver TSP (VROOM with 1 vehicle per driver)
-- [ ] **OPT-02**: System groups orders by DeliveryMan column from CSV before optimization
-- [ ] **OPT-03**: System stores all per-driver routes under a single optimization_run
-- [ ] **OPT-04**: System validates post-optimization that no orders overlap between driver routes
-- [ ] **OPT-05**: System reports validation warnings if cross-driver geographic anomalies are detected
+- [x] **OPT-01**: System optimizes stop order within each driver's assigned orders using per-driver TSP (VROOM with 1 vehicle per driver)
+- [x] **OPT-02**: System groups orders by DeliveryMan column from CSV before optimization
+- [x] **OPT-03**: System stores all per-driver routes under a single optimization_run
+- [x] **OPT-04**: System validates post-optimization that no orders overlap between driver routes
+- [x] **OPT-05**: System reports validation warnings if cross-driver geographic anomalies are detected
 
 ### CSV Upload Flow
 
@@ -107,11 +107,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DRV-05 | Phase 16 | Complete |
 | DRV-06 | Phase 16 | Complete |
 | DRV-07 | Phase 16 | Complete |
-| OPT-01 | Phase 19 | Pending |
-| OPT-02 | Phase 19 | Pending |
-| OPT-03 | Phase 19 | Pending |
-| OPT-04 | Phase 19 | Pending |
-| OPT-05 | Phase 19 | Pending |
+| OPT-01 | Phase 19 | Complete |
+| OPT-02 | Phase 19 | Complete |
+| OPT-03 | Phase 19 | Complete |
+| OPT-04 | Phase 19 | Complete |
+| OPT-05 | Phase 19 | Complete |
 | CSV-01 | Phase 17 | Complete |
 | CSV-02 | Phase 17 | Complete |
 | CSV-03 | Phase 17 | Complete |
