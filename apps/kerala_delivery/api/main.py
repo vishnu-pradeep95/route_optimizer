@@ -14,6 +14,7 @@ The driver app (PWA) calls this API to get today's route.
 import hmac  # For timing-safe API key comparison (prevents timing attacks)
 import json
 import html as html_module  # For escaping user data in server-rendered HTML (XSS prevention)
+from urllib.parse import quote_plus  # For URL-encoding driver names in QR codes
 import logging
 import os
 import pathlib
@@ -2411,7 +2412,7 @@ async def get_google_maps_route(
 
 
 @app.get("/api/qr-sheet", response_class=HTMLResponse, dependencies=[Depends(verify_read_key)])
-async def get_qr_sheet(session: AsyncSession = SessionDep):
+async def get_qr_sheet(request: Request, session: AsyncSession = SessionDep):
     """Generate a printable HTML page with QR codes for ALL vehicles.
 
     Workflow: dispatcher opens this URL in the browser → clicks Print →
@@ -2466,9 +2467,17 @@ async def get_qr_sheet(session: AsyncSession = SessionDep):
 
         segments = split_route_into_segments(stops)
 
+        # Generate driver PWA access QR code (Phase 19)
+        # This is the QR code drivers scan to open their route in the PWA.
+        # Separate from Google Maps navigation QR codes (those are for turn-by-turn nav).
+        driver_display = route.driver_name or route.vehicle_id
+        base_url = str(request.base_url).rstrip("/")
+        driver_pwa_url = f"{base_url}/driver/?driver={quote_plus(driver_display)}"
+        driver_pwa_qr = generate_qr_base64_png(driver_pwa_url, box_size=8)
+
         vehicle_cards.append({
             "vehicle_id": route.vehicle_id,
-            "driver_name": route.driver_name,
+            "driver_name": driver_display,
             "total_stops": route.stop_count,
             "total_distance_km": round(route.total_distance_km, 1),
             "total_duration_minutes": round(route.total_duration_minutes, 0),
@@ -2479,6 +2488,8 @@ async def get_qr_sheet(session: AsyncSession = SessionDep):
                 generate_qr_base64_png(seg["url"], box_size=8)
                 for seg in segments
             ],
+            "driver_pwa_qr": driver_pwa_qr,
+            "driver_pwa_url": driver_pwa_url,
         })
 
     # Generate the printable HTML page
@@ -2507,8 +2518,7 @@ async def get_qr_sheet(session: AsyncSession = SessionDep):
         cards_html += f'''
         <div class="card">
             <div class="card-header">
-                <div class="vehicle-id">{esc(str(card["vehicle_id"]))}</div>
-                <div class="driver-name">{esc(str(card["driver_name"]))}</div>
+                <div class="driver-name" style="font-size: 1.3em; font-weight: bold;">{esc(str(card["driver_name"]))}</div>
             </div>
             <div class="card-stats">
                 <div class="stat">
@@ -2529,9 +2539,13 @@ async def get_qr_sheet(session: AsyncSession = SessionDep):
                 </div>
             </div>
             <div class="qr-container">
+                <div class="qr-block" style="margin-bottom: 12px; border-bottom: 1px solid #ddd; padding-bottom: 12px;">
+                    <div class="segment-label" style="font-weight: bold;">Scan to open route</div>
+                    <img src="data:image/png;base64,{card["driver_pwa_qr"]}" alt="Route QR" class="qr-img" />
+                </div>
                 {qr_images}
             </div>
-            <div class="scan-instruction">Scan with phone camera → Google Maps opens</div>
+            <div class="scan-instruction">Top QR → opens route in phone | Bottom QR(s) → Google Maps navigation</div>
         </div>
         '''
 
@@ -2581,21 +2595,13 @@ async def get_qr_sheet(session: AsyncSession = SessionDep):
             page-break-inside: avoid;
         }}
         .card-header {{
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
             margin-bottom: 8px;
             padding-bottom: 6px;
             border-bottom: 1px solid #ddd;
         }}
-        .vehicle-id {{
+        .driver-name {{
             font-size: 22px;
             font-weight: 800;
-            font-family: 'Courier New', monospace;
-        }}
-        .driver-name {{
-            font-size: 16px;
-            color: #333;
         }}
         .card-stats {{
             display: flex;
@@ -2673,7 +2679,7 @@ async def get_qr_sheet(session: AsyncSession = SessionDep):
 <body>
     <div class="page-header">
         <h1>LPG Delivery Route QR Codes</h1>
-        <div class="date">Generated: {created_at} | {len(vehicle_cards)} vehicles | {sum(c["total_stops"] for c in vehicle_cards)} total deliveries</div>
+        <div class="date">Generated: {created_at} | {len(vehicle_cards)} drivers | {sum(c["total_stops"] for c in vehicle_cards)} total deliveries</div>
     </div>
     <button class="print-btn no-print" onclick="window.print()">🖨️ Print QR Sheet</button>
     <div class="cards-grid">

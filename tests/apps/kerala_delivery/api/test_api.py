@@ -2565,11 +2565,11 @@ class TestQrSheetEndpoint:
         html = resp.text
         # Should contain key elements
         assert "LPG Delivery Route QR Codes" in html
-        assert "VEH-01" in html
-        assert "Driver 1" in html
+        assert "Driver 1" in html  # Driver name is primary card title (Phase 19)
         assert "data:image/png;base64," in html  # QR code as base64 PNG
         assert "Print QR Sheet" in html  # Print button
-        assert "Scan with phone camera" in html  # Instruction text
+        assert "Scan to open route" in html  # Driver PWA QR instruction
+        assert "Google Maps navigation" in html  # Navigation QR instruction
         # Safety: time is shown as a range, not exact (MVD compliance)
         assert "Est. Route Time" in html
 
@@ -2581,11 +2581,11 @@ class TestQrSheetEndpoint:
         assert resp.status_code == 404
 
     def test_qr_sheet_escapes_html_in_vehicle_data(self, client, mock_run_id):
-        """XSS prevention: vehicle_id and driver_name are HTML-escaped.
+        """XSS prevention: driver_name is HTML-escaped.
 
         Even though these values come from authenticated endpoints,
         defence-in-depth requires escaping at the output layer.
-        A malicious vehicle_id like '<script>alert(1)</script>' must
+        A malicious driver_name like '<img onerror=alert(1) src=x>' must
         NOT appear unescaped in the rendered HTML.
         """
         from core.database.models import OptimizationRunDB, RouteDB
@@ -2634,11 +2634,10 @@ class TestQrSheetEndpoint:
 
         assert resp.status_code == 200
         html = resp.text
-        # RAW script/img XSS payloads must NOT appear unescaped
-        assert '<script>alert' not in html
+        # RAW img XSS payload must NOT appear unescaped
         assert '<img onerror=' not in html
-        # Escaped versions SHOULD appear (browser renders as text, not HTML)
-        assert '&lt;script&gt;' in html
+        # Escaped version SHOULD appear (browser renders as text, not HTML)
+        # driver_name is the primary display field in the QR card header
         assert '&lt;img' in html
 
 
