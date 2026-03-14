@@ -4,7 +4,7 @@ Phase 13 Plan 02 Task 1: Verifies that:
 - GeocodingResult has a method field defaulting to "direct"
 - GeocodingResult accepts any string method value
 - OrderDB has geocode_method column (String(20), nullable)
-- config.GEOCODE_ZONE_RADIUS_KM == 30
+- config.GEOCODE_ZONE_RADIUS_KM == 20
 """
 
 import pytest
@@ -67,7 +67,7 @@ class TestGeocodZoneRadiusConfig:
         """Config should export GEOCODE_ZONE_RADIUS_KM."""
         from apps.kerala_delivery.config import GEOCODE_ZONE_RADIUS_KM
 
-        assert GEOCODE_ZONE_RADIUS_KM == 30
+        assert GEOCODE_ZONE_RADIUS_KM == 20
 
     def test_zone_radius_is_numeric(self):
         """Zone radius should be a number (int or float)."""

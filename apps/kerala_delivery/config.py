@@ -19,9 +19,10 @@ from core.models.location import Location
 # =============================================================================
 # Actual godown GPS coordinates — Vatakara, Kozhikode district
 # Sourced from Google Maps pin drop at the HPCL LPG godown
+# Override via DEPOT_LAT / DEPOT_LON env vars for deployment flexibility.
 DEPOT_LOCATION = Location(
-    latitude=11.624443730714066,
-    longitude=75.57964507762223,
+    latitude=float(os.environ.get("DEPOT_LAT", "11.624443730714066")),
+    longitude=float(os.environ.get("DEPOT_LON", "75.57964507762223")),
     address_text="LPG Godown (Main Depot)",
 )
 
@@ -36,7 +37,8 @@ FREE_DELIVERY_RADIUS_KM = 5.0
 # =============================================================================
 # Radius from depot within which a geocode result is considered valid.
 # Addresses geocoding outside this radius trigger the fallback chain.
-GEOCODE_ZONE_RADIUS_KM = 30
+# Override via GEOCODE_ZONE_RADIUS_KM env var for deployment flexibility.
+GEOCODE_ZONE_RADIUS_KM = int(os.environ.get("GEOCODE_ZONE_RADIUS_KM", "20"))
 
 # =============================================================================
 # FLEET CONFIGURATION
