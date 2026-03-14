@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Driver-Centric Model
 status: completed
-stopped_at: Phase 18 context gathered
-last_updated: "2026-03-13T23:34:41.595Z"
+stopped_at: Completed 18-01-PLAN.md
+last_updated: "2026-03-14T00:02:19.102Z"
 last_activity: "2026-03-13 -- Completed 17-04 (UAT gap closure: geocoding filter, placeholder filter, button fix)"
 progress:
   total_phases: 7
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 
 ## Current Position
 
-Phase: 17 of 22 (CSV Upload and XLSX Detection) -- second of 7 phases in v3.0
-Plan: 4 of 4 (COMPLETE)
-Status: Phase 17 COMPLETE
-Last activity: 2026-03-13 -- Completed 17-04 (UAT gap closure: geocoding filter, placeholder filter, button fix)
+Phase: 18 of 22 (Address Preprocessing Fixes) -- third of 7 phases in v3.0
+Plan: 1 of 4
+Status: In Progress
+Last activity: 2026-03-13 -- Completed 18-01 (fix (HO), (PO), (H) regex patterns)
 
 Progress: [▓▓▓░░░░░░░] 28%
 
@@ -55,6 +55,7 @@ Progress: [▓▓▓░░░░░░░] 28%
 | Phase 17 P02 | 7min | 3 tasks | 5 files |
 | Phase 17 P03 | 2min | 1 tasks | 2 files |
 | Phase 17 P04 | 6min | 2 tasks | 5 files |
+| Phase 18 P01 | 2min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,8 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 - [Phase 17]: No new patterns needed -- single-line status string fix to emit matched instead of existing for fuzzy-matched drivers
 - [Phase 17]: Placeholder filtering at preprocessor level (both parse-upload and upload-and-optimize benefit)
 - [Phase 17]: Driver selection filter moved before geocoding to save Google Maps API costs
+- [Phase 18]: (HO) regex placed before (H) to prevent partial matching; space padding for all parenthesized abbreviation patterns
+- [Phase 18]: Added PERATTEYATH, POOLAKANDY, KOLAKKOTT to _PROTECTED_WORDS to prevent trailing-letter garbling
 
 ### Pending Todos
 
@@ -96,6 +99,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last session: 2026-03-13T23:34:41.581Z
-Stopped at: Phase 18 context gathered
-Resume file: .planning/milestones/v3.0-phases/18-address-preprocessing-fixes/18-CONTEXT.md
+Last session: 2026-03-14T00:02:19.101Z
+Stopped at: Completed 18-01-PLAN.md
+Resume file: None
