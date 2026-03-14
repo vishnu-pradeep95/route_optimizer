@@ -2,7 +2,7 @@
  *
  * Design: DaisyUI tw:table for data display, tw:badge for status,
  * tw:btn for actions, tw:input for form fields.
- * Simpler layout than FleetManagement since there's only one field (name).
+ * Simpler layout since there's only one field (name).
  */
 
 .driver-page {

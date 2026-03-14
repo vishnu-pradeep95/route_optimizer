@@ -4,12 +4,12 @@
  * This is the page employees use every day:
  * 1. Upload the CDCMS export file (drag & drop or click)
  * 2. System parses, geocodes, and optimizes routes
- * 3. View route summaries per vehicle with QR codes
+ * 3. View route summaries per driver with QR codes
  * 4. Print QR sheet → drivers scan to open Google Maps navigation
  *
  * Design: Industrial-utilitarian. Clear visual states for each step.
  * Large drop zone for file upload. Progress feedback during optimization.
- * QR codes displayed at scannable size with vehicle/driver details.
+ * QR codes displayed at scannable size with driver details.
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
@@ -310,7 +310,7 @@ export function UploadRoutes() {
   const [routes, setRoutes] = useState<RouteSummary[]>([]);
   const [routeDetails, setRouteDetails] = useState<Map<string, RouteDetail>>(new Map());
   const [qrData, setQrData] = useState<Map<string, GoogleMapsRouteResponse>>(new Map());
-  const [expandedVehicle, setExpandedVehicle] = useState<string | null>(null);
+  const [expandedRoute, setExpandedVehicle] = useState<string | null>(null);
 
   // --- Drag & Drop handlers ---
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -565,9 +565,9 @@ export function UploadRoutes() {
     }
   };
 
-  // --- Toggle expanded vehicle for QR details ---
-  const toggleVehicle = (vehicleId: string) => {
-    setExpandedVehicle(expandedVehicle === vehicleId ? null : vehicleId);
+  // --- Toggle expanded route for QR details ---
+  const toggleRoute = (vehicleId: string) => {
+    setExpandedVehicle(expandedRoute === vehicleId ? null : vehicleId);
   };
 
   // --- Render ---
@@ -853,7 +853,7 @@ export function UploadRoutes() {
                         <div className="tw:stat-value tw:text-lg numeric">{uploadResult.orders_assigned}</div>
                       </div>
                       <div className="tw:stat tw:py-2 tw:px-4">
-                        <div className="tw:stat-title tw:text-xs">Vehicles</div>
+                        <div className="tw:stat-title tw:text-xs">Drivers</div>
                         <div className="tw:stat-value tw:text-lg numeric">{uploadResult.vehicles_used}</div>
                       </div>
                       {uploadResult.orders_unassigned > 0 && (
@@ -874,7 +874,7 @@ export function UploadRoutes() {
                         <div className="tw:stat-value tw:text-lg numeric">{routes.reduce((s, r) => s + r.total_stops, 0)}</div>
                       </div>
                       <div className="tw:stat tw:py-2 tw:px-4">
-                        <div className="tw:stat-title tw:text-xs">Vehicles</div>
+                        <div className="tw:stat-title tw:text-xs">Drivers</div>
                         <div className="tw:stat-value tw:text-lg numeric">{routes.length}</div>
                       </div>
                       <div className="tw:stat tw:py-2 tw:px-4">
@@ -904,12 +904,12 @@ export function UploadRoutes() {
                 </div>
               </div>
 
-              {/* Vehicle Route Cards */}
+              {/* Driver Route Cards */}
               <div className="route-cards">
             {routes.map((route) => {
               const detail = routeDetails.get(route.vehicle_id);
-              const vehicleQr = qrData.get(route.vehicle_id);
-              const isExpanded = expandedVehicle === route.vehicle_id;
+              const routeQr = qrData.get(route.vehicle_id);
+              const isExpanded = expandedRoute === route.vehicle_id;
 
               return (
                 <div
@@ -919,11 +919,10 @@ export function UploadRoutes() {
                   <div className="tw:card-body tw:p-4">
                     <div
                       className="tw:flex tw:items-center tw:justify-between tw:cursor-pointer"
-                      onClick={() => toggleVehicle(route.vehicle_id)}
+                      onClick={() => toggleRoute(route.vehicle_id)}
                     >
                       <h2 className="tw:card-title tw:text-sm tw:gap-2">
-                        <span className="tw:badge tw:badge-neutral tw:font-mono">{route.vehicle_id}</span>
-                        <span className="text-muted-60">{route.driver_name}</span>
+                        <span className="tw:font-semibold">{route.vehicle_id}</span>
                       </h2>
                       <div className="tw:flex tw:items-center tw:gap-2">
                         {detail && <StatusBadge status={deriveRouteStatus(detail.stops)} />}
@@ -941,21 +940,21 @@ export function UploadRoutes() {
                     {isExpanded && (
                       <div className="tw:mt-4 tw:border-t tw:border-base-300 tw:pt-4">
                         {/* QR Codes */}
-                        {vehicleQr && (
+                        {routeQr && (
                           <div className="qr-section">
                             <h4 className="qr-heading">
-                              Google Maps QR Code{vehicleQr.total_segments > 1 ? "s" : ""}
+                              Google Maps QR Code{routeQr.total_segments > 1 ? "s" : ""}
                             </h4>
-                            {vehicleQr.total_segments > 1 && (
+                            {routeQr.total_segments > 1 && (
                               <p className="qr-note">
-                                Route split into {vehicleQr.total_segments} parts
+                                Route split into {routeQr.total_segments} parts
                                 (Google Maps supports max 11 stops per URL)
                               </p>
                             )}
                             <div className="qr-grid">
-                              {vehicleQr.segments.map((seg) => (
+                              {routeQr.segments.map((seg) => (
                                 <div key={seg.segment} className="qr-card">
-                                  {vehicleQr.total_segments > 1 && (
+                                  {routeQr.total_segments > 1 && (
                                     <div className="qr-segment-label">
                                       Part {seg.segment}: Stops {seg.start_stop}–{seg.end_stop}
                                     </div>

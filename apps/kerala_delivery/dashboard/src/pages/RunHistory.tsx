@@ -130,7 +130,7 @@ export function RunHistory() {
         <th className="numeric">Orders</th>
         <th className="numeric">Assigned</th>
         <th className="numeric">Unassigned</th>
-        <th className="numeric">Vehicles</th>
+        <th className="numeric">Drivers</th>
         <th className="numeric">Solve Time</th>
         <th>Source</th>
         <th>Status</th>
@@ -286,8 +286,8 @@ export function RunHistory() {
                             <table className="tw:table tw:table-sm">
                               <thead>
                                 <tr>
-                                  <th>Vehicle</th>
                                   <th>Driver</th>
+                                  <th>Name</th>
                                   <th className="numeric">Stops</th>
                                   <th className="numeric">Distance</th>
                                   <th className="numeric">Duration</th>

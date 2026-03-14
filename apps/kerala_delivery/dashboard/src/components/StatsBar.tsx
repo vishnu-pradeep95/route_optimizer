@@ -19,7 +19,7 @@ interface StatsBarProps {
   routes: RouteSummary[];
   /** Detailed routes with individual stops (used for status breakdown). */
   routeDetails: RouteDetail[];
-  /** Number of orders that couldn't be assigned to any vehicle. */
+  /** Number of orders that couldn't be assigned to any driver. */
   unassignedOrders: number;
 }
 
@@ -97,7 +97,7 @@ export function StatsBar({ routes, routeDetails, unassignedOrders }: StatsBarPro
         accent={STAT_ACCENTS.failed}
       />
       <StatCard
-        label="Vehicles Active"
+        label="Drivers Active"
         value={routes.length}
         accent={STAT_ACCENTS.active}
         showPulse
