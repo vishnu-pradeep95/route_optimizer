@@ -112,7 +112,7 @@
 - [x] **Phase 16: Driver Database Foundation** - Driver entity with CRUD, fuzzy name matching, auto-creation from CSV, and driver management page (completed 2026-03-13)
 - [x] **Phase 17: CSV Upload and XLSX Detection** - Fix .xlsx detection bug, add driver preview step, driver selection before processing (completed 2026-03-13)
 - [x] **Phase 18: Address Preprocessing Fixes** - Fix trailing-letter split garbling, (H) expansion, PO concatenation, and tighten geocode validation (completed 2026-03-14)
-- [ ] **Phase 19: Per-Driver TSP Optimization** - Group orders by driver, run VROOM TSP per driver, store all routes under single optimization run
+- [x] **Phase 19: Per-Driver TSP Optimization** - Group orders by driver, run VROOM TSP per driver, store all routes under single optimization run (completed 2026-03-14)
 - [ ] **Phase 20: UI Terminology Rename** - Change "Vehicle" to "Driver" in all dashboard labels while keeping API field names backward-compatible
 - [ ] **Phase 21: Dashboard Settings and Cache Management** - Settings page with API key management, upload history, geocode cache stats and export/import
 - [ ] **Phase 22: Google Routes Validation** - User-triggered OSRM vs Google Routes distance/time comparison with cost warning and confidence indicator
@@ -175,7 +175,7 @@ Plans:
   2. All per-driver routes from a single upload are stored under one optimization_run, visible together in the dashboard route list
   3. No order appears in more than one driver's route -- the system validates zero overlap post-optimization
   4. If geographic anomalies are detected across drivers (e.g., two drivers with interleaving delivery areas), validation warnings are surfaced in the optimization results
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [ ] 19-01-PLAN.md -- TSP orchestrator module with tests, DB migration for vehicle_id column widening
 - [ ] 19-02-PLAN.md -- Pipeline integration: DeliveryMan column check, replace fleet CVRP with per-driver TSP
@@ -238,7 +238,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 16. Documentation Corrections | 3/3 | Complete    | 2026-03-13 | 2026-03-05 |
 | 17. Error Message Humanization | 4/4 | Complete    | 2026-03-13 | 2026-03-06 |
 | 18. Distribution Build | 4/4 | Complete    | 2026-03-14 | 2026-03-06 |
-| 19. Pin OSRM Docker Image | 2/3 | In Progress|  | 2026-03-07 |
+| 19. Pin OSRM Docker Image | 3/3 | Complete   | 2026-03-14 | 2026-03-07 |
 | 20. Sync Error Message Documentation | v1.3 | 1/1 | Complete | 2026-03-07 |
 | 21. Playwright E2E Test Suite | v1.4 | 3/3 | Complete | 2026-03-08 |
 | 22. CI/CD Pipeline Integration | v1.4 | 2/2 | Complete | 2026-03-08 |

@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Driver-Centric Model
 status: in-progress
-stopped_at: Completed 19-02-PLAN.md
-last_updated: "2026-03-14T04:59:02.000Z"
-last_activity: 2026-03-14 -- Completed 19-02 (per-driver TSP integration into upload pipeline)
+stopped_at: Completed 19-03-PLAN.md
+last_updated: "2026-03-14T12:48:00.000Z"
+last_activity: 2026-03-14 -- Completed 19-03 (Driver PWA QR-only access and QR sheet driver names)
 progress:
   total_phases: 7
   completed_phases: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** v3.0 Driver-Centric Model -- Phase 19: Per-Driver TSP Optimization
+**Current focus:** v3.0 Driver-Centric Model -- Phase 19: Per-Driver TSP Optimization (COMPLETE)
 
 ## Current Position
 
 Phase: 19 of 22 (Per-Driver TSP Optimization) -- fourth of 7 phases in v3.0
-Plan: 2 of 3
-Status: In Progress
-Last activity: 2026-03-14 -- Completed 19-02 (per-driver TSP integration into upload pipeline)
+Plan: 3 of 3 (COMPLETE)
+Status: Phase Complete
+Last activity: 2026-03-14 -- Completed 19-03 (Driver PWA QR-only access and QR sheet driver names)
 
 Progress: [▓▓▓░░░░░░░] 28%
 
@@ -61,6 +61,7 @@ Progress: [▓▓▓░░░░░░░] 28%
 | Phase 18 P04 | 7min | 2 tasks | 5 files |
 | Phase 19 P01 | 3min | 2 tasks | 5 files |
 | Phase 19 P02 | 6min | 2 tasks | 5 files |
+| Phase 19 P03 | 3min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,9 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 - **Phase 19-02:** Non-CDCMS uploads fall back to single 'Driver' group for backward compatibility with per-driver TSP pipeline
 - **Phase 19-02:** preprocess_cdcms handles missing DeliveryMan gracefully (fills empty strings for clean validation)
 - **Phase 19-02:** Optimization warnings converted to ImportFailure with stage='optimization' for consistent response format
+- **Phase 19-03:** No backward compatibility for ?vehicle= parameter (clean break -- QR codes are the only access method)
+- **Phase 19-03:** Dual QR code layout on print sheet: top QR for PWA access, bottom QR(s) for Google Maps navigation
+- **Phase 19-03:** Driver name as sole card title on QR sheet (vehicle ID no longer displayed)
 
 ### Pending Todos
 
@@ -117,6 +121,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last session: 2026-03-14T04:59:02.000Z
-Stopped at: Completed 19-02-PLAN.md
-Resume file: .planning/milestones/v3.0-phases/19-per-driver-tsp-optimization/19-03-PLAN.md
+Last session: 2026-03-14T12:48:00.000Z
+Stopped at: Completed 19-03-PLAN.md (Phase 19 complete)
+Resume file: Next phase planning
