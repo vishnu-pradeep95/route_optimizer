@@ -375,6 +375,28 @@ class TelemetryDB(Base):
 
 
 # ---------------------------------------------------------------------------
+# SETTINGS (key-value store)
+# ---------------------------------------------------------------------------
+class SettingsDB(Base):
+    """ORM model for the settings table.
+
+    Generic key-value store for application settings. Stores configuration
+    values that can be changed at runtime via the dashboard (e.g., API keys).
+
+    Phase 21: Simple key-value design per user decision -- no typed columns.
+    Keys are unique strings (PK), values are free-form text.
+    """
+
+    __tablename__ = "settings"
+
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+# ---------------------------------------------------------------------------
 # GEOCODE CACHE
 # ---------------------------------------------------------------------------
 class GeocodeCacheDB(Base):

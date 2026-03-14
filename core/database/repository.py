@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from geoalchemy2.functions import ST_MakePoint, ST_SetSRID
 from geoalchemy2.shape import to_shape
 from shapely import Point
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -33,6 +33,7 @@ from core.database.models import (
     OrderDB,
     RouteDB,
     RouteStopDB,
+    SettingsDB,
     TelemetryDB,
     VehicleDB,
 )
@@ -1045,6 +1046,182 @@ async def save_geocode_cache(
         session.add(cache_entry)
 
     await session.flush()
+
+
+# =============================================================================
+# Settings (key-value store)
+# =============================================================================
+
+async def get_setting(session: AsyncSession, key: str) -> str | None:
+    """Get a setting value by key.
+
+    Returns None if the key does not exist.
+
+    Args:
+        session: Async DB session.
+        key: Setting key (e.g., "google_maps_api_key").
+
+    Returns:
+        The setting value as a string, or None if not found.
+    """
+    result = await session.execute(
+        select(SettingsDB).where(SettingsDB.key == key)
+    )
+    row = result.scalar_one_or_none()
+    return row.value if row else None
+
+
+async def set_setting(session: AsyncSession, key: str, value: str) -> None:
+    """Set a setting value (upsert: insert or update).
+
+    Uses SQLAlchemy merge() for upsert behavior -- inserts if the key
+    doesn't exist, updates if it does.
+
+    Args:
+        session: Async DB session (caller commits).
+        key: Setting key.
+        value: Setting value.
+    """
+    setting = SettingsDB(key=key, value=value)
+    session.merge(setting)
+    await session.flush()
+
+
+# =============================================================================
+# Geocode Cache Management (stats, export, import, clear)
+# =============================================================================
+
+async def get_geocode_cache_stats(session: AsyncSession) -> dict:
+    """Get aggregate statistics for the geocode cache.
+
+    Returns total entries, total hits, API calls saved (same as hits),
+    and estimated USD savings at $0.005 per request.
+
+    Args:
+        session: Async DB session.
+
+    Returns:
+        Dict with total_entries, total_hits, api_calls_saved, estimated_savings_usd.
+    """
+    from apps.kerala_delivery.config import GEOCODING_COST_PER_REQUEST
+
+    result = await session.execute(
+        select(
+            func.count(GeocodeCacheDB.id),
+            func.sum(GeocodeCacheDB.hit_count),
+        )
+    )
+    total_entries, total_hits_raw = result.one()
+    total_hits = total_hits_raw or 0
+
+    return {
+        "total_entries": total_entries,
+        "total_hits": total_hits,
+        "api_calls_saved": total_hits,
+        "estimated_savings_usd": round(total_hits * GEOCODING_COST_PER_REQUEST, 2),
+    }
+
+
+async def export_geocode_cache(session: AsyncSession) -> list[dict]:
+    """Export all geocode cache entries as a list of dicts.
+
+    Converts PostGIS geometry to latitude/longitude floats using
+    Shapely's to_shape() for JSON-friendly output.
+
+    Args:
+        session: Async DB session.
+
+    Returns:
+        List of dicts with address_raw, address_norm, latitude, longitude,
+        source, confidence, hit_count, created_at.
+    """
+    result = await session.execute(
+        select(GeocodeCacheDB).order_by(GeocodeCacheDB.created_at.desc())
+    )
+    rows = result.scalars().all()
+
+    entries = []
+    for row in rows:
+        point = to_shape(row.location)
+        entries.append({
+            "address_raw": row.address_raw,
+            "address_norm": row.address_norm,
+            "latitude": point.y,
+            "longitude": point.x,
+            "source": row.source,
+            "confidence": row.confidence,
+            "hit_count": row.hit_count,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        })
+
+    return entries
+
+
+async def import_geocode_cache(
+    session: AsyncSession, entries: list[dict]
+) -> dict:
+    """Import geocode cache entries, skipping duplicates.
+
+    For each entry: normalizes the address, checks if address_norm+source
+    already exists, inserts if not. Duplicates are silently skipped.
+
+    Args:
+        session: Async DB session (caller commits).
+        entries: List of dicts with address_raw, latitude, longitude,
+                 source, confidence (optional).
+
+    Returns:
+        Dict with added and skipped counts.
+    """
+    added = 0
+    skipped = 0
+
+    for entry in entries:
+        addr_raw = entry.get("address_raw", "")
+        addr_norm = normalize_address(addr_raw)
+        source = entry.get("source", "google")
+        lat = entry["latitude"]
+        lng = entry["longitude"]
+        confidence = entry.get("confidence", 0.5)
+
+        # Check for existing entry with same address_norm + source
+        existing_result = await session.execute(
+            select(GeocodeCacheDB).where(
+                GeocodeCacheDB.address_norm == addr_norm,
+                GeocodeCacheDB.source == source,
+            )
+        )
+        if existing_result.scalar_one_or_none() is not None:
+            skipped += 1
+            continue
+
+        # Create new cache entry using same pattern as save_geocode_cache
+        cache_entry = GeocodeCacheDB(
+            address_raw=addr_raw,
+            address_norm=addr_norm,
+            location=ST_SetSRID(ST_MakePoint(lng, lat), 4326),
+            source=source,
+            confidence=confidence,
+        )
+        session.add(cache_entry)
+        added += 1
+
+    await session.flush()
+    return {"added": added, "skipped": skipped}
+
+
+async def clear_geocode_cache(session: AsyncSession) -> int:
+    """Delete all geocode cache entries.
+
+    Args:
+        session: Async DB session (caller commits).
+
+    Returns:
+        Number of entries deleted.
+    """
+    result = await session.execute(delete(GeocodeCacheDB))
+    await session.flush()
+    return result.rowcount  # type: ignore[return-value]
 
 
 # =============================================================================
