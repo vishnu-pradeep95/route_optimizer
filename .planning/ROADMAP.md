@@ -175,7 +175,11 @@ Plans:
   2. All per-driver routes from a single upload are stored under one optimization_run, visible together in the dashboard route list
   3. No order appears in more than one driver's route -- the system validates zero overlap post-optimization
   4. If geographic anomalies are detected across drivers (e.g., two drivers with interleaving delivery areas), validation warnings are surfaced in the optimization results
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 19-01-PLAN.md -- TSP orchestrator module with tests, DB migration for vehicle_id column widening
+- [ ] 19-02-PLAN.md -- Pipeline integration: DeliveryMan column check, replace fleet CVRP with per-driver TSP
+- [ ] 19-03-PLAN.md -- Driver PWA QR-only access, QR sheet driver name titles
 
 ### Phase 20: UI Terminology Rename
 **Goal**: The dashboard speaks in "Driver" terms everywhere users see text, while API field names remain backward-compatible for the Driver PWA
@@ -258,7 +262,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 16. Driver Database Foundation | v3.0 | 0/3 | Not started | - |
 | 17. CSV Upload and XLSX Detection | v3.0 | 3/4 | Gap closure | - |
 | 18. Address Preprocessing Fixes | v3.0 | 0/4 | Not started | - |
-| 19. Per-Driver TSP Optimization | v3.0 | 0/TBD | Not started | - |
+| 19. Per-Driver TSP Optimization | v3.0 | 0/3 | Not started | - |
 | 20. UI Terminology Rename | v3.0 | 0/TBD | Not started | - |
 | 21. Dashboard Settings and Cache Management | v3.0 | 0/TBD | Not started | - |
 | 22. Google Routes Validation | v3.0 | 0/TBD | Not started | - |
