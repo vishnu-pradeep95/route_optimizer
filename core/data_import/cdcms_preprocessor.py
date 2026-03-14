@@ -76,6 +76,7 @@ _PROTECTED_WORDS = frozenset({
     "MADATHIL", "PANAKKULATHIL", "KALARIKKANDI", "PADINJARA",
     "MEATHALA", "BALAVADI", "MASTERVALLIKKADU", "MALAYILVALLIKKAD",
     "SREESHYLAMMUTTUNGAL", "POBALAVADI",
+    "PERATTEYATH", "POOLAKANDY", "KOLAKKOTT",
 })
 
 # Trailing suffixes that are meaningful abbreviations. When found at the end
@@ -430,8 +431,19 @@ def clean_cdcms_address(raw_address: str, *, area_suffix: str = "") -> str:
     # Must come BEFORE the standalone PO pattern below.
     addr = re.sub(r"([a-zA-Z])PO\.", r"\1 P.O.", addr, flags=re.IGNORECASE)
 
-    # (H) → House (common CDCMS notation for "house")
-    addr = re.sub(r"\(H\)", "House", addr, flags=re.IGNORECASE)
+    # (HO) → House (common CDCMS notation for "house" — 172 Refill.xlsx occurrences)
+    # Must come BEFORE (H) pattern to prevent partial matching.
+    # Space padding " House " ensures no word concatenation when (HO) is stuck
+    # to adjacent text like "PERATTEYATH(HO)CHORODE". Step 8 collapses extra spaces.
+    addr = re.sub(r"\(HO\)", " House ", addr, flags=re.IGNORECASE)
+
+    # (H) → House (common CDCMS notation for "house" — 104 Refill.xlsx occurrences)
+    # Space padding added to prevent concatenation: "CHALIL(H)7/214A" → "CHALIL House 7/214A"
+    addr = re.sub(r"\(H\)", " House ", addr, flags=re.IGNORECASE)
+
+    # (PO) → P.O. (post office — 368 Refill.xlsx occurrences)
+    # Space padding ensures "CHORODE(PO)POOLAKANDY" → "CHORODE P.O. POOLAKANDY"
+    addr = re.sub(r"\(PO\)", " P.O. ", addr, flags=re.IGNORECASE)
 
     # Step 5: Add spaces before uppercase words that are stuck together.
     # CDCMS often concatenates: "VATTEPARAMBU PONR JUMA MASJID"
