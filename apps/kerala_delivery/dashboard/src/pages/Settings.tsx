@@ -27,7 +27,6 @@ import {
 import { EmptyState } from "../components/EmptyState";
 import { StatusBadge } from "../components/StatusBadge";
 import type {
-  SettingsResponse,
   GeocodeStats,
   CacheImportResult,
   OptimizationRun,
