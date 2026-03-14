@@ -203,7 +203,10 @@ Plans:
   2. User can view upload history showing date, filename, driver count, and order count for each past upload
   3. User can view geocode cache statistics (total cached addresses, API calls made, estimated cost) on the Settings page
   4. User can export the entire geocode cache to a JSON file and import a cache JSON file from another machine
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 21-01-PLAN.md -- Backend: SettingsDB model, Alembic migration, repository functions, API endpoints for settings/cache
+- [ ] 21-02-PLAN.md -- Frontend: Settings page with API Key, Geocode Cache, and Upload History cards
 
 ### Phase 22: Google Routes Validation
 **Goal**: Users can manually compare a generated route against Google Routes API to assess OSRM routing accuracy, with clear cost transparency before each call
@@ -267,7 +270,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 18. Address Preprocessing Fixes | v3.0 | 0/4 | Not started | - |
 | 19. Per-Driver TSP Optimization | v3.0 | 0/3 | Not started | - |
 | 20. UI Terminology Rename | v3.0 | 0/2 | Not started | - |
-| 21. Dashboard Settings and Cache Management | v3.0 | 0/TBD | Not started | - |
+| 21. Dashboard Settings and Cache Management | v3.0 | 0/2 | Not started | - |
 | 22. Google Routes Validation | v3.0 | 0/TBD | Not started | - |
 
 ---
