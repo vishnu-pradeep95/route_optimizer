@@ -33,6 +33,7 @@ from core.database.models import (
     OrderDB,
     RouteDB,
     RouteStopDB,
+    RouteValidationDB,
     SettingsDB,
     TelemetryDB,
     VehicleDB,
@@ -1222,6 +1223,183 @@ async def clear_geocode_cache(session: AsyncSession) -> int:
     result = await session.execute(delete(GeocodeCacheDB))
     await session.flush()
     return result.rowcount  # type: ignore[return-value]
+
+
+# =============================================================================
+# Route Validation (Google Routes API comparison)
+# =============================================================================
+
+
+def confidence_level(distance_delta_pct: float) -> str:
+    """Compute confidence level from distance delta percentage.
+
+    Based on practical routing accuracy expectations:
+    - <= 10% delta: OSRM routing closely aligned with Google (green)
+    - <= 25% delta: Noticeable difference, worth investigating (amber)
+    - > 25% delta: Significant divergence, OSRM data may need updating (red)
+
+    Args:
+        distance_delta_pct: Absolute percentage difference between OSRM
+            and Google distances.
+
+    Returns:
+        "green", "amber", or "red" confidence string.
+    """
+    if distance_delta_pct <= 10.0:
+        return "green"
+    elif distance_delta_pct <= 25.0:
+        return "amber"
+    else:
+        return "red"
+
+
+async def save_route_validation(
+    session: AsyncSession,
+    route_id: uuid.UUID,
+    osrm_distance_km: float,
+    osrm_duration_minutes: float,
+    google_distance_km: float,
+    google_duration_minutes: float,
+    google_waypoint_order: str | None,
+    estimated_cost_usd: float = 0.01,
+) -> RouteValidationDB:
+    """Save a Google Routes validation result for a route.
+
+    Computes delta percentages automatically from the OSRM and Google values:
+    delta_pct = abs(google - osrm) / osrm * 100
+
+    Args:
+        session: Async DB session (caller commits).
+        route_id: UUID of the route being validated.
+        osrm_distance_km: OSRM/VROOM total distance in km.
+        osrm_duration_minutes: OSRM/VROOM total duration in minutes.
+        google_distance_km: Google Routes total distance in km.
+        google_duration_minutes: Google Routes total duration in minutes.
+        google_waypoint_order: JSON array string of Google's re-optimized
+            waypoint indices, or None.
+        estimated_cost_usd: Estimated cost of this API call in USD.
+
+    Returns:
+        The created RouteValidationDB instance.
+    """
+    # Compute delta percentages (guard against division by zero)
+    distance_delta_pct = (
+        abs(google_distance_km - osrm_distance_km) / osrm_distance_km * 100
+        if osrm_distance_km > 0
+        else 0.0
+    )
+    duration_delta_pct = (
+        abs(google_duration_minutes - osrm_duration_minutes) / osrm_duration_minutes * 100
+        if osrm_duration_minutes > 0
+        else 0.0
+    )
+
+    validation = RouteValidationDB(
+        route_id=route_id,
+        osrm_distance_km=osrm_distance_km,
+        osrm_duration_minutes=osrm_duration_minutes,
+        google_distance_km=google_distance_km,
+        google_duration_minutes=google_duration_minutes,
+        distance_delta_pct=round(distance_delta_pct, 1),
+        duration_delta_pct=round(duration_delta_pct, 1),
+        google_waypoint_order=google_waypoint_order,
+        estimated_cost_usd=estimated_cost_usd,
+    )
+    session.add(validation)
+    await session.flush()
+    return validation
+
+
+async def get_route_validation(
+    session: AsyncSession, route_id: uuid.UUID
+) -> RouteValidationDB | None:
+    """Get the latest validation result for a route.
+
+    Returns the most recent validation (by validated_at DESC) for the
+    given route_id, or None if no validation exists.
+
+    Args:
+        session: Async DB session.
+        route_id: UUID of the route.
+
+    Returns:
+        RouteValidationDB instance or None.
+    """
+    result = await session.execute(
+        select(RouteValidationDB)
+        .where(RouteValidationDB.route_id == route_id)
+        .order_by(RouteValidationDB.validated_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_validation_stats(session: AsyncSession) -> dict:
+    """Get cumulative validation statistics from SettingsDB.
+
+    Reads "validation_count" and "validation_total_cost_usd" from the
+    settings key-value store. Returns defaults (0) if not set.
+
+    Args:
+        session: Async DB session.
+
+    Returns:
+        Dict with count (int) and total_cost_usd (float).
+    """
+    count_str = await get_setting(session, "validation_count")
+    cost_str = await get_setting(session, "validation_total_cost_usd")
+
+    return {
+        "count": int(count_str) if count_str else 0,
+        "total_cost_usd": float(cost_str) if cost_str else 0.0,
+    }
+
+
+async def increment_validation_stats(
+    session: AsyncSession, cost_usd: float
+) -> None:
+    """Increment cumulative validation count and cost in SettingsDB.
+
+    Reads current values, increments by 1 (count) and cost_usd (cost),
+    then writes back via set_setting.
+
+    Args:
+        session: Async DB session (caller commits).
+        cost_usd: Cost of this validation in USD.
+    """
+    count_str = await get_setting(session, "validation_count")
+    cost_str = await get_setting(session, "validation_total_cost_usd")
+
+    new_count = int(count_str or "0") + 1
+    new_cost = float(cost_str or "0") + cost_usd
+
+    await set_setting(session, "validation_count", str(new_count))
+    await set_setting(session, "validation_total_cost_usd", str(round(new_cost, 4)))
+
+
+async def get_recent_validations(
+    session: AsyncSession, limit: int = 10
+) -> list[RouteValidationDB]:
+    """Get the most recent validation results, joined with route data.
+
+    Returns the latest N validations ordered by validated_at DESC.
+    Eagerly loads the associated RouteDB to access vehicle_id.
+
+    Args:
+        session: Async DB session.
+        limit: Maximum number of results to return (default 10).
+
+    Returns:
+        List of RouteValidationDB instances with route relationship loaded.
+    """
+    result = await session.execute(
+        select(RouteValidationDB)
+        .join(RouteDB, RouteValidationDB.route_id == RouteDB.id)
+        .options(selectinload(RouteValidationDB.route))
+        .order_by(RouteValidationDB.validated_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())
 
 
 # =============================================================================

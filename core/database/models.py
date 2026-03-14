@@ -397,6 +397,56 @@ class SettingsDB(Base):
 
 
 # ---------------------------------------------------------------------------
+# ROUTE VALIDATIONS (Google Routes API comparison)
+# ---------------------------------------------------------------------------
+class RouteValidationDB(Base):
+    """ORM model for the route_validations table.
+
+    Stores Google Routes API validation results for comparing OSRM/VROOM
+    routes against Google's routing. Each validation records both the
+    OSRM and Google distance/duration values, computed delta percentages,
+    and Google's re-optimized waypoint order.
+
+    Phase 22: Google Routes Validation — results persist in DB with
+    cumulative cost tracking via SettingsDB key-value store.
+    """
+
+    __tablename__ = "route_validations"
+    __table_args__ = (
+        Index("idx_route_validations_route_id", "route_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    route_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("routes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # OSRM/VROOM values (snapshot at validation time)
+    osrm_distance_km: Mapped[float] = mapped_column(Float, nullable=False)
+    osrm_duration_minutes: Mapped[float] = mapped_column(Float, nullable=False)
+    # Google Routes values
+    google_distance_km: Mapped[float] = mapped_column(Float, nullable=False)
+    google_duration_minutes: Mapped[float] = mapped_column(Float, nullable=False)
+    # Computed deltas: abs(google - osrm) / osrm * 100
+    distance_delta_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    duration_delta_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    # Google's re-optimized stop order (JSON array string of 0-based indices)
+    google_waypoint_order: Mapped[str | None] = mapped_column(Text)
+    # Cost tracking ($0.01 per Pro tier request)
+    estimated_cost_usd: Mapped[float] = mapped_column(Float, default=0.01)
+    # Timestamps
+    validated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships
+    route: Mapped[RouteDB] = relationship()
+
+
+# ---------------------------------------------------------------------------
 # GEOCODE CACHE
 # ---------------------------------------------------------------------------
 class GeocodeCacheDB(Base):
