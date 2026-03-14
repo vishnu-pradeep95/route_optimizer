@@ -217,7 +217,10 @@ Plans:
   2. After validation, the route card shows a side-by-side comparison of VROOM/OSRM vs Google distance and time, with a confidence indicator (green/amber/red based on delta percentage)
   3. Before the Google API call is made, a cost warning is displayed showing the estimated cost of the validation request
   4. Google Routes validation is never triggered automatically -- it only runs when the user explicitly clicks the validate button
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 22-01-PLAN.md -- Backend: RouteValidationDB model, Alembic migration, repository CRUD, Google Routes API adapter, validation endpoint with tests
+- [ ] 22-02-PLAN.md -- Frontend: TypeScript types, API client, RouteList validate button with cost modal and inline results, Settings validation history card
 
 ## Progress
 
@@ -246,32 +249,8 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 18. Distribution Build | 4/4 | Complete    | 2026-03-14 | 2026-03-06 |
 | 19. Pin OSRM Docker Image | 3/3 | Complete    | 2026-03-14 | 2026-03-07 |
 | 20. Sync Error Message Documentation | 2/2 | Complete    | 2026-03-14 | 2026-03-07 |
-| 21. Playwright E2E Test Suite | 2/2 | Complete    | 2026-03-14 | 2026-03-08 |
-| 22. CI/CD Pipeline Integration | v1.4 | 2/2 | Complete | 2026-03-08 |
-| 23. Distribution Verification & Ops | v1.4 | 2/2 | Complete | 2026-03-08 |
-| 24. Documentation Consolidation | v1.4 | 3/3 | Complete | 2026-03-09 |
-| 1. Documentation Restructure & Validation | v2.0 | 2/2 | Complete | 2026-03-09 |
-| 2. Error Handling Infrastructure | v2.0 | 4/4 | Complete | 2026-03-10 |
-| 3. Error Handling Polish | v2.0 | 1/1 | Complete | 2026-03-10 |
-| 4. Documentation Accuracy Refresh | v2.0 | 2/2 | Complete | 2026-03-10 |
-| 5. Fingerprinting Overhaul | v2.1 | 2/2 | Complete | 2026-03-10 |
-| 6. Build Pipeline -- Dev-Mode Stripping and Cython | v2.1 | 3/3 | Complete | 2026-03-10 |
-| 7. Enforcement Module | v2.1 | 2/2 | Complete | 2026-03-10 |
-| 8. Runtime Protection | v2.1 | 2/2 | Complete | 2026-03-11 |
-| 9. License Management | v2.1 | 2/2 | Complete | 2026-03-10 |
-| 10. End-to-End Validation | v2.1 | 2/2 | Complete | 2026-03-11 |
-| 11. Foundation Fixes | v2.2 | 3/3 | Complete | 2026-03-11 |
-| 12. Place Name Dictionary and Address Splitter | v2.2 | 3/3 | Complete | 2026-03-12 |
-| 13. Geocode Validation and Fallback Chain | v2.2 | 3/3 | Complete | 2026-03-12 |
-| 14. API Confidence Fields and Driver PWA Badge | v2.2 | 2/2 | Complete | 2026-03-12 |
-| 15. Integration Testing and Accuracy Metrics | v2.2 | 2/2 | Complete | 2026-03-12 |
-| 16. Driver Database Foundation | v3.0 | 0/3 | Not started | - |
-| 17. CSV Upload and XLSX Detection | v3.0 | 3/4 | Gap closure | - |
-| 18. Address Preprocessing Fixes | v3.0 | 0/4 | Not started | - |
-| 19. Per-Driver TSP Optimization | v3.0 | 0/3 | Not started | - |
-| 20. UI Terminology Rename | v3.0 | 0/2 | Not started | - |
-| 21. Dashboard Settings and Cache Management | v3.0 | 0/2 | Not started | - |
-| 22. Google Routes Validation | v3.0 | 0/TBD | Not started | - |
+| 21. Dashboard Settings and Cache Management | 2/2 | Complete    | 2026-03-14 | 2026-03-08 |
+| 22. Google Routes Validation | v3.0 | 0/2 | Not started | - |
 
 ---
 *Full phase details for v1.x and v2.x archived in `.planning/milestones/`*
