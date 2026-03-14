@@ -60,7 +60,7 @@ Requirements for v3.0 Driver-Centric Model. Each maps to roadmap phases.
 ### UI Terminology
 
 - [x] **UI-01**: Dashboard displays "Driver" instead of "Vehicle" in all user-facing labels, headers, and navigation
-- [ ] **UI-02**: API field names remain backward-compatible (vehicle_id stays in API responses for PWA compatibility)
+- [x] **UI-02**: API field names remain backward-compatible (vehicle_id stays in API responses for PWA compatibility)
 - [x] **UI-03**: Fleet Management page becomes Driver Management page with driver-centric UI
 
 ## Future Requirements
@@ -133,7 +133,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SET-05 | Phase 21 | Pending |
 | SET-06 | Phase 21 | Pending |
 | UI-01 | Phase 20 | Complete |
-| UI-02 | Phase 20 | Pending |
+| UI-02 | Phase 20 | Complete |
 | UI-03 | Phase 20 | Complete |
 
 **Coverage:**

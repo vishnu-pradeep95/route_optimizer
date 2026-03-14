@@ -113,7 +113,7 @@
 - [x] **Phase 17: CSV Upload and XLSX Detection** - Fix .xlsx detection bug, add driver preview step, driver selection before processing (completed 2026-03-13)
 - [x] **Phase 18: Address Preprocessing Fixes** - Fix trailing-letter split garbling, (H) expansion, PO concatenation, and tighten geocode validation (completed 2026-03-14)
 - [x] **Phase 19: Per-Driver TSP Optimization** - Group orders by driver, run VROOM TSP per driver, store all routes under single optimization run (completed 2026-03-14)
-- [ ] **Phase 20: UI Terminology Rename** - Change "Vehicle" to "Driver" in all dashboard labels while keeping API field names backward-compatible
+- [x] **Phase 20: UI Terminology Rename** - Change "Vehicle" to "Driver" in all dashboard labels while keeping API field names backward-compatible (completed 2026-03-14)
 - [ ] **Phase 21: Dashboard Settings and Cache Management** - Settings page with API key management, upload history, geocode cache stats and export/import
 - [ ] **Phase 22: Google Routes Validation** - User-triggered OSRM vs Google Routes distance/time comparison with cost warning and confidence indicator
 
@@ -189,7 +189,7 @@ Plans:
   1. All dashboard headers, labels, navigation items, and table columns show "Driver" instead of "Vehicle" (e.g., "Driver Management", "Driver Routes", driver name in route cards)
   2. API responses continue to include vehicle_id fields -- the Driver PWA works without any changes
   3. The Fleet Management page is now the Driver Management page with driver-centric layout (driver names, not vehicle IDs, as primary identifiers)
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 20-01-PLAN.md -- VehicleList->RouteList rename, Vehicle-to-Driver text sweep, FleetManagement deletion
 - [ ] 20-02-PLAN.md -- Duplicate warning UX redesign, floating-point display fix (API + dashboard + Driver PWA)
@@ -242,7 +242,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 17. Error Message Humanization | 4/4 | Complete    | 2026-03-13 | 2026-03-06 |
 | 18. Distribution Build | 4/4 | Complete    | 2026-03-14 | 2026-03-06 |
 | 19. Pin OSRM Docker Image | 3/3 | Complete    | 2026-03-14 | 2026-03-07 |
-| 20. Sync Error Message Documentation | 1/2 | In Progress|  | 2026-03-07 |
+| 20. Sync Error Message Documentation | 2/2 | Complete   | 2026-03-14 | 2026-03-07 |
 | 21. Playwright E2E Test Suite | v1.4 | 3/3 | Complete | 2026-03-08 |
 | 22. CI/CD Pipeline Integration | v1.4 | 2/2 | Complete | 2026-03-08 |
 | 23. Distribution Verification & Ops | v1.4 | 2/2 | Complete | 2026-03-08 |

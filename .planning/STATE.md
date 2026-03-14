@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Driver-Centric Model
 status: in-progress
-stopped_at: Completed 20-01-PLAN.md
-last_updated: "2026-03-14T19:26:41Z"
-last_activity: 2026-03-14 -- Completed 20-01 (Rename VehicleList to RouteList + sweep Vehicle-to-Driver text)
+stopped_at: Completed 20-02-PLAN.md
+last_updated: "2026-03-14T19:32:46Z"
+last_activity: 2026-03-14 -- Completed 20-02 (Duplicate warning redesign + float rounding)
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
-  percent: 28
+  percent: 35
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Every delivery address uploaded must appear on the map and be assigned to an optimized route -- no silent drops, no missing stops.
-**Current focus:** v3.0 Driver-Centric Model -- Phase 20: UI Terminology Rename (In Progress)
+**Current focus:** v3.0 Driver-Centric Model -- Phase 20: UI Terminology Rename (COMPLETE)
 
 ## Current Position
 
 Phase: 20 of 22 (UI Terminology Rename) -- fifth of 7 phases in v3.0
-Plan: 1 of 2 (COMPLETE)
-Status: In Progress
-Last activity: 2026-03-14 -- Completed 20-01 (Rename VehicleList to RouteList + sweep Vehicle-to-Driver text)
+Plan: 2 of 2 (COMPLETE)
+Status: Phase Complete
+Last activity: 2026-03-14 -- Completed 20-02 (Duplicate warning redesign + float rounding)
 
-Progress: [▓▓▓▓░░░░░░] 30%
+Progress: [▓▓▓▓░░░░░░] 35%
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Progress: [▓▓▓▓░░░░░░] 30%
 | Phase 19 P02 | 6min | 2 tasks | 5 files |
 | Phase 19 P03 | 3min | 3 tasks | 3 files |
 | Phase 20 P01 | 4min | 2 tasks | 9 files |
+| Phase 20 P02 | 3min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,9 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 - **Phase 20-01:** Kept internal prop names (selectedVehicleId, onSelectVehicle) unchanged for backward compatibility
 - **Phase 20-01:** Simplified route card header to show only vehicle_id (which is now driver name per Phase 19)
 - **Phase 20-01:** Renamed RunHistory detail table headers Vehicle/Driver to Driver/Name
+- **Phase 20-02:** Collapsed-by-default duplicate warnings to reduce visual noise for 15+ clusters
+- **Phase 20-02:** API-level rounding as primary fix ensures all clients get clean float data
+- **Phase 20-02:** Defense-in-depth Number().toFixed(1) in Driver PWA even though API now rounds
 
 ### Pending Todos
 
@@ -125,6 +129,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last session: 2026-03-14T19:26:41Z
-Stopped at: Completed 20-01-PLAN.md
-Resume file: .planning/milestones/v3.0-phases/20-ui-terminology-rename/20-01-SUMMARY.md
+Last session: 2026-03-14T19:32:46Z
+Stopped at: Completed 20-02-PLAN.md
+Resume file: .planning/milestones/v3.0-phases/20-ui-terminology-rename/20-02-SUMMARY.md
