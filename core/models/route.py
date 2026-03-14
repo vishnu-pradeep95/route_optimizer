@@ -5,6 +5,7 @@ which orders to deliver and in what sequence, along with estimated times
 and distances.
 """
 
+import uuid
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
@@ -90,6 +91,7 @@ class Route(BaseModel):
     route_id: str
     vehicle_id: str
     driver_name: str = ""
+    driver_id: uuid.UUID | None = Field(default=None, description="Driver UUID from drivers table")
     stops: list[RouteStop] = Field(default_factory=list)
     total_distance_km: float = Field(default=0.0, ge=0)
     total_duration_minutes: float = Field(default=0.0, ge=0)

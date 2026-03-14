@@ -59,6 +59,12 @@ from core.geocoding.google_adapter import GoogleGeocoder
 from core.licensing.license_manager import validate_license, LicenseStatus, LicenseInfo, GRACE_PERIOD_DAYS
 from core.models.location import Location
 from core.models.order import Order
+from core.optimizer.tsp_orchestrator import (
+    group_orders_by_driver,
+    optimize_per_driver,
+    validate_no_overlap,
+    detect_geographic_anomalies,
+)
 from core.optimizer.vroom_adapter import VroomAdapter
 from geoalchemy2.shape import to_shape
 
@@ -1857,27 +1863,15 @@ async def upload_and_optimize(
                 drivers=driver_summary,
             )
 
-        # Step 3: Build fleet and optimize
-        db_vehicles = await repo.get_active_vehicles(session)
-        if db_vehicles:
-            fleet = [repo.vehicle_db_to_pydantic(v) for v in db_vehicles]
-        else:
-            return error_response(
-                status_code=400,
-                error_code=ErrorCode.FLEET_NO_VEHICLES,
-                user_message="No active vehicles configured -- add vehicles in Fleet Management before uploading orders",
-                technical_message="repo.get_active_vehicles returned empty list",
-                request_id=request_id_var.get(""),
-            )
+        # Step 3: Per-driver TSP optimization (Phase 19)
+        # No vehicle fleet needed -- each driver gets 1 virtual vehicle with uncapped capacity.
+        # The DeliveryMan column from the CSV determines grouping.
 
-        # Apply monsoon multiplier (June–September) on top of base safety multiplier.
-        # Kerala monsoon significantly increases travel times: flooded roads, reduced
-        # visibility, slower speeds. See design doc Section 3.
         effective_multiplier = config.SAFETY_MULTIPLIER
         if datetime.now().month in config.MONSOON_MONTHS:
             effective_multiplier *= config.MONSOON_MULTIPLIER
             logger.info(
-                "Monsoon season active — using %.1f× travel time multiplier",
+                "Monsoon season active -- using %.1fx travel time multiplier",
                 effective_multiplier,
             )
 
@@ -1885,18 +1879,77 @@ async def upload_and_optimize(
             vroom_url=config.VROOM_URL,
             safety_multiplier=effective_multiplier,
         )
-        # Apply retry decorator to the optimizer's HTTP POST call.
-        # This wraps optimize() (synchronous httpx.post to VROOM) so transient
-        # failures (ConnectError, TimeoutException) are retried automatically.
-        # Permanent errors (HTTP 400 = bad input) are NOT retried.
         optimizer.optimize = optimizer_retry(optimizer.optimize)
 
-        # Driver selection filtering now happens BEFORE geocoding (see
-        # "Phase 17 gap closure" block above). By this point, `geocoded_orders`
-        # already contains only the selected drivers' orders.
-        orders_for_optimization = geocoded_orders
+        # Build order-driver map from preprocessed DataFrame (only for geocoded orders)
+        order_driver_map: dict[str, str] = {}
+        if is_cdcms and not preprocessed_df.empty and "delivery_man" in preprocessed_df.columns:
+            for _, row in preprocessed_df.iterrows():
+                oid = str(row.get("order_id", "")).strip()
+                dm = str(row.get("delivery_man", "")).strip()
+                if oid and dm:
+                    order_driver_map[oid] = dm
+        elif not is_cdcms:
+            # Standard CSV (non-CDCMS): no driver column, group all orders under
+            # a single default driver for backward compatibility with TSP pipeline
+            for o in geocoded_orders:
+                order_driver_map[o.order_id] = "Driver"
 
-        assignment = optimizer.optimize(orders_for_optimization, fleet)
+        # Group geocoded orders by driver
+        orders_by_driver = group_orders_by_driver(geocoded_orders, order_driver_map)
+
+        if not orders_by_driver:
+            # No orders could be mapped to drivers
+            return error_response(
+                status_code=400,
+                error_code=ErrorCode.INVALID_REQUEST,
+                user_message="No orders could be matched to drivers -- check that the DeliveryMan column has valid names",
+                technical_message="group_orders_by_driver returned empty dict",
+                request_id=request_id_var.get(""),
+            )
+
+        # Build driver name -> UUID map from auto_create_drivers_from_csv result
+        driver_uuids: dict[str, uuid.UUID] = {}
+        if driver_summary:
+            # Query all active drivers to build name->UUID mapping
+            all_drivers = await repo.get_all_drivers(session)
+            for drv in all_drivers:
+                driver_uuids[drv.name] = drv.id
+                # Also map normalized name for fuzzy match resilience
+                if hasattr(drv, "name_normalized") and drv.name_normalized:
+                    driver_uuids[drv.name_normalized] = drv.id
+
+        # Run per-driver TSP
+        assignment, opt_warnings = optimize_per_driver(
+            orders_by_driver=orders_by_driver,
+            driver_uuids=driver_uuids,
+            depot=config.DEPOT_LOCATION,
+            optimizer=optimizer,
+        )
+
+        # Post-optimization validations (OPT-04 + OPT-05)
+        overlap_errors = validate_no_overlap(assignment)
+        if overlap_errors:
+            logger.error("Order overlap detected: %s", overlap_errors)
+            opt_warnings.extend(overlap_errors)
+
+        geo_anomalies = detect_geographic_anomalies(assignment)
+        opt_warnings.extend(geo_anomalies)
+
+        # Populate driver_id FK on routes for DB persistence
+        for route in assignment.routes:
+            driver_uuid = driver_uuids.get(route.driver_name) or driver_uuids.get(route.vehicle_id)
+            if driver_uuid:
+                route.driver_id = driver_uuid
+
+        # Add optimization warnings (overlap, anomalies, partial failures)
+        for w in opt_warnings:
+            all_warnings.append(ImportFailure(
+                row_number=0,
+                address_snippet="",
+                reason=w,
+                stage="optimization",
+            ))
 
         # Step 4: Persist to database
         run_id = await repo.save_optimization_run(

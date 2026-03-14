@@ -180,6 +180,7 @@ async def save_optimization_run(
             run_id=run_id,
             vehicle_id=route.vehicle_id,
             driver_name=route.driver_name,
+            driver_id=route.driver_id,  # Phase 19: link route to driver
             total_distance_km=route.total_distance_km,
             total_duration_minutes=route.total_duration_minutes,
             total_weight_kg=route.total_weight_kg,
