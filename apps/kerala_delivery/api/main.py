@@ -232,6 +232,22 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("All services healthy")
 
+    # ── Load DB-stored settings ─────────────────────────────────────
+    # Phase 21: Load the Google Maps API key from DB into the module-level
+    # _cached_api_key so _get_geocoder() can use it from the first request.
+    # Uses async_session_factory directly (get_session is a FastAPI dependency
+    # generator, not a context manager).
+    global _cached_api_key
+    try:
+        from core.database.connection import async_session_factory
+        async with async_session_factory() as session:
+            db_key = await repo.get_setting(session, "google_maps_api_key")
+            if db_key:
+                _cached_api_key = db_key
+                logger.info("Google Maps API key loaded from database settings")
+    except Exception as e:
+        logger.warning("Could not load settings from database: %s", e)
+
     logger.info("Starting up — DB engine pool initialized")
     yield
     # Shutdown: dispose DB connection pool
@@ -607,21 +623,27 @@ async def verify_read_key(
 # GoogleGeocoder is a pure API caller -- caching is handled by CachedGeocoder.
 _geocoder_instance: GoogleGeocoder | None = None
 
+# Phase 21: Cached DB-stored API key. Loaded at startup and updated on
+# PUT /api/settings/api-key. Keeps _get_geocoder() synchronous (no DB call).
+_cached_api_key: str | None = None
+
 
 def _get_geocoder() -> GoogleGeocoder | None:
     """Get or create the shared GoogleGeocoder instance.
 
-    Returns None if GOOGLE_MAPS_API_KEY is not set (geocoding disabled).
+    Priority: DB settings (cached in _cached_api_key) > env var.
+    Returns None if no valid API key is available (geocoding disabled).
     GoogleGeocoder is a pure API caller -- caching is handled by CachedGeocoder.
     """
     global _geocoder_instance
     if _geocoder_instance is not None:
         return _geocoder_instance
-    api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+    # Priority: DB settings (cached) > env var
+    api_key = _cached_api_key or os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
     # Reject placeholder values that aren't real API keys.
     # Real Google API keys start with "AIza" and are 39 characters.
     placeholder_values = {"your-key-here", "your-api-key", "change-me", ""}
-    if api_key.lower() in placeholder_values:
+    if not api_key or api_key.lower() in placeholder_values:
         if api_key:
             logger.warning(
                 "GOOGLE_MAPS_API_KEY appears to be a placeholder ('%s') — geocoding disabled. "
@@ -631,6 +653,54 @@ def _get_geocoder() -> GoogleGeocoder | None:
         return None
     _geocoder_instance = GoogleGeocoder(api_key=api_key)
     return _geocoder_instance
+
+
+# =============================================================================
+# Settings helpers (Phase 21)
+# =============================================================================
+
+def mask_api_key(key: str) -> str:
+    """Mask an API key for display: show first 4 + last 4, stars in between.
+
+    If the key is 8 characters or fewer, return "****" to avoid
+    revealing the full key.
+
+    Args:
+        key: The full API key string.
+
+    Returns:
+        Masked string like "AIza****mnop".
+    """
+    if len(key) <= 8:
+        return "****"
+    return f"{key[:4]}{'*' * (len(key) - 8)}{key[-4:]}"
+
+
+async def _validate_google_api_key(api_key: str) -> tuple[bool, str]:
+    """Test a Google Maps API key with a known address.
+
+    Makes a single geocode request to the Google Maps Geocoding API
+    with a well-known address to verify the key is valid and has
+    the Geocoding API enabled.
+
+    Args:
+        api_key: Google Maps API key to validate.
+
+    Returns:
+        Tuple of (is_valid, message).
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                "https://maps.googleapis.com/maps/api/geocode/json",
+                params={"address": "Vatakara, Kerala, India", "key": api_key},
+            )
+            data = resp.json()
+            if data.get("status") == "OK":
+                return True, "API key is valid"
+            return False, f"Google API returned: {data.get('status', 'unknown')} - {data.get('error_message', '')}"
+    except Exception as e:
+        return False, f"Connection error: {str(e)}"
 
 
 def _is_cdcms_format(file_path: str) -> bool:
@@ -3427,4 +3497,179 @@ async def get_routes_for_run(
             }
             for r in route_dbs
         ],
+    }
+
+
+# =============================================================================
+# Settings & Cache Management (Phase 21)
+# =============================================================================
+
+
+@app.get("/api/settings", dependencies=[Depends(verify_read_key)])
+async def get_settings(
+    session: AsyncSession = SessionDep,
+):
+    """Get application settings.
+
+    Returns the Google Maps API key (masked) and whether one is configured.
+    Never exposes the full key -- only first 4 + last 4 characters.
+
+    Used by the dashboard Settings page to show current configuration status.
+    """
+    raw_key = await repo.get_setting(session, "google_maps_api_key")
+    masked = mask_api_key(raw_key) if raw_key else None
+
+    return {
+        "google_maps_api_key": masked,
+        "has_api_key": raw_key is not None,
+    }
+
+
+@app.put("/api/settings/api-key", dependencies=[Depends(verify_api_key)])
+@limiter.limit("10/minute")
+async def update_api_key(
+    request: Request,
+    body: dict,
+    session: AsyncSession = SessionDep,
+):
+    """Update the Google Maps API key.
+
+    Validates the key by making a test geocode request before saving.
+    If validation fails, returns 400 and does NOT save the key.
+    On success, updates the DB setting and invalidates the cached geocoder
+    instance so the next geocode request uses the new key.
+
+    Body: {"api_key": "AIza..."}
+    """
+    global _cached_api_key, _geocoder_instance
+
+    api_key_value = body.get("api_key", "").strip()
+    if not api_key_value:
+        raise HTTPException(status_code=400, detail="api_key is required")
+
+    # Validate the key with a test geocode request
+    valid, message = await _validate_google_api_key(api_key_value)
+    if not valid:
+        raise HTTPException(status_code=400, detail=message)
+
+    # Save to DB
+    await repo.set_setting(session, "google_maps_api_key", api_key_value)
+    await session.commit()
+
+    # Update module-level cache and invalidate geocoder instance
+    _cached_api_key = api_key_value
+    _geocoder_instance = None
+
+    return {
+        "message": "API key updated",
+        "masked_key": mask_api_key(api_key_value),
+        "valid": True,
+    }
+
+
+@app.post("/api/settings/api-key/validate", dependencies=[Depends(verify_api_key)])
+@limiter.limit("10/minute")
+async def validate_api_key_endpoint(
+    request: Request,
+    body: dict,
+    session: AsyncSession = SessionDep,
+):
+    """Validate a Google Maps API key without saving it.
+
+    Makes a test geocode request to verify the key works. Allows
+    "test before save" UX in the dashboard Settings page.
+
+    Body: {"api_key": "AIza..."}
+    """
+    api_key_value = body.get("api_key", "").strip()
+    if not api_key_value:
+        raise HTTPException(status_code=400, detail="api_key is required")
+
+    valid, message = await _validate_google_api_key(api_key_value)
+    return {"valid": valid, "message": message}
+
+
+@app.get("/api/geocode-cache/stats", dependencies=[Depends(verify_read_key)])
+async def get_cache_stats(
+    session: AsyncSession = SessionDep,
+):
+    """Get geocode cache statistics.
+
+    Returns total entries, hit count, API calls saved, and estimated
+    USD savings at $0.005 per request. Used by the dashboard Settings
+    page to show the value of the geocode cache.
+    """
+    stats = await repo.get_geocode_cache_stats(session)
+    return stats
+
+
+@app.get("/api/geocode-cache/export", dependencies=[Depends(verify_read_key)])
+async def export_cache(
+    session: AsyncSession = SessionDep,
+):
+    """Export all geocode cache entries as a JSON download.
+
+    Returns a JSON array with all cache entries, including lat/lng
+    extracted from PostGIS geometry. The response includes a
+    Content-Disposition header for browser download.
+    """
+    entries = await repo.export_geocode_cache(session)
+    return JSONResponse(
+        content=entries,
+        headers={
+            "Content-Disposition": 'attachment; filename="geocode_cache_export.json"',
+        },
+    )
+
+
+@app.post("/api/geocode-cache/import", dependencies=[Depends(verify_api_key)])
+@limiter.limit("5/minute")
+async def import_cache(
+    request: Request,
+    file: UploadFile = File(...),
+    session: AsyncSession = SessionDep,
+):
+    """Import geocode cache entries from an uploaded JSON file.
+
+    Accepts a JSON file with an array of cache entries. New entries
+    are added; duplicates (same address_norm + source) are skipped.
+
+    Returns the count of added and skipped entries.
+    """
+    try:
+        content = await file.read()
+        entries = json.loads(content)
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON file: {str(e)}")
+
+    if not isinstance(entries, list):
+        raise HTTPException(status_code=400, detail="Expected a JSON array of cache entries")
+
+    result = await repo.import_geocode_cache(session, entries)
+    await session.commit()
+
+    return {
+        "message": "Import complete",
+        "added": result["added"],
+        "skipped": result["skipped"],
+    }
+
+
+@app.delete("/api/geocode-cache", dependencies=[Depends(verify_api_key)])
+@limiter.limit("5/minute")
+async def clear_cache(
+    request: Request,
+    session: AsyncSession = SessionDep,
+):
+    """Clear all geocode cache entries.
+
+    Deletes all entries from the geocode_cache table. This is irreversible --
+    use export first if you want a backup. Returns the number of deleted entries.
+    """
+    count = await repo.clear_geocode_cache(session)
+    await session.commit()
+
+    return {
+        "message": "Cache cleared",
+        "deleted": count,
     }
