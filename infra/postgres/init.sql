@@ -131,7 +131,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_run_id ON orders(run_id);
 CREATE TABLE IF NOT EXISTS routes (
     id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     run_id                  UUID NOT NULL REFERENCES optimization_runs(id) ON DELETE CASCADE,
-    vehicle_id              VARCHAR(20) NOT NULL,       -- "VEH-01"
+    vehicle_id              VARCHAR(100) NOT NULL,      -- driver name (Phase 19: widened from 20 for driver names)
     driver_name             VARCHAR(100),
     driver_id               UUID REFERENCES drivers(id),  -- Phase 16: FK to standalone drivers table
     total_distance_km       REAL DEFAULT 0.0,
@@ -181,7 +181,7 @@ CREATE INDEX IF NOT EXISTS idx_route_stops_route_id ON route_stops(route_id);
 -- For now, the indexes below are sufficient.
 CREATE TABLE IF NOT EXISTS telemetry (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    vehicle_id  VARCHAR(20) NOT NULL,
+    vehicle_id  VARCHAR(100) NOT NULL,             -- driver name (Phase 19: widened from 20)
     driver_name VARCHAR(100),
     location    geometry(Point, 4326) NOT NULL,
     speed_kmh   REAL,                           -- from GPS or computed

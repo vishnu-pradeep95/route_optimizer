@@ -232,7 +232,7 @@ class RouteDB(Base):
         ForeignKey("optimization_runs.id", ondelete="CASCADE"),
         nullable=False,
     )
-    vehicle_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    vehicle_id: Mapped[str] = mapped_column(String(100), nullable=False)
     driver_name: Mapped[str | None] = mapped_column(String(100))
     driver_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("drivers.id"), nullable=True
@@ -328,7 +328,7 @@ class TelemetryDB(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    vehicle_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    vehicle_id: Mapped[str] = mapped_column(String(100), nullable=False)
     driver_name: Mapped[str | None] = mapped_column(String(100))
     location = mapped_column(Geometry("POINT", srid=4326), nullable=False)
     speed_kmh: Mapped[float | None] = mapped_column(Float)
