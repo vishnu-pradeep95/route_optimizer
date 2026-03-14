@@ -38,8 +38,8 @@ Requirements for v3.0 Driver-Centric Model. Each maps to roadmap phases.
 - [x] **ADDR-01**: System correctly preserves "MUTTUNGAL" as a single word (fix trailing-letter split garbling)
 - [x] **ADDR-02**: System correctly handles (H) expansion without splitting adjacent words
 - [x] **ADDR-03**: System correctly splits PO abbreviations from concatenated text without garbling surrounding words
-- [ ] **ADDR-04**: Geocode validation uses 20km radius (reduced from 30km)
-- [ ] **ADDR-05**: Geocode validation centroid is always the Vatakara depot location from config
+- [x] **ADDR-04**: Geocode validation uses 20km radius (reduced from 30km)
+- [x] **ADDR-05**: Geocode validation centroid is always the Vatakara depot location from config
 
 ### Route Validation
 
@@ -120,8 +120,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ADDR-01 | Phase 18 | Complete |
 | ADDR-02 | Phase 18 | Complete |
 | ADDR-03 | Phase 18 | Complete |
-| ADDR-04 | Phase 18 | Pending |
-| ADDR-05 | Phase 18 | Pending |
+| ADDR-04 | Phase 18 | Complete |
+| ADDR-05 | Phase 18 | Complete |
 | VAL-01 | Phase 22 | Pending |
 | VAL-02 | Phase 22 | Pending |
 | VAL-03 | Phase 22 | Pending |

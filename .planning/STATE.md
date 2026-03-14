@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Driver-Centric Model
-status: completed
-stopped_at: Completed 18-01-PLAN.md
-last_updated: "2026-03-14T00:02:19.102Z"
-last_activity: "2026-03-13 -- Completed 17-04 (UAT gap closure: geocoding filter, placeholder filter, button fix)"
+status: executing
+stopped_at: Completed 18-02-PLAN.md
+last_updated: "2026-03-14T00:03:49.964Z"
+last_activity: 2026-03-13 -- Completed 18-01 (fix (HO), (PO), (H) regex patterns)
 progress:
   total_phases: 7
   completed_phases: 0
@@ -56,6 +56,7 @@ Progress: [▓▓▓░░░░░░░] 28%
 | Phase 17 P03 | 2min | 1 tasks | 2 files |
 | Phase 17 P04 | 6min | 2 tasks | 5 files |
 | Phase 18 P01 | 2min | 1 tasks | 2 files |
+| Phase 18 P02 | 3min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,8 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 - [Phase 17]: Driver selection filter moved before geocoding to save Google Maps API costs
 - [Phase 18]: (HO) regex placed before (H) to prevent partial matching; space padding for all parenthesized abbreviation patterns
 - [Phase 18]: Added PERATTEYATH, POOLAKANDY, KOLAKKOTT to _PROTECTED_WORDS to prevent trailing-letter garbling
+- [Phase 18]: Zone radius reduced from 30km to 20km to match actual Vatakara delivery area
+- [Phase 18]: Depot lat/lon and zone radius made configurable via env vars for deployment flexibility
 
 ### Pending Todos
 
@@ -99,6 +102,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last session: 2026-03-14T00:02:19.101Z
-Stopped at: Completed 18-01-PLAN.md
+Last session: 2026-03-14T00:03:49.963Z
+Stopped at: Completed 18-02-PLAN.md
 Resume file: None
