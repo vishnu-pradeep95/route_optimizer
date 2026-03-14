@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Driver-Centric Model
 status: completed
-stopped_at: Completed 19-03-PLAN.md (Phase 19 complete)
-last_updated: "2026-03-14T12:54:19.546Z"
+stopped_at: Phase 20 context gathered
+last_updated: "2026-03-14T19:03:55.711Z"
 last_activity: 2026-03-14 -- Completed 19-03 (Driver PWA QR-only access and QR sheet driver names)
 progress:
   total_phases: 7
@@ -121,6 +121,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last session: 2026-03-14T12:48:00.000Z
-Stopped at: Completed 19-03-PLAN.md (Phase 19 complete)
-Resume file: Next phase planning
+Last session: 2026-03-14T19:03:55.708Z
+Stopped at: Phase 20 context gathered
+Resume file: .planning/milestones/v3.0-phases/20-ui-terminology-rename/20-CONTEXT.md
