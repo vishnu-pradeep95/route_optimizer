@@ -29,7 +29,7 @@ from rapidfuzz import fuzz
 # ---------------------------------------------------------------------------
 DEPOT_LAT = 11.6244
 DEPOT_LON = 75.5796
-RADIUS_M = 30000
+RADIUS_M = 20000
 RADIUS_KM = RADIUS_M // 1000
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -426,7 +426,7 @@ def main() -> None:
 
     if args.dry_run:
         log.info("Dry-run: no cached dictionary found. Would fetch from APIs:")
-        log.info("  - OSM Overpass: %d place nodes (30km radius)", 367)
+        log.info("  - OSM Overpass: place nodes (%dkm radius)", RADIUS_KM)
         log.info("  - India Post: %d PINs (%s)", len(VATAKARA_PINS), ", ".join(VATAKARA_PINS))
         log.info("  - Manual seeds: %d entries", len(MANUAL_SEEDS))
         log.info("  - Output: %s", OUTPUT_PATH)

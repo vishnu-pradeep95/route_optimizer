@@ -1,7 +1,7 @@
 """Tests for GeocodeValidator: zone validation, fallback chain, and circuit breaker.
 
 Verifies that GeocodeValidator correctly:
-- Checks coordinates against 30km radius from Vatakara depot (zone check)
+- Checks coordinates against 20km radius from Vatakara depot (zone check)
 - Returns direct hit (confidence 1.0) for in-zone coordinates
 - Triggers area-name retry via geocoder for out-of-zone results
 - Falls back to dictionary centroid when area retry also fails
@@ -55,7 +55,7 @@ def _make_geocoder(lat=None, lon=None, status="OK", raw_response=None):
 
 
 class TestZoneCheck:
-    """GVAL-01: Zone validation via haversine (30km radius)."""
+    """GVAL-01: Zone validation via haversine (20km radius)."""
 
     def test_depot_itself_is_in_zone(self):
         """Depot coordinates (distance 0m) should be in zone."""
@@ -68,7 +68,7 @@ class TestZoneCheck:
         assert v.is_in_zone(11.65, 75.56) is True
 
     def test_far_coordinate_out_of_zone(self):
-        """Coordinates >30km from depot should be out of zone."""
+        """Coordinates >20km from depot should be out of zone."""
         v = GeocodeValidator(DEPOT_LAT, DEPOT_LON)
         # ~47km away
         assert v.is_in_zone(12.0, 75.0) is False
@@ -79,12 +79,34 @@ class TestZoneCheck:
         assert v.is_in_zone(10.0, 76.0) is False
 
     def test_edge_of_zone_boundary(self):
-        """Coordinate right at 30km boundary."""
-        v = GeocodeValidator(DEPOT_LAT, DEPOT_LON, zone_radius_m=30_000)
-        # This point is roughly 30km from depot -- check boundary behavior
-        # We use a known point just inside 30km
-        # ~29km away (still in zone)
-        assert v.is_in_zone(11.88, 75.58) is True
+        """Coordinate right at 20km boundary."""
+        v = GeocodeValidator(DEPOT_LAT, DEPOT_LON, zone_radius_m=20_000)
+        # This point is roughly 19km from depot -- check boundary behavior
+        # We use a known point just inside 20km
+        # ~19km away (still in zone)
+        assert v.is_in_zone(11.795, 75.58) is True
+
+    def test_out_of_zone_address_not_accepted_as_direct(self):
+        """Coordinate ~25km from depot (outside 20km zone) is NOT a direct hit.
+
+        Per CONTEXT.md: out-of-zone addresses trigger fallback chain with UI warning.
+        This verifies that coordinates between 20km and 30km (previously in-zone,
+        now out-of-zone) are rejected as direct hits and fall through to
+        depot fallback (confidence < 0.5, location_approximate: true).
+        """
+        v = GeocodeValidator(DEPOT_LAT, DEPOT_LON, zone_radius_m=20_000,
+                             dictionary_path=DICTIONARY_PATH)
+        # ~25km from depot -- was in-zone at 30km, now out-of-zone at 20km
+        mock_geocoder = _make_geocoder(lat=11.85, lon=75.58)
+        result = v.validate(
+            lat=11.85, lon=75.58, area_name="SOMEZONE", geocoder=mock_geocoder
+        )
+        assert result.method != "direct", (
+            f"Expected fallback for out-of-zone (~25km), got method={result.method}"
+        )
+        assert result.confidence < 0.5, (
+            f"Expected confidence < 0.5 for out-of-zone (~25km), got {result.confidence}"
+        )
 
 
 class TestDirectHit:

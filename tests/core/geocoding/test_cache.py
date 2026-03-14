@@ -479,7 +479,7 @@ class TestCachedGeocoderWithValidator:
 
     @pytest.fixture
     def in_zone_location(self):
-        """Location within 30km of Vatakara depot (11.6244, 75.5796)."""
+        """Location within 20km of Vatakara depot (11.6244, 75.5796)."""
         return Location(
             latitude=11.5950,
             longitude=75.5700,
@@ -489,7 +489,7 @@ class TestCachedGeocoderWithValidator:
 
     @pytest.fixture
     def out_of_zone_location(self):
-        """Location far outside 30km of Vatakara depot (Delhi)."""
+        """Location far outside 20km of Vatakara depot (Delhi)."""
         return Location(
             latitude=28.6139,
             longitude=77.2090,

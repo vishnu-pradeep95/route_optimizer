@@ -78,7 +78,7 @@ class GeocodeValidator:
     Args:
         depot_lat: Depot latitude (center of delivery zone).
         depot_lon: Depot longitude (center of delivery zone).
-        zone_radius_m: Maximum distance from depot in meters (default 30km).
+        zone_radius_m: Maximum distance from depot in meters (default 20km).
         dictionary_path: Path to place_names_vatakara.json for centroid lookups.
         area_suffix: Regional suffix for area-name retry queries.
     """
@@ -87,7 +87,7 @@ class GeocodeValidator:
         self,
         depot_lat: float,
         depot_lon: float,
-        zone_radius_m: float = 30_000,
+        zone_radius_m: float = 20_000,
         dictionary_path: str | None = None,
         area_suffix: str = ", Vatakara, Kozhikode, Kerala",
     ) -> None:

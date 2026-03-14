@@ -4,7 +4,7 @@ Verifies the complete address pipeline end-to-end with real CDCMS data
 and mock geocoding. Covers:
 
 - TEST-01: All CDCMS addresses processed through cleaning + validation
-  pipeline without errors, each either geocodes within 30km of depot
+  pipeline without errors, each either geocodes within 20km of depot
   or is flagged with location_approximate: true.
 - TEST-02: The HDFC ERGO bug scenario is explicitly tested: out-of-zone
   Google result falls to centroid/depot, never silently used.
@@ -187,7 +187,7 @@ class TestFullPipeline:
     def test_all_addresses_in_zone_or_flagged_approximate(
         self, cdcms_df, validator
     ):
-        """Every address geocodes within 30km of depot or gets confidence < 0.5.
+        """Every address geocodes within 20km of depot or gets confidence < 0.5.
 
         Uses a mock geocoder that returns dictionary centroids for known
         area names. Out-of-zone results trigger the validator's fallback
@@ -337,7 +337,7 @@ class TestHdfcErgoBug:
         )
 
     def test_fallback_produces_in_zone_coordinates(self, validator):
-        """Fallback chain returns coordinates within 30km of depot.
+        """Fallback chain returns coordinates within 20km of depot.
 
         After detecting out-of-zone, the validator falls through to
         centroid or depot -- both of which are guaranteed in-zone.
@@ -353,7 +353,7 @@ class TestHdfcErgoBug:
 
         assert validator.is_in_zone(result.latitude, result.longitude), (
             f"Fallback coordinates ({result.latitude}, {result.longitude}) "
-            f"are NOT within 30km of depot. Method: {result.method}"
+            f"are NOT within 20km of depot. Method: {result.method}"
         )
 
     def test_location_approximate_flag_for_centroid(self, validator):
