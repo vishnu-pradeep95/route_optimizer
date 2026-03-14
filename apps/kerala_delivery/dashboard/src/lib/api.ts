@@ -157,6 +157,22 @@ async function apiWrite<T>(path: string, method: string, body?: unknown): Promis
   return (await response.json()) as T;
 }
 
+// --- App config endpoint ---
+
+/** Public application configuration from the backend. */
+export interface AppConfig {
+  depot_lat: number;
+  depot_lng: number;
+  safety_multiplier: number;
+  office_phone_number: string;
+  zone_radius_km: number;
+}
+
+/** Fetch public application configuration (depot location, zone radius, etc.). */
+export async function fetchAppConfig(): Promise<AppConfig> {
+  return apiFetch<AppConfig>("/api/config");
+}
+
 // --- Fleet / Vehicle endpoints ---
 
 /** Fetch all vehicles in the fleet. */

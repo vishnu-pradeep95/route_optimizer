@@ -848,6 +848,7 @@ class AppConfig(BaseModel):
     depot_lng: float = Field(description="Depot longitude")
     safety_multiplier: float = Field(description="Route time safety multiplier")
     office_phone_number: str = Field(description="Office phone in E.164 format")
+    zone_radius_km: float = Field(description="Geocode validation zone radius in km")
 
 
 @app.get("/health")
@@ -921,6 +922,7 @@ async def get_app_config():
         depot_lng=config.DEPOT_LOCATION.longitude,
         safety_multiplier=config.SAFETY_MULTIPLIER,
         office_phone_number=config.OFFICE_PHONE_NUMBER,
+        zone_radius_km=config.GEOCODE_ZONE_RADIUS_KM,
     )
 
 

@@ -13,6 +13,8 @@
     "@fontsource/dm-sans": "^5.2.8",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@tailwindcss/vite": "^4.2.1",
+    "@turf/circle": "^7.3.4",
+    "@turf/helpers": "^7.3.4",
     "daisyui": "^5.5.19",
     "framer-motion": "^12.34.3",
     "lucide-react": "^0.575.0",
