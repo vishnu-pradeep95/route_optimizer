@@ -189,7 +189,10 @@ Plans:
   1. All dashboard headers, labels, navigation items, and table columns show "Driver" instead of "Vehicle" (e.g., "Driver Management", "Driver Routes", driver name in route cards)
   2. API responses continue to include vehicle_id fields -- the Driver PWA works without any changes
   3. The Fleet Management page is now the Driver Management page with driver-centric layout (driver names, not vehicle IDs, as primary identifiers)
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 20-01-PLAN.md -- VehicleList->RouteList rename, Vehicle-to-Driver text sweep, FleetManagement deletion
+- [ ] 20-02-PLAN.md -- Duplicate warning UX redesign, floating-point display fix (API + dashboard + Driver PWA)
 
 ### Phase 21: Dashboard Settings and Cache Management
 **Goal**: Office staff can manage the Google Maps API key, review upload history, and inspect/export/import the geocode cache -- all from the dashboard
@@ -263,7 +266,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 17. CSV Upload and XLSX Detection | v3.0 | 3/4 | Gap closure | - |
 | 18. Address Preprocessing Fixes | v3.0 | 0/4 | Not started | - |
 | 19. Per-Driver TSP Optimization | v3.0 | 0/3 | Not started | - |
-| 20. UI Terminology Rename | v3.0 | 0/TBD | Not started | - |
+| 20. UI Terminology Rename | v3.0 | 0/2 | Not started | - |
 | 21. Dashboard Settings and Cache Management | v3.0 | 0/TBD | Not started | - |
 | 22. Google Routes Validation | v3.0 | 0/TBD | Not started | - |
 
