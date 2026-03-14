@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Driver-Centric Model
 status: executing
-stopped_at: Completed 18-02-PLAN.md
-last_updated: "2026-03-14T00:03:49.964Z"
+stopped_at: Completed 18-03-PLAN.md
+last_updated: "2026-03-14T00:07:32.836Z"
 last_activity: 2026-03-13 -- Completed 18-01 (fix (HO), (PO), (H) regex patterns)
 progress:
   total_phases: 7
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 18 of 22 (Address Preprocessing Fixes) -- third of 7 phases in v3.0
-Plan: 1 of 4
+Plan: 3 of 4
 Status: In Progress
-Last activity: 2026-03-13 -- Completed 18-01 (fix (HO), (PO), (H) regex patterns)
+Last activity: 2026-03-14 -- Completed 18-03 (zone circle overlay on dashboard live map)
 
 Progress: [▓▓▓░░░░░░░] 28%
 
@@ -57,6 +57,7 @@ Progress: [▓▓▓░░░░░░░] 28%
 | Phase 17 P04 | 6min | 2 tasks | 5 files |
 | Phase 18 P01 | 2min | 1 tasks | 2 files |
 | Phase 18 P02 | 3min | 2 tasks | 8 files |
+| Phase 18 P03 | 3min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,8 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 - [Phase 18]: Added PERATTEYATH, POOLAKANDY, KOLAKKOTT to _PROTECTED_WORDS to prevent trailing-letter garbling
 - [Phase 18]: Zone radius reduced from 30km to 20km to match actual Vatakara delivery area
 - [Phase 18]: Depot lat/lon and zone radius made configurable via env vars for deployment flexibility
+- [Phase 18]: Zone circle rendered before route polylines for correct z-order
+- [Phase 18]: fetchAppConfig failure non-critical -- map works without zone circle
 
 ### Pending Todos
 
@@ -102,6 +105,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last session: 2026-03-14T00:03:49.963Z
-Stopped at: Completed 18-02-PLAN.md
+Last session: 2026-03-14T00:07:32.835Z
+Stopped at: Completed 18-03-PLAN.md
 Resume file: None
