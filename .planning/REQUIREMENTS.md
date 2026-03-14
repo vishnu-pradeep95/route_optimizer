@@ -50,12 +50,12 @@ Requirements for v3.0 Driver-Centric Model. Each maps to roadmap phases.
 
 ### Dashboard Settings & Operations
 
-- [ ] **SET-01**: User can enter/update Google Maps API key in the dashboard settings page
-- [ ] **SET-02**: API key is stored server-side and displayed masked in the UI (e.g., AIza...****1234)
-- [ ] **SET-03**: User can view upload history with date, filename, driver count, and order count
-- [ ] **SET-04**: User can view geocode cache statistics (total cached addresses, API calls made, estimated cost)
-- [ ] **SET-05**: User can export geocode cache to JSON file for migration to another machine
-- [ ] **SET-06**: User can import geocode cache from a JSON file
+- [x] **SET-01**: User can enter/update Google Maps API key in the dashboard settings page
+- [x] **SET-02**: API key is stored server-side and displayed masked in the UI (e.g., AIza...****1234)
+- [x] **SET-03**: User can view upload history with date, filename, driver count, and order count
+- [x] **SET-04**: User can view geocode cache statistics (total cached addresses, API calls made, estimated cost)
+- [x] **SET-05**: User can export geocode cache to JSON file for migration to another machine
+- [x] **SET-06**: User can import geocode cache from a JSON file
 
 ### UI Terminology
 
@@ -126,12 +126,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VAL-02 | Phase 22 | Pending |
 | VAL-03 | Phase 22 | Pending |
 | VAL-04 | Phase 22 | Pending |
-| SET-01 | Phase 21 | Pending |
-| SET-02 | Phase 21 | Pending |
-| SET-03 | Phase 21 | Pending |
-| SET-04 | Phase 21 | Pending |
-| SET-05 | Phase 21 | Pending |
-| SET-06 | Phase 21 | Pending |
+| SET-01 | Phase 21 | Complete |
+| SET-02 | Phase 21 | Complete |
+| SET-03 | Phase 21 | Complete |
+| SET-04 | Phase 21 | Complete |
+| SET-05 | Phase 21 | Complete |
+| SET-06 | Phase 21 | Complete |
 | UI-01 | Phase 20 | Complete |
 | UI-02 | Phase 20 | Complete |
 | UI-03 | Phase 20 | Complete |

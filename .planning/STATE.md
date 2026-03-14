@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Driver-Centric Model
-status: completed
-stopped_at: Phase 21 context gathered
-last_updated: "2026-03-14T21:24:49.084Z"
-last_activity: 2026-03-14 -- Completed 20-02 (Duplicate warning redesign + float rounding)
+status: executing
+stopped_at: Completed 21-01-PLAN.md
+last_updated: "2026-03-14T21:54:59.443Z"
+last_activity: "2026-03-14 -- Completed 21-01 (Settings backend: model, repo, endpoints)"
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
-  percent: 35
+  percent: 40
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 
 ## Current Position
 
-Phase: 20 of 22 (UI Terminology Rename) -- fifth of 7 phases in v3.0
-Plan: 2 of 2 (COMPLETE)
-Status: Phase Complete
-Last activity: 2026-03-14 -- Completed 20-02 (Duplicate warning redesign + float rounding)
+Phase: 21 of 22 (Dashboard Settings & Cache Management) -- sixth of 7 phases in v3.0
+Plan: 1 of 2 (COMPLETE)
+Status: In Progress
+Last activity: 2026-03-14 -- Completed 21-01 (Settings backend: model, repo, endpoints)
 
-Progress: [▓▓▓▓░░░░░░] 35%
+Progress: [▓▓▓▓░░░░░░] 40%
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [▓▓▓▓░░░░░░] 35%
 | Phase 19 P03 | 3min | 3 tasks | 3 files |
 | Phase 20 P01 | 4min | 2 tasks | 9 files |
 | Phase 20 P02 | 3min | 2 tasks | 3 files |
+| Phase 21 P01 | 7min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -112,6 +113,9 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 - **Phase 20-02:** Collapsed-by-default duplicate warnings to reduce visual noise for 15+ clusters
 - **Phase 20-02:** API-level rounding as primary fix ensures all clients get clean float data
 - **Phase 20-02:** Defense-in-depth Number().toFixed(1) in Driver PWA even though API now rounds
+- [Phase 21]: SettingsDB uses key-value schema (not typed columns) per user decision
+- [Phase 21]: DB-stored API key cached in module-level _cached_api_key for sync _get_geocoder() access
+- [Phase 21]: API key validated via real geocode request to Google Maps before saving
 
 ### Pending Todos
 
@@ -129,6 +133,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last session: 2026-03-14T21:24:49.081Z
-Stopped at: Phase 21 context gathered
-Resume file: .planning/milestones/v3.0-phases/21-dashboard-settings-and-cache-management/21-CONTEXT.md
+Last session: 2026-03-14T21:54:59.442Z
+Stopped at: Completed 21-01-PLAN.md
+Resume file: None
