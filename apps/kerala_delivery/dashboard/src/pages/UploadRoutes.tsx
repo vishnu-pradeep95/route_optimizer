@@ -228,7 +228,13 @@ function CostSummary({ uploadResult }: { uploadResult: UploadResponse }) {
  * Uses DaisyUI 5 `alert` + `collapse` components with tw: prefix.
  * Each cluster is expandable showing order IDs, addresses, and distance.
  */
-function DuplicateWarnings({ warnings }: { warnings: DuplicateLocationWarning[] }) {
+function DuplicateWarnings({
+  warnings,
+  orderDriverMap,
+}: {
+  warnings: DuplicateLocationWarning[];
+  orderDriverMap: Map<string, string>;
+}) {
   if (!warnings || warnings.length === 0) return null;
 
   return (
@@ -242,27 +248,36 @@ function DuplicateWarnings({ warnings }: { warnings: DuplicateLocationWarning[] 
           {warnings.length} group{warnings.length !== 1 ? "s" : ""} of orders resolve to very similar GPS coordinates
         </span>
       </div>
-      {warnings.map((cluster, idx) => (
-        <div key={idx} className="tw:collapse tw:collapse-arrow tw:bg-base-200 tw:mt-2">
-          <input type="checkbox" defaultChecked />
-          <div className="tw:collapse-title tw:font-semibold">
-            Orders {cluster.order_ids.join(", ")} — within {cluster.max_distance_m.toFixed(0)}m of each other
+      {warnings.map((cluster, idx) => {
+        const firstAddr = cluster.addresses[0] ?? "";
+        const truncAddr = firstAddr.length > 35 ? firstAddr.slice(0, 35) + "..." : firstAddr;
+        return (
+          <div key={idx} className="tw:collapse tw:collapse-arrow tw:bg-base-200 tw:mt-2">
+            <input type="checkbox" />
+            <div className="tw:collapse-title tw:text-sm tw:font-semibold">
+              {cluster.order_ids.length} orders near {truncAddr} — within {cluster.max_distance_m.toFixed(0)}m of each other
+            </div>
+            <div className="tw:collapse-content">
+              <ul className="tw:list-disc tw:pl-4 tw:space-y-1">
+                {cluster.order_ids.map((id, i) => (
+                  <li key={id}>
+                    <strong>{id}</strong>: {cluster.addresses[i]}
+                    {orderDriverMap.get(id) && (
+                      <span className="tw:badge tw:badge-sm tw:badge-ghost tw:ml-2">
+                        {orderDriverMap.get(id)}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <p className="tw:text-xs text-muted-60 tw:mt-2">
+                Different addresses resolving to nearby coordinates may indicate a data entry error.
+                If these are intentional (e.g., neighboring buildings), no action is needed.
+              </p>
+            </div>
           </div>
-          <div className="tw:collapse-content">
-            <ul className="tw:list-disc tw:pl-4 tw:space-y-1">
-              {cluster.order_ids.map((id, i) => (
-                <li key={id}>
-                  <strong>{id}</strong>: {cluster.addresses[i]}
-                </li>
-              ))}
-            </ul>
-            <p className="tw:text-xs text-muted-60 tw:mt-2">
-              Different addresses resolving to nearby coordinates may indicate a data entry error.
-              If these are intentional (e.g., neighboring buildings), no action is needed.
-            </p>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -835,9 +850,20 @@ export function UploadRoutes() {
           {uploadResult && <CostSummary uploadResult={uploadResult} />}
 
           {/* Duplicate location warnings — non-blocking alerts for suspicious clusters (GEO-03) */}
-          {uploadResult && (
-            <DuplicateWarnings warnings={uploadResult.duplicate_warnings ?? []} />
-          )}
+          {uploadResult && (() => {
+            const orderDriverMap = new Map<string, string>();
+            routeDetails.forEach((detail) => {
+              detail.stops.forEach((stop) => {
+                orderDriverMap.set(stop.order_id, detail.vehicle_id);
+              });
+            });
+            return (
+              <DuplicateWarnings
+                warnings={uploadResult.duplicate_warnings ?? []}
+                orderDriverMap={orderDriverMap}
+              />
+            );
+          })()}
 
           {/* Route cards — shown when routes exist (fresh upload or loaded from API) */}
           {routes.length > 0 && (
@@ -931,9 +957,9 @@ export function UploadRoutes() {
                     </div>
                     <div className="tw:flex tw:gap-4 tw:mt-2">
                       <span className="numeric"><strong>{route.total_stops}</strong> stops</span>
-                      <span className="numeric"><strong>{route.total_distance_km}</strong> km</span>
+                      <span className="numeric"><strong>{route.total_distance_km.toFixed(1)}</strong> km</span>
                       <span className="numeric"><strong>{Math.round(route.total_duration_minutes)}</strong> min</span>
-                      <span className="numeric"><strong>{route.total_weight_kg}</strong> kg</span>
+                      <span className="numeric"><strong>{route.total_weight_kg.toFixed(1)}</strong> kg</span>
                     </div>
 
                     {/* Expanded: QR codes + stop list */}
@@ -995,9 +1021,9 @@ export function UploadRoutes() {
                                       <span className="stop-address-raw">{stop.address_raw}</span>
                                     )}
                                     <span className="stop-meta">
-                                      <span className="numeric">{stop.weight_kg} kg</span> ·{" "}
+                                      <span className="numeric">{Number(stop.weight_kg).toFixed(1)} kg</span> ·{" "}
                                       <span className="numeric">{stop.quantity} cyl</span> ·{" "}
-                                      <span className="numeric">{stop.distance_from_prev_km} km</span> from prev
+                                      <span className="numeric">{Number(stop.distance_from_prev_km).toFixed(1)} km</span> from prev
                                     </span>
                                   </div>
                                 </div>
