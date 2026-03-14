@@ -699,7 +699,7 @@ class ImportFailure(BaseModel):
     row_number: int = Field(..., description="1-based row in original CSV")
     address_snippet: str = Field(default="", description="First 80 chars of address")
     reason: str = Field(..., description="Human-readable failure reason for office staff")
-    stage: Literal["validation", "geocoding"] = Field(..., description="When the failure occurred")
+    stage: Literal["validation", "geocoding", "optimization"] = Field(..., description="When the failure occurred")
 
 
 class DuplicateLocationWarning(BaseModel):

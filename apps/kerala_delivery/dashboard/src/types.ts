@@ -179,7 +179,7 @@ export interface ImportFailure {
   row_number: number;
   address_snippet: string;
   reason: string;
-  stage: "validation" | "geocoding";
+  stage: "validation" | "geocoding" | "optimization";
 }
 
 /** A cluster of orders with suspiciously close GPS coordinates. */
