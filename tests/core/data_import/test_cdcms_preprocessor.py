@@ -858,3 +858,184 @@ class TestPlaceholderDriverFiltering:
         df = preprocess_cdcms(cdcms_tsv_file, area_suffix="")
         # All 5 orders in the fixture have GIREESHAN ( C ) as driver
         assert len(df) == 5
+
+
+# =============================================================================
+# ADDR-01/02/03: Parenthesized abbreviation expansion — (HO), (PO), (H)
+# =============================================================================
+
+
+class TestParenthesizedAbbreviations:
+    """Tests for (HO), (PO), and (H) expansion in clean_cdcms_address.
+
+    CDCMS uses parenthesized abbreviations for house types and post offices:
+    - (HO) = House (172 occurrences in Refill.xlsx)
+    - (PO) = P.O. / Post Office (368 occurrences)
+    - (H)  = House (104 occurrences)
+
+    These must expand with proper space padding to avoid word concatenation.
+    """
+
+    # --- (HO) expansion ---
+
+    def test_ho_with_spaces_expands_to_house(self):
+        """(HO) with surrounding spaces should expand to House."""
+        result = clean_cdcms_address("CHEMERI (HO) MUTTUNGAL", area_suffix="")
+        assert "House" in result
+        assert "(Ho)" not in result
+        assert "(HO)" not in result
+
+    def test_ho_without_spaces_expands_with_padding(self):
+        """(HO) stuck to adjacent words should expand with space padding."""
+        result = clean_cdcms_address("PERATTEYATH(HO)CHORODE", area_suffix="")
+        assert "Peratteyath" in result
+        assert "House" in result
+        assert "Chorode" in result
+        # Words must be space-separated, not concatenated
+        assert "PeratteyathHouse" not in result
+        assert "HouseChorode" not in result
+
+    def test_ho_case_insensitive(self):
+        """(ho), (Ho), (hO) should all expand to House."""
+        for variant in ["(ho)", "(Ho)", "(hO)", "(HO)"]:
+            result = clean_cdcms_address(f"CHEMERI {variant} MUTTUNGAL", area_suffix="")
+            assert "House" in result, f"{variant} not expanded in: {result}"
+
+    # --- (PO) expansion ---
+
+    def test_po_with_spaces_expands(self):
+        """(PO) with surrounding spaces should expand to P.O."""
+        result = clean_cdcms_address("CHORODE (PO)", area_suffix="")
+        assert "P.O." in result
+        assert "(PO)" not in result
+        assert "(P.O." not in result
+
+    def test_po_without_spaces_expands_with_padding(self):
+        """(PO) stuck to adjacent words should expand with space padding."""
+        result = clean_cdcms_address("CHORODE(PO)POOLAKANDY", area_suffix="")
+        assert "Chorode" in result
+        assert "P.O." in result
+        assert "Poolakandy" in result
+        # Words must be space-separated
+        assert "ChorodeP" not in result
+
+    def test_po_case_insensitive(self):
+        """(po), (Po), (pO) should all expand to P.O."""
+        for variant in ["(po)", "(Po)", "(pO)", "(PO)"]:
+            result = clean_cdcms_address(f"CHORODE {variant} EAST", area_suffix="")
+            assert "P.O." in result, f"{variant} not expanded in: {result}"
+
+    def test_muttungal_preserved_with_po(self):
+        """MUTTUNGAL should remain as a single word when followed by (PO)."""
+        result = clean_cdcms_address("MUTTUNGAL (PO)BALAVADI", area_suffix="")
+        assert "Muttungal" in result
+        assert "P.O." in result
+
+    # --- (H) regression tests ---
+
+    def test_h_with_spaces_still_works(self):
+        """Existing (H) with spaces should still expand to House (regression)."""
+        result = clean_cdcms_address("MEETHAL (H) 13/301", area_suffix="")
+        assert "House" in result
+        assert "(H)" not in result
+
+    def test_h_without_spaces_now_padded(self):
+        """(H) stuck to adjacent words should now expand with space padding."""
+        result = clean_cdcms_address("CHALIL(H)7/214A", area_suffix="")
+        assert "Chalil" in result
+        assert "House" in result
+        # House should be separated from the number
+        assert "House7" not in result
+        assert "House 7" in result or "House" in result
+
+    def test_inline_po_dot_still_works(self):
+        """Existing inline PO. pattern should still work (regression)."""
+        result = clean_cdcms_address("KUNIYILPO. CHORODE", area_suffix="")
+        assert "P.O." in result
+
+    # --- Ordering: (HO) before (H) ---
+
+    def test_ho_not_partially_matched_by_h_pattern(self):
+        """(HO) must be processed before (H) to prevent partial matching."""
+        result = clean_cdcms_address("TEST(HO)END", area_suffix="")
+        assert "House" in result
+        # Should not leave residual 'O' from partial (H) match on (HO)
+        assert "O)End" not in result
+        assert "O)end" not in result
+
+
+class TestRefillXlsxRegressions:
+    """Regression tests using real address patterns from Refill.xlsx research.
+
+    These addresses were identified in 18-RESEARCH.md as producing garbled
+    output with the pre-fix code. Each test verifies the fix produces
+    clean, correctly separated words.
+    """
+
+    def test_chemeri_ho_muttungal_po_chorode(self):
+        """Full compound pattern: (HO) + phone + (PO) in one address."""
+        result = clean_cdcms_address(
+            "CHEMERI (HO)/ 9387908552RAMYA  MUTTUNGAL (PO)CHORODE",
+            area_suffix="",
+        )
+        # (HO) should expand to House
+        assert "House" in result
+        assert "(Ho)" not in result
+        # Phone number should be removed
+        assert "9387908552" not in result
+        # MUTTUNGAL should be preserved as single word
+        assert "Muttungal" in result
+        # (PO) should expand to P.O.
+        assert "P.O." in result
+        # Chorode should be a separate word
+        assert "Chorode" in result
+
+    def test_chalil_h_beach_road(self):
+        """Concatenated (H) with house number and road name."""
+        result = clean_cdcms_address(
+            "AVARANGATH CHALIL(H)7/214ABEACH ROAD POAZHITHALA",
+            area_suffix="",
+        )
+        # (H) should expand to House with space padding
+        assert "House" in result
+        assert "Chalil" in result
+        # No garbled trailing letters
+        assert "Chalilhouse" not in result.lower()
+
+    def test_kolakkott_meethal_h_po_chorode(self):
+        """(H) with house number + PO. + place name."""
+        result = clean_cdcms_address(
+            "KOLAKKOTT MEETHAL (H) 13/301PO.CHORODEBEHIND RANI SCHOOL",
+            area_suffix="",
+        )
+        assert "House" in result
+        assert "Meethal" in result
+        assert "P.O." in result
+
+    def test_muttungal_single_word_in_all_patterns(self):
+        """MUTTUNGAL must be preserved as a single word in all compound patterns."""
+        patterns = [
+            "MUTTUNGAL (PO)CHORODE",
+            "SREESHYLAM MUTTUNGAL (PO)BALAVADI",
+            "CHEMERI (HO) MUTTUNGAL",
+        ]
+        for pattern in patterns:
+            result = clean_cdcms_address(pattern, area_suffix="")
+            assert "Muttungal" in result, (
+                f"MUTTUNGAL not preserved in: {result} (input: {pattern})"
+            )
+            # Should not be split into Muttung + Al or similar
+            assert "Muttung " not in result, (
+                f"MUTTUNGAL was split in: {result} (input: {pattern})"
+            )
+
+    def test_no_trailing_letter_garbling(self):
+        """Fixed output should not have garbled trailing letters from Step 6."""
+        result = clean_cdcms_address(
+            "CHEMERI (HO)/ 9387908552RAMYA  MUTTUNGAL (PO)CHORODE",
+            area_suffix="",
+        )
+        # Should not have single trailing letters stuck on words
+        # (unless they are legitimate initials)
+        assert "Chorod E" not in result
+        assert "Chorode" in result
