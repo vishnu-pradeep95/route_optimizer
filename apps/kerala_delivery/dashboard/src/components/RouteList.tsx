@@ -1,23 +1,23 @@
 /**
- * VehicleList — Sidebar panel listing all vehicles and their route stats.
+ * RouteList — Sidebar panel listing all routes and their stats.
  *
- * Each vehicle row shows: driver name, stops remaining, distance, and ETA range.
- * Clicking a vehicle selects it, which the parent uses to highlight that route
+ * Each route row shows: driver name, stops remaining, distance, and ETA range.
+ * Clicking a route selects it, which the parent uses to highlight that route
  * on the map and zoom to it.
  *
  * Why ETAs are shown as time ranges instead of countdowns:
  * Kerala MVD directive prohibits countdown timers in any delivery UI.
  * We show "between HH:MM and HH:MM" to give a realistic arrival window
- * that accounts for the 1.3× safety multiplier on travel times.
+ * that accounts for the 1.3x safety multiplier on travel times.
  */
 
 import { Package, Ruler, Scale, AlertTriangle } from "lucide-react";
 import type { RouteSummary, RouteDetail, TelemetryPing } from "../types";
 import { getVehicleColor } from "../types";
-import "./VehicleList.css";
+import "./RouteList.css";
 
-interface VehicleListProps {
-  /** Summary for each vehicle's route. */
+interface RouteListProps {
+  /** Summary for each route. */
   routes: RouteSummary[];
   /** Detailed route data (stops) for each vehicle, keyed by vehicle_id. */
   routeDetailsMap: Map<string, RouteDetail>;
@@ -25,7 +25,7 @@ interface VehicleListProps {
   latestPings: Map<string, TelemetryPing>;
   /** Currently selected vehicle ID (null if none). */
   selectedVehicleId: string | null;
-  /** Callback when a vehicle is clicked. */
+  /** Callback when a route is clicked. */
   onSelectVehicle: (vehicleId: string | null) => void;
   /** Map from vehicle_id to its color index (for the color dot). */
   vehicleIndexMap: Map<string, number>;
@@ -37,7 +37,7 @@ interface VehicleListProps {
  * Why a range instead of a single time:
  * Real-world delivery times are uncertain. Showing a range
  * (optimistic to pessimistic) sets realistic expectations.
- * The pessimistic bound applies the 1.3× safety multiplier
+ * The pessimistic bound applies the 1.3x safety multiplier
  * from the Kerala delivery constraints.
  */
 function formatETARange(remainingMinutes: number): string {
@@ -45,8 +45,8 @@ function formatETARange(remainingMinutes: number): string {
 
   // Optimistic: raw estimate
   const optimistic = new Date(now.getTime() + remainingMinutes * 60_000);
-  // Pessimistic: 1.3× safety multiplier applied to remaining time
-  // Why 1.3×: accounts for Kerala traffic variability, narrow roads, rain
+  // Pessimistic: 1.3x safety multiplier applied to remaining time
+  // Why 1.3x: accounts for Kerala traffic variability, narrow roads, rain
   const SAFETY_MULTIPLIER = 1.3;
   const pessimistic = new Date(
     now.getTime() + remainingMinutes * SAFETY_MULTIPLIER * 60_000
@@ -58,30 +58,30 @@ function formatETARange(remainingMinutes: number): string {
   return `${fmt(optimistic)} – ${fmt(pessimistic)}`;
 }
 
-export function VehicleList({
+export function RouteList({
   routes,
   routeDetailsMap,
   latestPings,
   selectedVehicleId,
   onSelectVehicle,
   vehicleIndexMap,
-}: VehicleListProps) {
+}: RouteListProps) {
   return (
-    <div className="vehicle-list">
-      <div className="vehicle-list-header">
-        <h3>Vehicles</h3>
+    <div className="route-list">
+      <div className="route-list-header">
+        <h3>Routes</h3>
         {selectedVehicleId && (
           <button
             className="clear-selection"
             onClick={() => onSelectVehicle(null)}
-            title="Show all vehicles"
+            title="Show all routes"
           >
             Show All
           </button>
         )}
       </div>
 
-      <div className="vehicle-list-items">
+      <div className="route-list-items">
         {routes.map((route) => {
           const detail = routeDetailsMap.get(route.vehicle_id);
           const ping = latestPings.get(route.vehicle_id);
@@ -112,7 +112,7 @@ export function VehicleList({
           return (
             <div
               key={route.vehicle_id}
-              className={`vehicle-item ${isSelected ? "selected" : ""}`}
+              className={`route-item ${isSelected ? "selected" : ""}`}
               onClick={() =>
                 onSelectVehicle(
                   isSelected ? null : route.vehicle_id
@@ -120,12 +120,12 @@ export function VehicleList({
               }
             >
               {/* Color dot matches the route polyline on the map */}
-              <div className="vehicle-item-header">
+              <div className="route-item-header">
                 <span
-                  className="vehicle-color-dot"
+                  className="route-color-dot"
                   style={{ backgroundColor: getVehicleColor(colorIndex) }}
                 />
-                <span className="vehicle-id">{route.vehicle_id}</span>
+                <span className="route-id">{route.vehicle_id}</span>
                 {ping?.speed_alert && (
                   <span
                     className="speed-alert-badge"
@@ -136,20 +136,20 @@ export function VehicleList({
                 )}
               </div>
 
-              <div className="vehicle-driver">{route.driver_name}</div>
+              <div className="route-driver">{route.driver_name}</div>
 
-              <div className="vehicle-stats">
-                <div className="vehicle-stat">
+              <div className="route-stats">
+                <div className="route-stat">
                   <span className="stat-icon"><Package size={14} /></span>
                   <span className="numeric">
                     {stopsCompleted}/{route.total_stops} stops
                   </span>
                 </div>
-                <div className="vehicle-stat">
+                <div className="route-stat">
                   <span className="stat-icon"><Ruler size={14} /></span>
                   <span className="numeric">{route.total_distance_km.toFixed(1)} km</span>
                 </div>
-                <div className="vehicle-stat">
+                <div className="route-stat">
                   <span className="stat-icon"><Scale size={14} /></span>
                   <span className="numeric">{route.total_weight_kg.toFixed(0)} kg</span>
                 </div>
@@ -157,22 +157,22 @@ export function VehicleList({
 
               {/* Efficiency indicator — km per delivery helps ops spot outliers */}
               {route.total_stops > 0 && (
-                <div className="vehicle-efficiency numeric">
+                <div className="route-efficiency numeric">
                   {(route.total_distance_km / route.total_stops).toFixed(1)} km/delivery
                 </div>
               )}
 
               {/* ETA shown as range, never as a countdown (Kerala MVD directive) */}
               {stopsRemaining > 0 && (
-                <div className="vehicle-eta">
+                <div className="route-eta">
                   ETA: {formatETARange(remainingMinutes)}
                 </div>
               )}
 
               {/* Progress bar: amber while in-progress, green at 100% */}
-              <div className="vehicle-progress">
+              <div className="route-progress">
                 <div
-                  className="vehicle-progress-bar"
+                  className="route-progress-bar"
                   style={{
                     width: `${completionPct}%`,
                     backgroundColor: completionPct >= 100
@@ -186,7 +186,7 @@ export function VehicleList({
         })}
 
         {routes.length === 0 && (
-          <div className="vehicle-list-empty">
+          <div className="route-list-empty">
             No active routes. Run an optimization first.
           </div>
         )}

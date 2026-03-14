@@ -1,6 +1,6 @@
-/* VehicleList — Sidebar panel for vehicle selection and stats.
+/* RouteList — Sidebar panel for route selection and stats.
  *
- * Design: Clean card-style vehicle items with amber accent on selection,
+ * Design: Clean card-style route items with amber accent on selection,
  * mini progress bars (amber in-progress, green 100%), and efficiency indicators.
  *
  * Why CSS custom properties (design tokens) for all colors:
@@ -8,7 +8,7 @@
  * future theme changes trivial — change one variable, all components update.
  */
 
-.vehicle-list {
+.route-list {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -17,7 +17,7 @@
   overflow: hidden;
 }
 
-.vehicle-list-header {
+.route-list-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -26,7 +26,7 @@
   background: var(--color-surface);
 }
 
-.vehicle-list-header h3 {
+.route-list-header h3 {
   margin: 0;
   font-family: var(--font-heading);
   font-size: 13px;
@@ -53,14 +53,14 @@
   color: var(--color-text-primary);
 }
 
-.vehicle-list-items {
+.route-list-items {
   flex: 1;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-strong) transparent;
 }
 
-.vehicle-item {
+.route-item {
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-surface-alt);
   cursor: pointer;
@@ -68,30 +68,30 @@
   border-left: 3px solid transparent;
 }
 
-.vehicle-item:hover {
+.route-item:hover {
   background: var(--color-surface);
 }
 
-/* Selected vehicle: amber left border accent */
-.vehicle-item.selected {
+/* Selected route: amber left border accent */
+.route-item.selected {
   background: var(--color-accent-bg);
   border-left-color: var(--color-accent);
 }
 
-.vehicle-item-header {
+.route-item-header {
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
 
-.vehicle-color-dot {
+.route-color-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
-.vehicle-id {
+.route-id {
   font-family: var(--font-heading);
   font-weight: 600;
   font-size: 13px;
@@ -108,29 +108,29 @@
   font-weight: 700;
   margin-left: auto;
   color: var(--color-danger);
-  animation: vehicle-pulse 1.5s infinite;
+  animation: route-pulse 1.5s infinite;
 }
 
-@keyframes vehicle-pulse {
+@keyframes route-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
 
-.vehicle-driver {
+.route-driver {
   font-size: 12px;
   color: var(--color-text-muted);
   margin-top: 2px;
   padding-left: 18px;
 }
 
-.vehicle-stats {
+.route-stats {
   display: flex;
   gap: var(--space-3);
   margin-top: var(--space-2);
   padding-left: 18px;
 }
 
-.vehicle-stat {
+.route-stat {
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -146,7 +146,7 @@
 }
 
 /* Route efficiency indicator — km per delivery */
-.vehicle-efficiency {
+.route-efficiency {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--color-text-muted);
@@ -155,7 +155,7 @@
 }
 
 /* ETA range — never a countdown (Kerala MVD directive) */
-.vehicle-eta {
+.route-eta {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--color-text-muted);
@@ -164,7 +164,7 @@
 }
 
 /* Progress bar: amber = in-progress, green = 100% complete */
-.vehicle-progress {
+.route-progress {
   height: 4px;
   background: var(--color-border);
   border-radius: 2px;
@@ -172,13 +172,13 @@
   overflow: hidden;
 }
 
-.vehicle-progress-bar {
+.route-progress-bar {
   height: 100%;
   border-radius: 2px;
   transition: width 0.3s ease, background-color 0.3s ease;
 }
 
-.vehicle-list-empty {
+.route-list-empty {
   padding: var(--space-6) var(--space-4);
   text-align: center;
   color: var(--color-text-muted);

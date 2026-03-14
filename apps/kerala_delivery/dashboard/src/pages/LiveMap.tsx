@@ -21,7 +21,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import type { MapRef } from "react-map-gl/maplibre";
 import { MapPin } from "lucide-react";
 import { StatsBar } from "../components/StatsBar";
-import { VehicleList } from "../components/VehicleList";
+import { RouteList } from "../components/RouteList";
 import { RouteMap } from "../components/RouteMap";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -217,11 +217,11 @@ export function LiveMap() {
         {/* Content area skeleton */}
         <div className="live-map-content">
           <div className="live-map-sidebar">
-            <div className="vehicle-list">
-              <div className="vehicle-list-header">
+            <div className="route-list">
+              <div className="route-list-header">
                 <div className="tw:skeleton tw:h-5 tw:w-20" />
               </div>
-              <div className="vehicle-list-items">
+              <div className="route-list-items">
                 {Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="tw:p-3 tw:border-b tw:border-base-300">
                     <div className="tw:skeleton tw:h-4 tw:w-24 tw:mb-2" />
@@ -280,7 +280,7 @@ export function LiveMap() {
       {/* Main content: sidebar + map */}
       <div className="live-map-content">
         <div className="live-map-sidebar">
-          <VehicleList
+          <RouteList
             routes={routes}
             routeDetailsMap={routeDetailsMap}
             latestPings={latestPings}
