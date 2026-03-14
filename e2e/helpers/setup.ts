@@ -23,6 +23,9 @@ export const TEST_CSV_PATH = path.join(__dirname, '..', 'fixtures', 'test-orders
  */
 export const PREGEOCODE_CSV_PATH = path.join(__dirname, '..', '..', 'data', 'sample_orders.csv');
 
+/** Path to real CDCMS Refill.xlsx data for address cleaning E2E tests. */
+export const REFILL_XLSX_PATH = path.join(__dirname, '..', '..', 'data', 'Refill.xlsx');
+
 /**
  * Validate that the API_KEY environment variable is set.
  *
