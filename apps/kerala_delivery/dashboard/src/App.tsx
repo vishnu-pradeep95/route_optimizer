@@ -18,11 +18,12 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { Upload, Map, ClipboardList, Users, Fuel, Menu } from "lucide-react";
+import { Upload, Map, ClipboardList, Users, Fuel, Menu, Settings as SettingsIcon } from "lucide-react";
 import { UploadRoutes } from "./pages/UploadRoutes";
 import { LiveMap } from "./pages/LiveMap";
 import { RunHistory } from "./pages/RunHistory";
 import { DriverManagement } from "./pages/DriverManagement";
+import { Settings } from "./pages/Settings";
 import { fetchHealth } from "./lib/api";
 import type { HealthResponse } from "./types";
 import "./App.css";
@@ -35,7 +36,7 @@ import "./App.css";
  * "upload" is the default page -- the primary daily workflow is:
  * upload CDCMS -> generate routes -> print QR codes -> drivers scan.
  */
-type Page = "upload" | "live-map" | "run-history" | "drivers";
+type Page = "upload" | "live-map" | "run-history" | "drivers" | "settings";
 
 /**
  * Navigation items configuration.
@@ -53,6 +54,7 @@ const NAV_ITEMS: { page: Page; icon: React.ComponentType<{ size?: number }>; lab
   { page: "live-map", icon: Map, label: "Live Map" },
   { page: "run-history", icon: ClipboardList, label: "Run History" },
   { page: "drivers", icon: Users, label: "Drivers" },
+  { page: "settings", icon: SettingsIcon, label: "Settings" },
 ];
 
 /** Derive a human-readable status summary from the HealthResponse. */
@@ -202,6 +204,7 @@ function App() {
           {activePage === "live-map" && <LiveMap />}
           {activePage === "run-history" && <RunHistory />}
           {activePage === "drivers" && <DriverManagement />}
+          {activePage === "settings" && <Settings />}
         </main>
       </div>
 

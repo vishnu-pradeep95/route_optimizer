@@ -29,6 +29,12 @@ import type {
   ImportFailure,
   DuplicateLocationWarning,
   ParsePreviewResponse,
+  SettingsResponse,
+  ApiKeyUpdateResponse,
+  ApiKeyValidateResponse,
+  GeocodeStats,
+  CacheImportResult,
+  CacheClearResult,
 } from "../types";
 import { isApiError, type ApiError } from "./errors";
 
@@ -550,4 +556,76 @@ export async function fetchGoogleMapsRoute(
 /** Get the URL for the printable QR sheet (opens in new tab). */
 export function getQrSheetUrl(): string {
   return `${BASE_URL}/api/qr-sheet`;
+}
+
+// --- Settings endpoints ---
+
+/** Fetch current settings (API key status). */
+export async function fetchSettings(): Promise<SettingsResponse> {
+  return apiFetch<SettingsResponse>("/api/settings");
+}
+
+/** Save a new Google Maps API key (validates before storing). */
+export async function updateApiKey(apiKey: string): Promise<ApiKeyUpdateResponse> {
+  return apiWrite<ApiKeyUpdateResponse>("/api/settings/api-key", "PUT", { api_key: apiKey });
+}
+
+/** Validate a Google Maps API key without saving it. */
+export async function validateApiKey(apiKey: string): Promise<ApiKeyValidateResponse> {
+  return apiWrite<ApiKeyValidateResponse>("/api/settings/api-key/validate", "POST", { api_key: apiKey });
+}
+
+// --- Geocode cache endpoints ---
+
+/** Fetch geocode cache statistics (entries, hits, savings). */
+export async function fetchGeocodeStats(): Promise<GeocodeStats> {
+  return apiFetch<GeocodeStats>("/api/geocode-cache/stats");
+}
+
+/**
+ * Export the entire geocode cache as a JSON file download.
+ *
+ * Uses direct fetch instead of apiFetch because we need the raw blob
+ * for browser file download -- apiFetch parses JSON which loses the
+ * Content-Disposition header and binary blob handling.
+ */
+export async function exportGeocodeCache(): Promise<void> {
+  const url = `${BASE_URL}/api/geocode-cache/export`;
+  const headers: Record<string, string> = {};
+  const apiKey = import.meta.env.VITE_API_KEY;
+  if (apiKey) headers["X-API-Key"] = apiKey;
+  const response = await fetch(url, { headers });
+  if (!response.ok) throw new Error(`Export failed (${response.status})`);
+  const blob = await response.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "geocode_cache_export.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/**
+ * Import a geocode cache JSON file.
+ *
+ * Uses direct fetch with FormData instead of apiWrite because
+ * file uploads require multipart/form-data encoding, not JSON.
+ */
+export async function importGeocodeCache(file: File): Promise<CacheImportResult> {
+  const url = `${BASE_URL}/api/geocode-cache/import`;
+  const formData = new FormData();
+  formData.append("file", file);
+  const headers: Record<string, string> = {};
+  const apiKey = import.meta.env.VITE_API_KEY;
+  if (apiKey) headers["X-API-Key"] = apiKey;
+  const response = await fetch(url, { method: "POST", headers, body: formData });
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Import failed (${response.status}): ${errorBody}`);
+  }
+  return (await response.json()) as CacheImportResult;
+}
+
+/** Clear all entries from the geocode cache. */
+export async function clearGeocodeCache(): Promise<CacheClearResult> {
+  return apiWrite<CacheClearResult>("/api/geocode-cache", "DELETE");
 }

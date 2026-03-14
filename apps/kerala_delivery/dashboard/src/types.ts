@@ -237,6 +237,48 @@ export interface HealthResponse {
   };
 }
 
+// --- Settings types ---
+
+/** Response from GET /api/settings. */
+export interface SettingsResponse {
+  google_maps_api_key: string | null;
+  has_api_key: boolean;
+}
+
+/** Response from PUT /api/settings/api-key. */
+export interface ApiKeyUpdateResponse {
+  message: string;
+  masked_key: string;
+  valid: boolean;
+}
+
+/** Response from POST /api/settings/api-key/validate. */
+export interface ApiKeyValidateResponse {
+  valid: boolean;
+  message: string;
+}
+
+/** Response from GET /api/geocode-cache/stats. */
+export interface GeocodeStats {
+  total_entries: number;
+  total_hits: number;
+  api_calls_saved: number;
+  estimated_savings_usd: number;
+}
+
+/** Response from POST /api/geocode-cache/import. */
+export interface CacheImportResult {
+  message: string;
+  added: number;
+  skipped: number;
+}
+
+/** Response from DELETE /api/geocode-cache. */
+export interface CacheClearResult {
+  message: string;
+  deleted: number;
+}
+
 // --- UI constants ---
 
 /**

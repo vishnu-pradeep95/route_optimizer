@@ -1,0 +1,133 @@
+/* Settings -- Settings page layout and card styles.
+ *
+ * Design: Single-column scrollable layout with stacked DaisyUI cards.
+ * Follows the industrial-utilitarian aesthetic (dark headers, clean cards).
+ * Uses design tokens from index.css for consistency.
+ */
+
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.settings-header h2 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 720px;
+}
+
+/* Card spacing override for consistent padding */
+.settings-card .tw\:card-body {
+  gap: var(--space-3);
+}
+
+/* Error banner at top of page */
+.settings-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-6);
+  background: var(--color-danger-bg);
+  border-bottom: 1px solid rgba(220, 38, 38, 0.2);
+  color: #991b1b;
+  font-size: 13px;
+}
+
+.settings-error button {
+  background: #991b1b;
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* API Key section */
+.settings-key-status {
+  padding: var(--space-2) 0;
+}
+
+.settings-masked-key {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.settings-key-form {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+/* Cache stats layout */
+.settings-stats {
+  display: flex;
+  gap: var(--space-6);
+  padding: var(--space-3) 0;
+  flex-wrap: wrap;
+}
+
+.settings-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-stat-value {
+  font-family: var(--font-heading);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.settings-stat-label {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Cache action buttons */
+.settings-cache-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* Upload history source filename */
+.settings-source-file {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-muted);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
