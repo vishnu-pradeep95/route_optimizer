@@ -18,6 +18,7 @@
  */
 
 import { useState, useCallback, useMemo } from "react";
+import circle from "@turf/circle";
 import Map, {
   Source,
   Layer,
@@ -70,6 +71,8 @@ interface RouteMapProps {
   vehicleIndexMap: Map<string, number>;
   /** Callback to capture the map ref for programmatic control. */
   onMapRef?: (ref: MapRef | null) => void;
+  /** Zone radius in km from /api/config. When provided, draws boundary circle. */
+  zoneRadiusKm?: number;
 }
 
 /**
@@ -103,6 +106,7 @@ export function RouteMap({
   selectedVehicleId,
   vehicleIndexMap,
   onMapRef,
+  zoneRadiusKm,
 }: RouteMapProps) {
   /**
    * Map theme state — persists during the session.
@@ -147,6 +151,20 @@ export function RouteMap({
     return entries;
   }, [latestPings, selectedVehicleId]);
 
+  /**
+   * Memoized GeoJSON circle for the delivery zone boundary.
+   * Uses @turf/circle to generate a 64-step polygon at the configured radius.
+   * Rendered as a dashed gray line — subtle informational overlay.
+   */
+  const zoneCircle = useMemo(() => {
+    if (!zoneRadiusKm) return null;
+    return circle(
+      [VATAKARA_CENTER.longitude, VATAKARA_CENTER.latitude],
+      zoneRadiusKm,
+      { steps: 64, units: "kilometers" }
+    );
+  }, [zoneRadiusKm]);
+
   const handleMapRef = useCallback(
     (ref: MapRef | null) => {
       onMapRef?.(ref);
@@ -179,6 +197,23 @@ export function RouteMap({
          */
       >
         <NavigationControl position="top-right" />
+
+        {/* Zone boundary circle — dashed gray line showing delivery area limit.
+            Rendered before route polylines so it sits behind them in z-order. */}
+        {zoneCircle && (
+          <Source id="zone-boundary" type="geojson" data={zoneCircle}>
+            <Layer
+              id="zone-boundary-line"
+              type="line"
+              paint={{
+                "line-color": "#888888",
+                "line-width": 1.5,
+                "line-dasharray": [4, 4],
+                "line-opacity": 0.5,
+              }}
+            />
+          </Source>
+        )}
 
         {/* Route polylines — one GeoJSON source + layer per vehicle for distinct colors.
             TODO Phase 3: Add drag-and-drop route adjustment per design doc Section 6.3

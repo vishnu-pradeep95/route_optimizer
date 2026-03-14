@@ -25,7 +25,7 @@ import { VehicleList } from "../components/VehicleList";
 import { RouteMap } from "../components/RouteMap";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { fetchRoutesWithStops, fetchFleetTelemetry } from "../lib/api";
+import { fetchRoutesWithStops, fetchFleetTelemetry, fetchAppConfig } from "../lib/api";
 import { isApiError } from "../lib/errors";
 import type { ApiError } from "../lib/errors";
 import type {
@@ -47,6 +47,7 @@ export function LiveMap() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [apiError, setApiError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
+  const [zoneRadiusKm, setZoneRadiusKm] = useState<number | undefined>();
 
   /** Map ref for programmatic zoom/pan when a vehicle is selected. */
   const mapRef = useRef<MapRef | null>(null);
@@ -141,6 +142,13 @@ export function LiveMap() {
   useEffect(() => {
     loadRouteData();
   }, [loadRouteData]);
+
+  // Fetch zone radius from app config on mount (non-critical — map works without it)
+  useEffect(() => {
+    fetchAppConfig()
+      .then((cfg) => setZoneRadiusKm(cfg.zone_radius_km))
+      .catch(() => {}); // Non-critical -- map works without zone circle
+  }, []);
 
   // Telemetry polling — runs after routes are loaded, refreshes every 15s
   useEffect(() => {
@@ -288,6 +296,7 @@ export function LiveMap() {
             selectedVehicleId={selectedVehicleId}
             vehicleIndexMap={vehicleIndexMap}
             onMapRef={handleMapRef}
+            zoneRadiusKm={zoneRadiusKm}
           />
         </div>
       </div>
