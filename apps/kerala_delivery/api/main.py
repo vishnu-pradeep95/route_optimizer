@@ -1118,6 +1118,25 @@ async def parse_upload(
 
         filtered_rows = len(preprocessed_df)
 
+        # Phase 19: Fail fast if DeliveryMan column is missing -- per-driver TSP requires it.
+        # Check both column existence AND that at least one non-empty value exists.
+        # preprocess_cdcms fills missing DeliveryMan with empty strings (not NaN),
+        # so dropna() alone won't catch the "column exists but all empty" case.
+        _has_delivery_man = (
+            "delivery_man" in preprocessed_df.columns
+            and not preprocessed_df["delivery_man"].dropna().str.strip().replace("", pd.NA).dropna().empty
+        )
+        if not _has_delivery_man:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            return error_response(
+                status_code=400,
+                error_code=ErrorCode.UPLOAD_INVALID_FORMAT,
+                user_message="CSV is missing the DeliveryMan column -- this file must be a CDCMS export with driver assignments. Upload a file exported from CDCMS after allocating orders to drivers.",
+                technical_message="delivery_man column missing or empty in preprocessed DataFrame",
+                request_id=request_id_var.get(""),
+            )
+
         # --- Driver auto-creation and categorization ---
         driver_summary = await auto_create_drivers_from_csv(session, preprocessed_df)
 

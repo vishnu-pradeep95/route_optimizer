@@ -313,7 +313,11 @@ def preprocess_cdcms(
             # Keep area_name and delivery_man as metadata — useful for grouping
             # and filtering, but not consumed by CsvImporter directly.
             "area_name": df[CDCMS_COL_AREA].str.strip().str.title(),
-            "delivery_man": df[CDCMS_COL_DELIVERY_MAN].str.strip(),
+            "delivery_man": (
+                df[CDCMS_COL_DELIVERY_MAN].str.strip()
+                if CDCMS_COL_DELIVERY_MAN in df.columns
+                else pd.Series("", index=df.index)
+            ),
             # Completely unprocessed CDCMS ConsumerAddress text, only stripped.
             # Preserved so the API can expose both cleaned and raw address forms.
             "address_original": df[CDCMS_COL_ADDRESS].str.strip(),
