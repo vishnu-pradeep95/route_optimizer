@@ -114,7 +114,7 @@
 - [x] **Phase 18: Address Preprocessing Fixes** - Fix trailing-letter split garbling, (H) expansion, PO concatenation, and tighten geocode validation (completed 2026-03-14)
 - [x] **Phase 19: Per-Driver TSP Optimization** - Group orders by driver, run VROOM TSP per driver, store all routes under single optimization run (completed 2026-03-14)
 - [x] **Phase 20: UI Terminology Rename** - Change "Vehicle" to "Driver" in all dashboard labels while keeping API field names backward-compatible (completed 2026-03-14)
-- [ ] **Phase 21: Dashboard Settings and Cache Management** - Settings page with API key management, upload history, geocode cache stats and export/import
+- [x] **Phase 21: Dashboard Settings and Cache Management** - Settings page with API key management, upload history, geocode cache stats and export/import (completed 2026-03-14)
 - [ ] **Phase 22: Google Routes Validation** - User-triggered OSRM vs Google Routes distance/time comparison with cost warning and confidence indicator
 
 ## Phase Details
@@ -203,7 +203,7 @@ Plans:
   2. User can view upload history showing date, filename, driver count, and order count for each past upload
   3. User can view geocode cache statistics (total cached addresses, API calls made, estimated cost) on the Settings page
   4. User can export the entire geocode cache to a JSON file and import a cache JSON file from another machine
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 21-01-PLAN.md -- Backend: SettingsDB model, Alembic migration, repository functions, API endpoints for settings/cache
 - [ ] 21-02-PLAN.md -- Frontend: Settings page with API Key, Geocode Cache, and Upload History cards
@@ -246,7 +246,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 18. Distribution Build | 4/4 | Complete    | 2026-03-14 | 2026-03-06 |
 | 19. Pin OSRM Docker Image | 3/3 | Complete    | 2026-03-14 | 2026-03-07 |
 | 20. Sync Error Message Documentation | 2/2 | Complete    | 2026-03-14 | 2026-03-07 |
-| 21. Playwright E2E Test Suite | 1/2 | In Progress|  | 2026-03-08 |
+| 21. Playwright E2E Test Suite | 2/2 | Complete   | 2026-03-14 | 2026-03-08 |
 | 22. CI/CD Pipeline Integration | v1.4 | 2/2 | Complete | 2026-03-08 |
 | 23. Distribution Verification & Ops | v1.4 | 2/2 | Complete | 2026-03-08 |
 | 24. Documentation Consolidation | v1.4 | 3/3 | Complete | 2026-03-09 |
