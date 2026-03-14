@@ -624,71 +624,8 @@
         }
 
         /* ============================================================
-           Vehicle selector
+           (Vehicle selector removed — Phase 19: QR-only access)
            ============================================================ */
-        .vehicle-selector {
-            padding: 16px 12px 16px;
-            display: none;
-        }
-        .vehicle-selector.visible { display: block; }
-        .vehicle-selector h2 {
-            font-family: var(--font-ui);
-            font-size: 18px;
-            font-weight: 700;
-            margin-bottom: 12px;
-            letter-spacing: -0.01em;
-        }
-        .vehicle-btn {
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-            padding: 16px;
-            margin-bottom: 8px;
-            background: var(--color-surface);
-            border: 1px solid var(--color-border);
-            border-radius: var(--radius-card);
-            text-align: left;
-            cursor: pointer;
-            min-height: 64px;
-            transition: border-color 0.15s, background 0.15s;
-            gap: 4px;
-        }
-        .vehicle-btn:hover {
-            border-color: var(--color-accent);
-            background: var(--color-surface-2);
-        }
-        .vehicle-btn .v-name {
-            font-family: var(--font-ui);
-            font-weight: 700;
-            font-size: 15px;
-            color: var(--color-text);
-        }
-        .vehicle-btn .v-stats {
-            font-family: var(--font-data);
-            color: var(--color-text-secondary);
-            font-size: 14px;
-        }
-
-        /* Back button */
-        .back-btn {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            width: 100%;
-            padding: 12px 16px;
-            margin-bottom: 16px;
-            background: transparent;
-            border: 1px solid var(--color-border);
-            border-radius: var(--radius-btn);
-            font-family: var(--font-ui);
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--color-text-secondary);
-            cursor: pointer;
-            min-height: 48px;
-            transition: border-color 0.15s, color 0.15s;
-        }
-        .back-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
 
         /* ============================================================
            Header action buttons
@@ -831,10 +768,10 @@
     </div>
     <!-- Action buttons — hidden until a route is loaded.
          ⟳ reloads route data from server (e.g. supervisor re-ran optimization).
-         ⇄ returns to vehicle selector so driver can switch without a page reload. -->
+         ⇄ resets the view (re-fetches in QR mode, returns to upload in manual mode). -->
     <div id="header-actions" class="header-actions">
         <button class="header-btn" onclick="reloadCurrentRoute()" title="Reload route from server">&#x29F3;</button>
-        <button class="header-btn" onclick="changeVehicle()" title="Switch to a different vehicle">&#x21C4;</button>
+        <button class="header-btn" onclick="resetRoute()" title="Reset">&#x21C4;</button>
     </div>
 </div>
 
@@ -860,13 +797,7 @@
     <div id="upload-status"></div>
 </div>
 
-<!-- Vehicle selector (after upload) -->
-<div id="vehicle-selector" class="vehicle-selector">
-    <h2>Select Your Vehicle</h2>
-    <div id="vehicle-list"></div>
-</div>
-
-<!-- Route view (after vehicle selection) -->
+<!-- Route view (after QR scan or upload+optimize) -->
 <div id="route-view" style="display: none;">
     <div class="tabs">
         <button class="tab active" onclick="showTab('list')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> Delivery List</button>
@@ -936,6 +867,11 @@ const API_BASE = window.location.origin;
 let currentRoute = null;
 let map = null;
 let markers = [];
+
+// QR-based access: driver name from ?driver= URL parameter.
+// When set, the PWA was opened via QR scan (not manual upload).
+// This changes reset behavior — re-fetch route instead of returning to upload.
+const qrDriverName = new URLSearchParams(window.location.search).get('driver');
 
 // GPS telemetry interval ID (cleared when route is unloaded).
 // Sends pings to /api/telemetry every TELEMETRY_INTERVAL_MS while
@@ -1176,7 +1112,7 @@ async function replayOfflineQueue() {
     for (const item of queue) {
         try {
             const resp = await authPost(
-                `${API_BASE}/api/routes/${item.vehicleId}/stops/${item.orderId}/status`,
+                `${API_BASE}/api/routes/${encodeURIComponent(item.vehicleId)}/stops/${item.orderId}/status`,
                 { status: item.status },
             );
             if (!resp.ok) remaining.push(item); // Keep failed items for retry
@@ -1195,8 +1131,8 @@ async function replayOfflineQueue() {
 // ============================================================
 // XSS Prevention — escape untrusted strings before HTML insertion
 // ============================================================
-// Why? renderStopList() and showVehicleSelector() use innerHTML with
-// server data (addresses, notes, driver names). If that data ever
+// Why? renderStopList() uses innerHTML with server data (addresses,
+// notes, driver names). If that data ever
 // contains HTML tags (e.g., a malicious address like
 // "<script>alert(1)<\/script>"), the browser would execute it.
 // This helper escapes the 5 HTML-significant characters.
@@ -1213,9 +1149,8 @@ function escapeHtml(str) {
 // ============================================================
 // App Initialization — restore cached state on load
 // ============================================================
-// On page load, check if we have cached route data from a previous session.
-// This lets the driver refresh the page or lose connectivity and still see
-// their route. The data was saved when they first loaded the route.
+// On page load, check for QR-based access (?driver= parameter) first,
+// then fall back to cached route data, then show upload screen.
 window.addEventListener('DOMContentLoaded', () => {
     // Fetch app config (office phone number, depot settings) early
     fetchAppConfig();
@@ -1225,24 +1160,34 @@ window.addEventListener('DOMContentLoaded', () => {
         window.dispatchEvent(new Event('offline'));
     }
 
-    const cachedVehicleId = loadFromStorage(STORAGE_KEYS.VEHICLE_ID);
-    const cachedRoute = loadFromStorage(STORAGE_KEYS.ROUTE_DATA);
-
-    if (cachedRoute && cachedVehicleId) {
-        // Restore previously loaded route
-        currentRoute = cachedRoute;
+    if (qrDriverName) {
+        // QR-based access: load route directly for this driver.
+        // The driver name is URL-encoded in the QR code (e.g., ?driver=Suresh+Kumar).
+        // vehicle_id column now stores driver names (Phase 19 migration).
         document.getElementById('upload-section').style.display = 'none';
-        document.getElementById('route-view').style.display = 'block';
-        document.getElementById('progress-section').style.display = 'block';
-        document.getElementById('header-title').textContent = currentRoute.driver_name;
-        renderStopList();
-        updateRefreshRow();
-        // Show header action buttons so driver isn't stuck if wrong route was restored
-        document.getElementById('header-actions').style.display = 'flex';
-        // Show Call Office FAB for cached route
-        document.getElementById('call-office-fab').style.display = 'flex';
-        // Resume telemetry for the cached route
-        startTelemetry();
+        loadRoute(qrDriverName);
+    } else {
+        // Manual access: check for cached route, otherwise show upload screen
+        const cachedVehicleId = loadFromStorage(STORAGE_KEYS.VEHICLE_ID);
+        const cachedRoute = loadFromStorage(STORAGE_KEYS.ROUTE_DATA);
+
+        if (cachedRoute && cachedVehicleId) {
+            // Restore previously loaded route
+            currentRoute = cachedRoute;
+            document.getElementById('upload-section').style.display = 'none';
+            document.getElementById('route-view').style.display = 'block';
+            document.getElementById('progress-section').style.display = 'block';
+            document.getElementById('header-title').textContent = currentRoute.driver_name;
+            renderStopList();
+            updateRefreshRow();
+            // Show header action buttons so driver isn't stuck if wrong route was restored
+            document.getElementById('header-actions').style.display = 'flex';
+            // Show Call Office FAB for cached route
+            document.getElementById('call-office-fab').style.display = 'flex';
+            // Resume telemetry for the cached route
+            startTelemetry();
+        }
+        // else: upload screen is visible by default — no action needed
     }
 
     // Replay any offline queued updates
@@ -1252,7 +1197,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // ============================================================
-// File Upload → Optimize → Show Vehicle Selector
+// File Upload → Optimize → Load First Route
 // ============================================================
 async function handleFileUpload(input) {
     const file = input.files[0];
@@ -1275,16 +1220,19 @@ async function handleFileUpload(input) {
         const summary = await resp.json();
         const solveTime = summary.optimization_time_ms != null
             ? summary.optimization_time_ms.toFixed(0) : '?';
-        status.textContent = `✅ ${summary.orders_assigned} orders assigned to ${summary.vehicles_used} vehicles (${solveTime}ms)`;
+        status.textContent = `✅ ${summary.orders_assigned} orders assigned to ${summary.vehicles_used} drivers (${solveTime}ms)`;
 
-        // Fetch all routes and show vehicle selector
+        // Fetch all routes and load the first one directly.
+        // With per-driver TSP (Phase 19), each driver gets their own route.
+        // If the upload was done from the PWA, load the first route.
         const routesResp = await fetch(`${API_BASE}/api/routes`);
         const routesData = await routesResp.json();
 
-        // Cache routes list for offline access
-        saveToStorage(STORAGE_KEYS.ROUTES_LIST, routesData.routes);
-
-        showVehicleSelector(routesData.routes);
+        if (routesData.routes && routesData.routes.length > 0) {
+            // Load the first driver's route (upload flow = supervisor or single-driver use)
+            const firstRoute = routesData.routes[0];
+            await loadRoute(firstRoute.vehicle_id);
+        }
 
     } catch (err) {
         status.textContent = `❌ Error: ${err.message}`;
@@ -1292,40 +1240,16 @@ async function handleFileUpload(input) {
 }
 
 // ============================================================
-// Vehicle Selector
-// ============================================================
-function showVehicleSelector(routes) {
-    document.getElementById('upload-section').style.display = 'none';
-    const selector = document.getElementById('vehicle-selector');
-    selector.classList.add('visible');
-
-    const list = document.getElementById('vehicle-list');
-    // Prepend a back-to-upload button so the driver isn't stuck here
-    // if they need to upload a new list or arrived by mistake.
-    list.innerHTML = `
-        <button class="back-btn" onclick="goToUpload()">&#8592; Upload New List</button>
-        ${routes.map(r => `
-        <button class="vehicle-btn" onclick="loadRoute('${escapeHtml(r.vehicle_id)}')">
-            <div class="v-name">🚛 ${escapeHtml(r.driver_name)} (${escapeHtml(r.vehicle_id)})</div>
-            <div class="v-stats">
-                ${r.total_stops} stops · ${r.total_distance_km} km · ~${Math.round(r.total_duration_minutes)} min · ${r.total_weight_kg} kg
-            </div>
-        </button>
-        `).join('')}
-    `;
-}
-
-// ============================================================
 // Load a specific driver's route
 // ============================================================
 async function loadRoute(vehicleId) {
-    document.getElementById('vehicle-selector').classList.remove('visible');
+    document.getElementById('upload-section').style.display = 'none';
     document.getElementById('route-view').style.display = 'block';
-    // Show the reload / change-vehicle buttons in the header
+    // Show the reload button in the header
     document.getElementById('header-actions').style.display = 'flex';
 
     try {
-        const resp = await fetch(`${API_BASE}/api/routes/${vehicleId}`);
+        const resp = await fetch(`${API_BASE}/api/routes/${encodeURIComponent(vehicleId)}`);
         currentRoute = await resp.json();
     } catch {
         // Network failed — try loading from localStorage cache
@@ -1604,7 +1528,7 @@ async function updateStatus(vehicleId, orderId, status) {
     // See: apps/kerala_delivery/api/main.py StatusUpdate model
     try {
         const resp = await authPost(
-            `${API_BASE}/api/routes/${vehicleId}/stops/${orderId}/status`,
+            `${API_BASE}/api/routes/${encodeURIComponent(vehicleId)}/stops/${orderId}/status`,
             { status },
         );
         if (!resp.ok) throw new Error('Server rejected update');
@@ -1748,35 +1672,41 @@ async function reloadCurrentRoute() {
     await loadRoute(vehicleId);
 }
 
-function changeVehicle() {
-    // Return to the vehicle selector without a full page reload.
-    // Clears the cached route so the app won't auto-restore to it next open.
+function resetRoute() {
+    // Reset the current route view.
+    // QR mode (?driver= present): re-fetch the driver's route from server.
+    // Upload mode: return to the upload screen.
     stopTelemetry();
-    saveToStorage(STORAGE_KEYS.ROUTE_DATA, null);
-    saveToStorage(STORAGE_KEYS.VEHICLE_ID, null);
-    currentRoute = null;
+    document.getElementById('all-done-banner')?.remove();
 
+    if (qrDriverName) {
+        // QR mode: re-fetch route from server (supervisor may have re-optimized)
+        loadRoute(qrDriverName);
+    } else {
+        // Upload mode: clear cached route and show upload screen
+        saveToStorage(STORAGE_KEYS.ROUTE_DATA, null);
+        saveToStorage(STORAGE_KEYS.VEHICLE_ID, null);
+        currentRoute = null;
+
+        document.getElementById('route-view').style.display = 'none';
+        document.getElementById('progress-section').style.display = 'none';
+        document.getElementById('header-actions').style.display = 'none';
+        document.getElementById('call-office-fab').style.display = 'none';
+        document.getElementById('header-title').textContent = 'LPG Delivery Route';
+        document.getElementById('header-stats').textContent = '';
+        document.getElementById('upload-section').style.display = 'block';
+    }
+}
+
+function goToUpload() {
+    // Return to the upload screen.
+    document.getElementById('upload-section').style.display = 'block';
     document.getElementById('route-view').style.display = 'none';
     document.getElementById('progress-section').style.display = 'none';
     document.getElementById('header-actions').style.display = 'none';
     document.getElementById('call-office-fab').style.display = 'none';
     document.getElementById('header-title').textContent = 'LPG Delivery Route';
     document.getElementById('header-stats').textContent = '';
-    document.getElementById('all-done-banner')?.remove();
-
-    // Use the in-memory routes list if available; fall back to upload screen
-    const cachedRoutes = loadFromStorage(STORAGE_KEYS.ROUTES_LIST);
-    if (cachedRoutes && cachedRoutes.length > 0) {
-        showVehicleSelector(cachedRoutes);
-    } else {
-        document.getElementById('upload-section').style.display = 'block';
-    }
-}
-
-function goToUpload() {
-    // Return to the upload screen from the vehicle selector.
-    document.getElementById('vehicle-selector').classList.remove('visible');
-    document.getElementById('upload-section').style.display = 'block';
 }
 
 // ============================================================
