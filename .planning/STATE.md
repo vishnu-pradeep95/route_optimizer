@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Driver-Centric Model
 status: executing
-stopped_at: Completed 18-03-PLAN.md
-last_updated: "2026-03-14T00:07:32.836Z"
-last_activity: 2026-03-13 -- Completed 18-01 (fix (HO), (PO), (H) regex patterns)
+stopped_at: Completed 18-04-PLAN.md
+last_updated: "2026-03-14T01:10:45.419Z"
+last_activity: 2026-03-14 -- Completed 18-04 (address cleaning test coverage with Refill.xlsx)
 progress:
   total_phases: 7
   completed_phases: 0
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 18 of 22 (Address Preprocessing Fixes) -- third of 7 phases in v3.0
-Plan: 3 of 4
-Status: In Progress
-Last activity: 2026-03-14 -- Completed 18-03 (zone circle overlay on dashboard live map)
+Plan: 4 of 4
+Status: Phase Complete
+Last activity: 2026-03-14 -- Completed 18-04 (address cleaning test coverage with Refill.xlsx)
 
 Progress: [▓▓▓░░░░░░░] 28%
 
@@ -58,6 +58,7 @@ Progress: [▓▓▓░░░░░░░] 28%
 | Phase 18 P01 | 2min | 1 tasks | 2 files |
 | Phase 18 P02 | 3min | 2 tasks | 8 files |
 | Phase 18 P03 | 3min | 2 tasks | 5 files |
+| Phase 18 P04 | 7min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,9 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 - [Phase 18]: Depot lat/lon and zone radius made configurable via env vars for deployment flexibility
 - [Phase 18]: Zone circle rendered before route polylines for correct z-order
 - [Phase 18]: fetchAppConfig failure non-critical -- map works without zone circle
+- [Phase 18]: First+last char guard on fuzzy dictionary matching to prevent off-by-one false positives
+- [Phase 18]: MUTTUNGALPARA added to _PROTECTED_WORDS to prevent trailing-letter garbling
+- [Phase 18]: Focused integration testing approach for address cleaning (real data + direct function, no HTTP mocks)
 
 ### Pending Todos
 
@@ -105,6 +109,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last session: 2026-03-14T00:07:32.835Z
-Stopped at: Completed 18-03-PLAN.md
+Last session: 2026-03-14T01:10:00Z
+Stopped at: Completed 18-04-PLAN.md (Phase 18 complete)
 Resume file: None

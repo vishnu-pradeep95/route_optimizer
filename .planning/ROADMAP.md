@@ -111,7 +111,7 @@
 
 - [x] **Phase 16: Driver Database Foundation** - Driver entity with CRUD, fuzzy name matching, auto-creation from CSV, and driver management page (completed 2026-03-13)
 - [x] **Phase 17: CSV Upload and XLSX Detection** - Fix .xlsx detection bug, add driver preview step, driver selection before processing (completed 2026-03-13)
-- [ ] **Phase 18: Address Preprocessing Fixes** - Fix trailing-letter split garbling, (H) expansion, PO concatenation, and tighten geocode validation
+- [x] **Phase 18: Address Preprocessing Fixes** - Fix trailing-letter split garbling, (H) expansion, PO concatenation, and tighten geocode validation (completed 2026-03-14)
 - [ ] **Phase 19: Per-Driver TSP Optimization** - Group orders by driver, run VROOM TSP per driver, store all routes under single optimization run
 - [ ] **Phase 20: UI Terminology Rename** - Change "Vehicle" to "Driver" in all dashboard labels while keeping API field names backward-compatible
 - [ ] **Phase 21: Dashboard Settings and Cache Management** - Settings page with API key management, upload history, geocode cache stats and export/import
@@ -159,7 +159,7 @@ Plans:
   2. Address containing "(H)" expands correctly to "House" without splitting or garbling adjacent words
   3. Address containing concatenated "PO" abbreviation (e.g., "MUTTUNGALPOBALAVADI") correctly separates "P.O." without mangling surrounding text
   4. Geocode results outside a 20km radius from the Vatakara depot (from config) are flagged as out-of-zone, using Vatakara depot as the centroid
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 - [ ] 18-01-PLAN.md -- Fix (HO), (PO), and (H) regex patterns with unit tests
 - [ ] 18-02-PLAN.md -- Zone radius 30->20km, env var config, dictionary rebuild, test updates
@@ -233,7 +233,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 15. CSV Documentation | v1.3 | 1/1 | Complete | 2026-03-05 |
 | 16. Documentation Corrections | 3/3 | Complete    | 2026-03-13 | 2026-03-05 |
 | 17. Error Message Humanization | 4/4 | Complete    | 2026-03-13 | 2026-03-06 |
-| 18. Distribution Build | 3/4 | In Progress|  | 2026-03-06 |
+| 18. Distribution Build | 4/4 | Complete   | 2026-03-14 | 2026-03-06 |
 | 19. Pin OSRM Docker Image | v1.3 | 1/1 | Complete | 2026-03-07 |
 | 20. Sync Error Message Documentation | v1.3 | 1/1 | Complete | 2026-03-07 |
 | 21. Playwright E2E Test Suite | v1.4 | 3/3 | Complete | 2026-03-08 |
