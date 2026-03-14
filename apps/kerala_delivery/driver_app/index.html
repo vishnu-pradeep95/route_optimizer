@@ -1315,7 +1315,7 @@ function renderStopList() {
 function renderHeroCard(stop) {
     const total = currentRoute.stops.length;
     const distInfo = stop.distance_from_prev_km > 0
-        ? `${stop.distance_from_prev_km} km away`
+        ? `${Number(stop.distance_from_prev_km).toFixed(1)} km away`
         : '';
     const refInfo = stop.customer_ref
         ? `<div class="hero-meta">Ref: ${escapeHtml(stop.customer_ref)}</div>`
@@ -1327,7 +1327,7 @@ function renderHeroCard(stop) {
         ${stop.address_raw ? `<div class="hero-address-raw">${escapeHtml(stop.address_raw)}</div>` : ''}
         ${stop.location_approximate ? '<div class="approx-badge tw:badge tw:badge-warning tw:badge-sm">&#9888; Approx. location</div>' : ''}
         <div class="hero-meta">
-            ${stop.quantity} cyl &middot; ${stop.weight_kg} kg${distInfo ? ` &middot; ${distInfo}` : ''}
+            ${stop.quantity} cyl &middot; ${Number(stop.weight_kg).toFixed(1)} kg${distInfo ? ` &middot; ${distInfo}` : ''}
         </div>
         ${refInfo}
         ${stop.notes ? `<div class="hero-notes">${escapeHtml(stop.notes)}</div>` : ''}
@@ -1361,8 +1361,8 @@ function renderCompactCard(stop) {
             <div class="stop-address">${escapeHtml(stop.address) || 'Address pending'}</div>
             ${stop.address_raw ? `<div class="compact-address-raw">${escapeHtml(stop.address_raw)}</div>` : ''}
             <div class="stop-meta">
-                ${stop.quantity} cyl &middot; ${stop.weight_kg} kg
-                ${stop.distance_from_prev_km > 0 ? ` &middot; ${stop.distance_from_prev_km} km` : ''}
+                ${stop.quantity} cyl &middot; ${Number(stop.weight_kg).toFixed(1)} kg
+                ${stop.distance_from_prev_km > 0 ? ` &middot; ${Number(stop.distance_from_prev_km).toFixed(1)} km` : ''}
             </div>
             ${!isPending ? `<div class="status-chip ${statusClass}">
                 ${stop.status === 'delivered' ? '&#x2713; Delivered' : '&#x2715; Failed'}
@@ -1436,7 +1436,7 @@ function showRouteOnMap() {
         const marker = L.marker(latlng, { icon }).addTo(map);
         // XSS defence: stop.address comes from the database (originally from CSV
         // uploads). Must escape before passing to bindPopup(), which uses innerHTML.
-        marker.bindPopup(`<b>Stop ${stop.sequence}</b><br>${escapeHtml(stop.address)}<br>${stop.quantity} cyl · ${stop.weight_kg} kg`);
+        marker.bindPopup(`<b>Stop ${stop.sequence}</b><br>${escapeHtml(stop.address)}<br>${stop.quantity} cyl · ${Number(stop.weight_kg).toFixed(1)} kg`);
         markers.push(marker);
     });
 
