@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Driver-Centric Model
 status: in-progress
-stopped_at: Completed 19-01-PLAN.md
-last_updated: "2026-03-14T04:49:00.000Z"
-last_activity: 2026-03-14 -- Completed 19-01 (per-driver TSP orchestrator + DB migration)
+stopped_at: Completed 19-02-PLAN.md
+last_updated: "2026-03-14T04:59:02.000Z"
+last_activity: 2026-03-14 -- Completed 19-02 (per-driver TSP integration into upload pipeline)
 progress:
   total_phases: 7
   completed_phases: 0
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 19 of 22 (Per-Driver TSP Optimization) -- fourth of 7 phases in v3.0
-Plan: 1 of 3
+Plan: 2 of 3
 Status: In Progress
-Last activity: 2026-03-14 -- Completed 19-01 (per-driver TSP orchestrator + DB migration)
+Last activity: 2026-03-14 -- Completed 19-02 (per-driver TSP integration into upload pipeline)
 
 Progress: [▓▓▓░░░░░░░] 28%
 
@@ -60,6 +60,7 @@ Progress: [▓▓▓░░░░░░░] 28%
 | Phase 18 P03 | 3min | 2 tasks | 5 files |
 | Phase 18 P04 | 7min | 2 tasks | 5 files |
 | Phase 19 P01 | 3min | 2 tasks | 5 files |
+| Phase 19 P02 | 6min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,9 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 - **Phase 19-01:** Partial failure returns partial results with warnings (not full batch failure)
 - **Phase 19-01:** Shapely for convex hull computation (already installed, no DB round-trip needed)
 - **Phase 19-01:** Collinear/degenerate hulls gracefully skipped (only Polygon hulls compared)
+- **Phase 19-02:** Non-CDCMS uploads fall back to single 'Driver' group for backward compatibility with per-driver TSP pipeline
+- **Phase 19-02:** preprocess_cdcms handles missing DeliveryMan gracefully (fills empty strings for clean validation)
+- **Phase 19-02:** Optimization warnings converted to ImportFailure with stage='optimization' for consistent response format
 
 ### Pending Todos
 
@@ -113,6 +117,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last session: 2026-03-14T04:49:00.000Z
-Stopped at: Completed 19-01-PLAN.md
-Resume file: .planning/milestones/v3.0-phases/19-per-driver-tsp-optimization/19-02-PLAN.md
+Last session: 2026-03-14T04:59:02.000Z
+Stopped at: Completed 19-02-PLAN.md
+Resume file: .planning/milestones/v3.0-phases/19-per-driver-tsp-optimization/19-03-PLAN.md
