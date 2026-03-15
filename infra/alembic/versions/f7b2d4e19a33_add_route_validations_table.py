@@ -7,7 +7,7 @@ results. Each row stores both OSRM and Google distance/duration values, computed
 delta percentages, Google's re-optimized waypoint order, and cost tracking.
 
 Revision ID: f7b2d4e19a33
-Revises: e4a1c7f83b21
+Revises: b3e8f4a17c02
 Create Date: 2026-03-14 23:55:00.000000
 """
 from typing import Sequence, Union
@@ -19,7 +19,7 @@ from sqlalchemy.dialects.postgresql import UUID
 
 # revision identifiers, used by Alembic.
 revision: str = "f7b2d4e19a33"
-down_revision: Union[str, Sequence[str], None] = "e4a1c7f83b21"
+down_revision: Union[str, Sequence[str], None] = "b3e8f4a17c02"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -1084,7 +1084,7 @@ async def set_setting(session: AsyncSession, key: str, value: str) -> None:
         value: Setting value.
     """
     setting = SettingsDB(key=key, value=value)
-    session.merge(setting)
+    await session.merge(setting)
     await session.flush()
 
 

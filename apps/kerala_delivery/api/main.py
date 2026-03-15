@@ -3744,25 +3744,15 @@ async def validate_route(
                 "cached": True,
             }
 
-    # Step 4: Guard waypoint count
-    if len(route.stops) > 98:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "error": "too_many_stops",
-                "message": f"Route has too many stops for Google validation ({len(route.stops)} stops, max 98).",
-            },
-        )
-
-    # Step 5: Build Google Routes API request
+    # Step 4: Build intermediates from stops
     depot_lat = config.DEPOT_LOCATION.latitude
     depot_lng = config.DEPOT_LOCATION.longitude
 
-    intermediates = []
+    all_intermediates = []
     for stop in route.stops:
         if stop.location is not None:
             point = to_shape(stop.location)
-            intermediates.append({
+            all_intermediates.append({
                 "location": {
                     "latLng": {
                         "latitude": point.y,
@@ -3771,29 +3761,54 @@ async def validate_route(
                 }
             })
 
-    body = {
-        "origin": {"location": {"latLng": {"latitude": depot_lat, "longitude": depot_lng}}},
-        "destination": {"location": {"latLng": {"latitude": depot_lat, "longitude": depot_lng}}},
-        "intermediates": intermediates,
-        "travelMode": "DRIVE",
-        "optimizeWaypointOrder": True,
-        "routingPreference": "TRAFFIC_UNAWARE",
-    }
+    # Step 5: Split into segments (Google Routes API max 25 intermediates per request)
+    GOOGLE_MAX_INTERMEDIATES = 25
+    segments = []
+    for i in range(0, len(all_intermediates), GOOGLE_MAX_INTERMEDIATES):
+        segments.append(all_intermediates[i:i + GOOGLE_MAX_INTERMEDIATES])
 
-    # Step 6: Call Google Routes API
+    estimated_cost = 0.01 * len(segments)  # $0.01 per API call
+
+    # Step 6: Call Google Routes API for each segment, aggregate results
+    total_google_distance_m = 0
+    total_google_duration_s = 0
+    all_waypoint_orders: list[int] = []
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as http_client:
-            google_resp = await http_client.post(
-                "https://routes.googleapis.com/directions/v2:computeRoutes",
-                json=body,
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Goog-Api-Key": api_key,
-                    "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.optimizedIntermediateWaypointIndex",
-                },
-            )
-            google_resp.raise_for_status()
-            google_data = google_resp.json()
+            for seg_idx, seg_intermediates in enumerate(segments):
+                # First segment: depot → stops; last: stops → depot
+                # Each segment is depot → segment stops → depot
+                body = {
+                    "origin": {"location": {"latLng": {"latitude": depot_lat, "longitude": depot_lng}}},
+                    "destination": {"location": {"latLng": {"latitude": depot_lat, "longitude": depot_lng}}},
+                    "intermediates": seg_intermediates,
+                    "travelMode": "DRIVE",
+                    "optimizeWaypointOrder": True,
+                    "routingPreference": "TRAFFIC_UNAWARE",
+                }
+
+                google_resp = await http_client.post(
+                    "https://routes.googleapis.com/directions/v2:computeRoutes",
+                    json=body,
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Goog-Api-Key": api_key,
+                        "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.optimizedIntermediateWaypointIndex",
+                    },
+                )
+                google_resp.raise_for_status()
+                seg_data = google_resp.json()
+
+                seg_route = seg_data["routes"][0]
+                total_google_distance_m += seg_route["distanceMeters"]
+                duration_str = seg_route["duration"]
+                total_google_duration_s += int(duration_str.rstrip("s"))
+
+                seg_order = seg_route.get("optimizedIntermediateWaypointIndex", [])
+                # Offset waypoint indices by segment start position
+                offset = seg_idx * GOOGLE_MAX_INTERMEDIATES
+                all_waypoint_orders.extend([idx + offset for idx in seg_order])
 
     except httpx.TimeoutException:
         logger.warning("Google Routes API request timed out for vehicle %s", vehicle_id)
@@ -3805,7 +3820,6 @@ async def validate_route(
             },
         )
     except httpx.HTTPStatusError as e:
-        # Parse Google error message from response body if available
         try:
             error_body = e.response.json()
             google_msg = error_body.get("error", {}).get("message", str(e))
@@ -3833,25 +3847,12 @@ async def validate_route(
             },
         )
 
-    # Step 7: Parse response
-    try:
-        google_route = google_data["routes"][0]
-        google_distance_km = google_route["distanceMeters"] / 1000.0
-        duration_str = google_route["duration"]
-        google_duration_minutes = int(duration_str.rstrip("s")) / 60.0
-        waypoint_order = google_route.get("optimizedIntermediateWaypointIndex", [])
-    except (KeyError, IndexError, ValueError) as e:
-        logger.error("Failed to parse Google Routes API response: %s", e)
-        return JSONResponse(
-            status_code=502,
-            content={
-                "error": "google_api_parse_error",
-                "message": "Could not parse Google Routes API response.",
-            },
-        )
+    # Step 7: Parse aggregated results
+    google_distance_km = total_google_distance_m / 1000.0
+    google_duration_minutes = total_google_duration_s / 60.0
+    waypoint_order = all_waypoint_orders
 
     # Step 8: Save validation and increment stats
-    estimated_cost = 0.01
     validation = await repo.save_route_validation(
         session,
         route_id=route.id,

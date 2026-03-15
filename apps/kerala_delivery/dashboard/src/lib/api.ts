@@ -676,15 +676,20 @@ export async function validateRoute(
         err.noApiKey = true;
         throw err;
       }
+      // Extract human-readable message from structured error responses
+      if (parsed.message) {
+        throw new Error(parsed.message);
+      }
       if (isApiError(parsed)) {
         throw parsed;
       }
     } catch (parseErr) {
-      // Re-throw our noApiKey error or ApiError
+      // Re-throw our noApiKey error or ApiError or message-extracted error
       if (parseErr instanceof Error && (parseErr as Error & { noApiKey?: boolean }).noApiKey) throw parseErr;
+      if (parseErr instanceof Error) throw parseErr;
       if (isApiError(parseErr)) throw parseErr;
     }
-    throw new Error(`Validation failed (${response.status}): ${errorBody || response.statusText}`);
+    throw new Error(`Validation failed (${response.status}): ${response.statusText}`);
   }
 
   return (await response.json()) as ValidationResult;

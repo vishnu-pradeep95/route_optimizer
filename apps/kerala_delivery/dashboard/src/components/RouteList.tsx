@@ -103,7 +103,7 @@ export function RouteList({
   const [validatingVehicle, setValidatingVehicle] = useState<string | null>(null);
   const [showCostModal, setShowCostModal] = useState<string | null>(null);
   const [validationStats, setValidationStats] = useState<ValidationStats | null>(null);
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<{ vehicleId: string; message: string } | null>(null);
   const [noApiKeyVehicle, setNoApiKeyVehicle] = useState<string | null>(null);
 
   // Fetch validation stats on mount (for the cost modal cumulative display)
@@ -118,7 +118,7 @@ export function RouteList({
   // Clear validation error after 5 seconds
   useEffect(() => {
     if (!validationError) return;
-    const timer = setTimeout(() => setValidationError(null), 5000);
+    const timer = setTimeout(() => setValidationError(null), 15000);
     return () => clearTimeout(timer);
   }, [validationError]);
 
@@ -161,7 +161,7 @@ export function RouteList({
         setNoApiKeyVehicle(vehicleId);
       } else {
         const message = err instanceof Error ? err.message : "Validation failed";
-        setValidationError(message);
+        setValidationError({ vehicleId, message });
       }
     } finally {
       setValidatingVehicle(null);
@@ -371,9 +371,9 @@ export function RouteList({
               </div>
 
               {/* Validation error (inline, auto-clears after 5s) */}
-              {validationError && validatingVehicle === null && (
+              {validationError && validationError.vehicleId === route.vehicle_id && (
                 <div className="validation-error" onClick={(e) => e.stopPropagation()}>
-                  Validation failed: {validationError}
+                  Validation failed: {validationError.message}
                 </div>
               )}
             </div>
