@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Driver-Centric Model
-status: completed
-stopped_at: Phase 22 context gathered
-last_updated: "2026-03-14T23:33:10.080Z"
-last_activity: "2026-03-14 -- Completed 21-02 (Frontend Settings page: API key, cache, upload history)"
+status: executing
+stopped_at: Completed 22-01-PLAN.md
+last_updated: "2026-03-15T00:02:38.244Z"
+last_activity: "2026-03-15 -- Completed 22-01 (Validation backend: model, migration, endpoints, tests)"
 progress:
   total_phases: 7
   completed_phases: 0
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 
 ## Current Position
 
-Phase: 21 of 22 (Dashboard Settings & Cache Management) -- sixth of 7 phases in v3.0
-Plan: 2 of 2 (COMPLETE)
-Status: Phase Complete
-Last activity: 2026-03-14 -- Completed 21-02 (Frontend Settings page: API key, cache, upload history)
+Phase: 22 of 22 (Google Routes Validation) -- seventh of 7 phases in v3.0
+Plan: 1 of 2
+Status: In Progress
+Last activity: 2026-03-15 -- Completed 22-01 (Validation backend: model, migration, endpoints, tests)
 
 Progress: [▓▓▓▓░░░░░░] 40%
 
@@ -66,6 +66,7 @@ Progress: [▓▓▓▓░░░░░░] 40%
 | Phase 20 P02 | 3min | 2 tasks | 3 files |
 | Phase 21 P01 | 7min | 2 tasks | 5 files |
 | Phase 21 P02 | 4min | 2 tasks | 5 files |
+| Phase 22 P01 | 6min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -119,6 +120,10 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 - [Phase 21]: API key validated via real geocode request to Google Maps before saving
 - [Phase 21]: SettingsIcon alias for lucide-react Settings import to avoid collision with Settings page component
 - [Phase 21]: Direct fetch (not apiFetch) for export/import cache endpoints due to blob/FormData handling
+- [Phase 22]: Confidence thresholds: green <=10%, amber <=25%, red >25% distance delta
+- [Phase 22]: Google Routes API Pro tier with TRAFFIC_UNAWARE for stable comparison
+- [Phase 22]: Cumulative validation stats in SettingsDB key-value store
+- [Phase 22]: Route-level comparison only since Google re-optimizes stop order
 
 ### Pending Todos
 
@@ -136,6 +141,6 @@ See: PROJECT.md Key Decisions table, `.planning/milestones/` for full phase deta
 
 ## Session Continuity
 
-Last session: 2026-03-14T23:33:10.079Z
-Stopped at: Phase 22 context gathered
-Resume file: .planning/milestones/v3.0-phases/22-google-routes-validation/22-CONTEXT.md
+Last session: 2026-03-15T00:02:38.243Z
+Stopped at: Completed 22-01-PLAN.md
+Resume file: None

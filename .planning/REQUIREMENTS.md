@@ -43,10 +43,10 @@ Requirements for v3.0 Driver-Centric Model. Each maps to roadmap phases.
 
 ### Route Validation
 
-- [ ] **VAL-01**: User can trigger Google Routes API comparison for a generated route
-- [ ] **VAL-02**: System displays VROOM/OSRM vs Google Routes distance/time comparison with confidence indicator
-- [ ] **VAL-03**: System shows cost warning before running Google Routes validation
-- [ ] **VAL-04**: Google Routes validation is never triggered automatically (user-initiated only)
+- [x] **VAL-01**: User can trigger Google Routes API comparison for a generated route
+- [x] **VAL-02**: System displays VROOM/OSRM vs Google Routes distance/time comparison with confidence indicator
+- [x] **VAL-03**: System shows cost warning before running Google Routes validation
+- [x] **VAL-04**: Google Routes validation is never triggered automatically (user-initiated only)
 
 ### Dashboard Settings & Operations
 
@@ -122,10 +122,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ADDR-03 | Phase 18 | Complete |
 | ADDR-04 | Phase 18 | Complete |
 | ADDR-05 | Phase 18 | Complete |
-| VAL-01 | Phase 22 | Pending |
-| VAL-02 | Phase 22 | Pending |
-| VAL-03 | Phase 22 | Pending |
-| VAL-04 | Phase 22 | Pending |
+| VAL-01 | Phase 22 | Complete |
+| VAL-02 | Phase 22 | Complete |
+| VAL-03 | Phase 22 | Complete |
+| VAL-04 | Phase 22 | Complete |
 | SET-01 | Phase 21 | Complete |
 | SET-02 | Phase 21 | Complete |
 | SET-03 | Phase 21 | Complete |

@@ -217,7 +217,7 @@ Plans:
   2. After validation, the route card shows a side-by-side comparison of VROOM/OSRM vs Google distance and time, with a confidence indicator (green/amber/red based on delta percentage)
   3. Before the Google API call is made, a cost warning is displayed showing the estimated cost of the validation request
   4. Google Routes validation is never triggered automatically -- it only runs when the user explicitly clicks the validate button
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
 - [ ] 22-01-PLAN.md -- Backend: RouteValidationDB model, Alembic migration, repository CRUD, Google Routes API adapter, validation endpoint with tests
 - [ ] 22-02-PLAN.md -- Frontend: TypeScript types, API client, RouteList validate button with cost modal and inline results, Settings validation history card
@@ -250,7 +250,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 19. Pin OSRM Docker Image | 3/3 | Complete    | 2026-03-14 | 2026-03-07 |
 | 20. Sync Error Message Documentation | 2/2 | Complete    | 2026-03-14 | 2026-03-07 |
 | 21. Dashboard Settings and Cache Management | 2/2 | Complete    | 2026-03-14 | 2026-03-08 |
-| 22. Google Routes Validation | v3.0 | 0/2 | Not started | - |
+| 22. Google Routes Validation | 1/2 | In Progress|  | - |
 
 ---
 *Full phase details for v1.x and v2.x archived in `.planning/milestones/`*
