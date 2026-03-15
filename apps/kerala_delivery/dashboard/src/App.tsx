@@ -12,7 +12,7 @@
  * - Industry-standard for ops dashboards / command centers
  *
  * Why client-side "routing" with state instead of react-router:
- * We only have 4 pages -- adding a router library is overkill.
+ * We only have 5 pages -- adding a router library is overkill.
  * A simple state toggle is easier to understand and has zero bundle cost.
  * If the app grows beyond 5-6 pages, migrate to react-router.
  */
