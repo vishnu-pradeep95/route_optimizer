@@ -1,5 +1,5 @@
 ---
-status: awaiting_human_verify
+status: resolved
 trigger: "After running ./scripts/reset --all and ./scripts/bootstrap.sh, CSV upload fails with 'unable to geocode' error. User hypothesis: .env was not filled out before bootstrap, so API keys weren't included in the generated Docker images."
 created: 2026-03-08T00:00:00Z
 updated: 2026-03-08T00:02:00Z
