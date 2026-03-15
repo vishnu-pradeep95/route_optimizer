@@ -115,7 +115,7 @@
 - [x] **Phase 19: Per-Driver TSP Optimization** - Group orders by driver, run VROOM TSP per driver, store all routes under single optimization run (completed 2026-03-14)
 - [x] **Phase 20: UI Terminology Rename** - Change "Vehicle" to "Driver" in all dashboard labels while keeping API field names backward-compatible (completed 2026-03-14)
 - [x] **Phase 21: Dashboard Settings and Cache Management** - Settings page with API key management, upload history, geocode cache stats and export/import (completed 2026-03-14)
-- [ ] **Phase 22: Google Routes Validation** - User-triggered OSRM vs Google Routes distance/time comparison with cost warning and confidence indicator
+- [x] **Phase 22: Google Routes Validation** - User-triggered OSRM vs Google Routes distance/time comparison with cost warning and confidence indicator (completed 2026-03-15)
 
 ## Phase Details
 
@@ -217,7 +217,7 @@ Plans:
   2. After validation, the route card shows a side-by-side comparison of VROOM/OSRM vs Google distance and time, with a confidence indicator (green/amber/red based on delta percentage)
   3. Before the Google API call is made, a cost warning is displayed showing the estimated cost of the validation request
   4. Google Routes validation is never triggered automatically -- it only runs when the user explicitly clicks the validate button
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 22-01-PLAN.md -- Backend: RouteValidationDB model, Alembic migration, repository CRUD, Google Routes API adapter, validation endpoint with tests
 - [ ] 22-02-PLAN.md -- Frontend: TypeScript types, API client, RouteList validate button with cost modal and inline results, Settings validation history card
@@ -250,7 +250,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 19. Pin OSRM Docker Image | 3/3 | Complete    | 2026-03-14 | 2026-03-07 |
 | 20. Sync Error Message Documentation | 2/2 | Complete    | 2026-03-14 | 2026-03-07 |
 | 21. Dashboard Settings and Cache Management | 2/2 | Complete    | 2026-03-14 | 2026-03-08 |
-| 22. Google Routes Validation | 1/2 | In Progress|  | - |
+| 22. Google Routes Validation | 2/2 | Complete   | 2026-03-15 | - |
 
 ---
 *Full phase details for v1.x and v2.x archived in `.planning/milestones/`*
