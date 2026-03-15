@@ -1,20 +1,22 @@
 /**
- * Settings -- Dashboard settings page for API key, geocode cache, and upload history.
+ * Settings -- Dashboard settings page for API key, geocode cache, upload history,
+ * and validation history.
  *
- * Three card sections stacked vertically:
+ * Four card sections stacked vertically:
  * 1. Google Maps API Key -- view masked key, update with validation
  * 2. Geocode Cache -- stats, export, import, clear with confirmation modal
  * 3. Upload History -- compact table of recent optimization runs
+ * 4. Validation History -- cumulative Google Routes validation stats and recent results
  *
  * Data flow:
- * On mount: parallel fetch of settings, cache stats, and recent runs.
+ * On mount: parallel fetch of settings, cache stats, recent runs, and validation stats.
  * Mutations: save API key, export/import/clear cache -- each updates local state.
  *
  * Follows patterns from DriverManagement.tsx (mutations) and RunHistory.tsx (data fetching).
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Key, Database, ClipboardList, Download, Upload, Trash2 } from "lucide-react";
+import { Key, Database, ClipboardList, Download, Upload, Trash2, ShieldCheck } from "lucide-react";
 import {
   fetchSettings,
   updateApiKey,
@@ -23,6 +25,8 @@ import {
   importGeocodeCache,
   clearGeocodeCache,
   fetchRuns,
+  fetchValidationStats,
+  fetchRecentValidations,
 } from "../lib/api";
 import { EmptyState } from "../components/EmptyState";
 import { StatusBadge } from "../components/StatusBadge";
@@ -30,6 +34,8 @@ import type {
   GeocodeStats,
   CacheImportResult,
   OptimizationRun,
+  ValidationStats,
+  RecentValidation,
 } from "../types";
 import "./Settings.css";
 
@@ -86,16 +92,22 @@ export function Settings() {
   // --- Export ---
   const [exporting, setExporting] = useState(false);
 
+  // --- Validation history section state ---
+  const [validationStats, setValidationStats] = useState<ValidationStats | null>(null);
+  const [recentValidations, setRecentValidations] = useState<RecentValidation[]>([]);
+
   // --- Data loading ---
 
   const loadAll = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const [settingsData, statsData, runsData] = await Promise.all([
+      const [settingsData, statsData, runsData, valStats, valRecent] = await Promise.all([
         fetchSettings(),
         fetchGeocodeStats(),
         fetchRuns(10),
+        fetchValidationStats().catch(() => null),
+        fetchRecentValidations().catch(() => ({ validations: [] })),
       ]);
 
       // Settings
@@ -107,6 +119,10 @@ export function Settings() {
 
       // Runs
       setRuns(runsData.runs);
+
+      // Validation history
+      setValidationStats(valStats);
+      setRecentValidations(valRecent.validations.slice(0, 10));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load settings");
     } finally {
@@ -443,6 +459,84 @@ export function Settings() {
                   </table>
                 </div>
               </>
+            )}
+          </div>
+        </div>
+
+        {/* ──────────── Card 4: Validation History ──────────── */}
+        <div className="tw:card tw:bg-base-100 tw:shadow-sm settings-card">
+          <div className="tw:card-body">
+            <h3 className="tw:card-title tw:text-base tw:gap-2">
+              <ShieldCheck size={18} />
+              Validation History
+            </h3>
+
+            {/* Stats row */}
+            {validationStats && (
+              <div className="validation-stats-row">
+                <div className="validation-stat">
+                  <span className="settings-stat-value">
+                    {validationStats.count}
+                  </span>
+                  <span className="settings-stat-label">Total Validations</span>
+                </div>
+                <div className="validation-stat">
+                  <span className="settings-stat-value">
+                    ~INR {validationStats.estimated_cost_inr.toFixed(2)}
+                  </span>
+                  <span className="settings-stat-label">Total Cost</span>
+                </div>
+                <div className="validation-stat">
+                  <span className="settings-stat-value">~INR 0.93</span>
+                  <span className="settings-stat-label">Per Validation</span>
+                </div>
+              </div>
+            )}
+
+            {/* Recent validations table or empty state */}
+            {(!validationStats || validationStats.count === 0) ? (
+              <EmptyState
+                icon={ShieldCheck}
+                title="No validations yet"
+                description="Use the Validate button on route cards to compare OSRM routes against Google Routes API."
+              />
+            ) : (
+              <div className="tw:overflow-x-auto">
+                <table className="tw:table tw:table-sm tw:table-zebra">
+                  <thead>
+                    <tr>
+                      <th>Driver</th>
+                      <th className="numeric">Distance Delta</th>
+                      <th>Confidence</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentValidations.map((v, i) => (
+                      <tr key={`${v.vehicle_id}-${i}`}>
+                        <td>{v.vehicle_id}</td>
+                        <td className="numeric">
+                          {v.distance_delta_pct >= 0 ? "+" : ""}{v.distance_delta_pct.toFixed(1)}%
+                        </td>
+                        <td>
+                          <span className={`tw:badge tw:badge-sm ${
+                            v.confidence === "green"
+                              ? "tw:badge-success"
+                              : v.confidence === "amber"
+                                ? "tw:badge-warning"
+                                : "tw:badge-error"
+                          }`}>
+                            {v.confidence === "green" ? "Good" : v.confidence === "amber" ? "Fair" : "Poor"}
+                          </span>
+                        </td>
+                        <td className="tw:whitespace-nowrap">
+                          {formatShortDate(v.validated_at)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>

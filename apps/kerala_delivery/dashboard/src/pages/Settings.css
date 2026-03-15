@@ -131,3 +131,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Validation history stats row (Phase 22) */
+.validation-stats-row {
+  display: flex;
+  gap: var(--space-6);
+  padding: var(--space-3) 0;
+  flex-wrap: wrap;
+}
+
+.validation-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
