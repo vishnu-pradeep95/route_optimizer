@@ -27,6 +27,7 @@ import Map, {
 } from "react-map-gl/maplibre";
 import type { MapRef } from "react-map-gl/maplibre";
 import type { LayerSpecification } from "maplibre-gl";
+import type { ValidationResult } from "../types";
 import { Moon, Sun } from "lucide-react";
 import type { RouteDetail, TelemetryPing } from "../types";
 import { getVehicleColor, STATUS_COLORS } from "../types";
@@ -73,6 +74,8 @@ interface RouteMapProps {
   onMapRef?: (ref: MapRef | null) => void;
   /** Zone radius in km from /api/config. When provided, draws boundary circle. */
   zoneRadiusKm?: number;
+  /** Cached validation results keyed by vehicle_id. Draws Google's reordered route as dashed polyline. */
+  validationResults?: Map<string, ValidationResult>;
 }
 
 /**
@@ -107,6 +110,7 @@ export function RouteMap({
   vehicleIndexMap,
   onMapRef,
   zoneRadiusKm,
+  validationResults,
 }: RouteMapProps) {
   /**
    * Map theme state — persists during the session.
@@ -251,6 +255,53 @@ export function RouteMap({
               data={geojson}
             >
               <Layer {...layerStyle} />
+            </Source>
+          );
+        })}
+
+        {/* Google validation polylines — dashed amber lines showing Google's reordered route.
+            Only rendered for routes that have been validated. Uses the google_waypoint_order
+            indices to reorder stops, with depot as start/end point. */}
+        {validationResults && routeFeatures.map((route) => {
+          const validation = validationResults.get(route.vehicle_id);
+          if (!validation?.google_waypoint_order?.length) return null;
+
+          const reorderedCoords: [number, number][] = [
+            [VATAKARA_CENTER.longitude, VATAKARA_CENTER.latitude],
+          ];
+          for (const idx of validation.google_waypoint_order) {
+            const stop = route.stops[idx];
+            if (stop) reorderedCoords.push([stop.longitude, stop.latitude]);
+          }
+          reorderedCoords.push([VATAKARA_CENTER.longitude, VATAKARA_CENTER.latitude]);
+
+          const geojson: GeoJSON.Feature = {
+            type: "Feature",
+            properties: { vehicle_id: route.vehicle_id, type: "validation" },
+            geometry: { type: "LineString", coordinates: reorderedCoords },
+          };
+
+          return (
+            <Source
+              key={`validation-${route.vehicle_id}`}
+              id={`validation-${route.vehicle_id}`}
+              type="geojson"
+              data={geojson}
+            >
+              <Layer
+                id={`validation-line-${route.vehicle_id}`}
+                type="line"
+                paint={{
+                  "line-color": "#F59E0B",
+                  "line-width": 2.5,
+                  "line-opacity": 0.7,
+                  "line-dasharray": [6, 3],
+                }}
+                layout={{
+                  "line-join": "round",
+                  "line-cap": "round",
+                }}
+              />
             </Source>
           );
         })}

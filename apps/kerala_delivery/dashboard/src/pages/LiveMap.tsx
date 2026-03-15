@@ -32,6 +32,7 @@ import type {
   RouteSummary,
   RouteDetail,
   TelemetryPing,
+  ValidationResult,
 } from "../types";
 import "./LiveMap.css";
 
@@ -53,6 +54,7 @@ export function LiveMap({ onNavigateToSettings }: LiveMapProps = {}) {
   const [apiError, setApiError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
   const [zoneRadiusKm, setZoneRadiusKm] = useState<number | undefined>();
+  const [validationResults, setValidationResults] = useState<Map<string, ValidationResult>>(new Map());
 
   /** Map ref for programmatic zoom/pan when a vehicle is selected. */
   const mapRef = useRef<MapRef | null>(null);
@@ -293,6 +295,7 @@ export function LiveMap({ onNavigateToSettings }: LiveMapProps = {}) {
             onSelectVehicle={handleSelectVehicle}
             vehicleIndexMap={vehicleIndexMap}
             onNavigateToSettings={onNavigateToSettings}
+            onValidationResultsChange={setValidationResults}
           />
         </div>
         <div className="live-map-canvas">
@@ -303,6 +306,7 @@ export function LiveMap({ onNavigateToSettings }: LiveMapProps = {}) {
             vehicleIndexMap={vehicleIndexMap}
             onMapRef={handleMapRef}
             zoneRadiusKm={zoneRadiusKm}
+            validationResults={validationResults}
           />
         </div>
       </div>

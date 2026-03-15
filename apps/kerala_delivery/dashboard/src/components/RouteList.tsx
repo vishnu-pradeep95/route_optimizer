@@ -38,6 +38,8 @@ interface RouteListProps {
   vehicleIndexMap: Map<string, number>;
   /** Callback to navigate to Settings page (for no-API-key message). */
   onNavigateToSettings?: () => void;
+  /** Callback to notify parent of validation results (for map polyline display). */
+  onValidationResultsChange?: (results: Map<string, ValidationResult>) => void;
 }
 
 /**
@@ -100,6 +102,7 @@ export function RouteList({
   onSelectVehicle,
   vehicleIndexMap,
   onNavigateToSettings,
+  onValidationResultsChange,
 }: RouteListProps) {
   // --- Validation state ---
   const [validationResults, setValidationResults] = useState<Map<string, ValidationResult>>(new Map());
@@ -121,6 +124,7 @@ export function RouteList({
           map.set(vid, result);
         }
         setValidationResults(map);
+        onValidationResultsChange?.(map);
       })
       .catch(() => {});
   }, []);
@@ -162,6 +166,7 @@ export function RouteList({
       setValidationResults((prev) => {
         const next = new Map(prev);
         next.set(vehicleId, result);
+        onValidationResultsChange?.(next);
         return next;
       });
       // Refresh stats after successful validation
