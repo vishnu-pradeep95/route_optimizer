@@ -29,7 +29,7 @@ sudo service docker start
 ### Python Tests
 ```bash
 source .venv/bin/activate
-pytest tests/ -v                          # All 560+ tests
+pytest tests/ -v                          # All 736 tests
 pytest tests/core/routing/ -v             # Single module
 pytest tests/apps/ -v                     # API endpoint tests
 pytest -k "test_upload" -v                # By name pattern
@@ -76,7 +76,7 @@ apps/   → Business-specific consumers. Kerala LPG is the first app.
 ```
 
 ### Service Architecture
-- **PostgreSQL + PostGIS** (port 5432) — orders, routes, vehicles, GPS telemetry, geocode cache
+- **PostgreSQL + PostGIS** (port 5432) — orders, routes, vehicles, drivers, settings, route_validations, GPS telemetry, geocode cache
 - **OSRM** (port 5000) — travel time/distance matrices from Kerala OpenStreetMap data
 - **VROOM** (port 3000) — CVRP solver, connects to OSRM for travel times
 - **FastAPI API** (port 8000) — orchestrates upload → geocode → optimize → persist → serve
@@ -87,6 +87,7 @@ apps/   → Business-specific consumers. Kerala LPG is the first app.
 ```
 CDCMS Export → cdcms_preprocessor.py → Geocode (Google Maps, PostGIS cache) → VROOM optimize → PostgreSQL → Driver PWA
 ```
+**Two-step upload flow:** The API uses a parse-upload → driver preview → upload-orders sequence. First, `POST /api/parse-upload` parses and geocodes the CSV without persisting. The dashboard then shows a driver assignment preview. Finally, `POST /api/upload-orders` commits the optimized routes to the database.
 
 ### Core Module Interfaces
 Every core module defines a `Protocol` (structural typing) before implementation. This allows swapping backends (e.g., OSRM → Valhalla, VROOM → OR-Tools) without changing calling code. Key protocols:
@@ -144,7 +145,7 @@ Start API server, navigate to `http://localhost:8000/driver/`, and systematicall
 - [ ] "Map View" tab visible with map icon
 - [ ] Tab switching works (list ↔ map)
 
-**3. Route View (after CSV upload + vehicle selection)**
+**3. Route View (after CSV upload + driver selection)**
 - [ ] Header shows route info and stats
 - [ ] Progress bar renders with correct segments
 - [ ] "Last updated" timestamp + Refresh button visible
@@ -167,13 +168,13 @@ Start API server, navigate to `http://localhost:8000/driver/`, and systematicall
 - [ ] Elements scale correctly on small screens
 
 **6. Navigation Flow**
-- [ ] Upload → Vehicle Selector → Route View → full cycle
-- [ ] ⇄ (reset) button returns to vehicle selector
+- [ ] Upload → Driver Selector → Route View → full cycle
+- [ ] ⇄ (reset) button returns to driver selector
 - [ ] "Upload New List" returns to upload screen
 - [ ] Navigate button opens Google Maps in new tab
 
 **7. All-Done State**
-- [ ] Select a 1-stop vehicle (VEH-02), mark Done
+- [ ] Select a 1-stop driver (e.g., "Rajesh"), mark Done
 - [ ] Green "Route complete!" banner appears
 - [ ] Progress bar fully green
 - [ ] Banner dismiss (x) button works

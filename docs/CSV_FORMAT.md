@@ -6,6 +6,19 @@ Upload your CDCMS export or a CSV/Excel file. The system accepts `.csv`, `.xlsx`
 
 ---
 
+## Upload Workflow (v3.0+)
+
+The upload process has two steps, giving you control over which drivers' orders get processed:
+
+1. **Upload file** -- Drag and drop (or browse) your CDCMS export or CSV file. The system detects the format and extracts driver assignments.
+2. **Driver preview** -- A preview screen shows which drivers are in the file, along with the number of orders for each driver.
+3. **Select drivers** -- Choose which drivers to process. Deselected drivers' orders are skipped entirely -- they are not geocoded, which saves Google Maps API costs.
+4. **Process Selected** -- Click "Process Selected" to run geocoding and route optimization for the selected drivers only.
+
+This replaces the old single-step flow (upload -> auto-optimize all) and is especially useful when a CDCMS export contains multiple drivers but you only need to optimize routes for some of them.
+
+---
+
 ## Accepted File Formats
 
 | Format | Extension | Notes |

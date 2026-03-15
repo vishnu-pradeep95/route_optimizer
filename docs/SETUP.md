@@ -362,8 +362,11 @@ If importing from HPCL's CDCMS system:
 1. Open `http://localhost:8000/dashboard/` in Chrome
 2. Go to the **Upload Routes** page
 3. Drag & drop the CDCMS CSV file (auto-detected format)
-4. Click **Upload & Optimize** — routes appear on the map
-5. Click **Print QR Sheet** — print and hand QR codes to drivers
+4. The system parses the file and shows a **driver preview** -- a list of drivers found in the file with their order counts
+5. Select which drivers to process (deselected drivers' orders are skipped, saving geocoding API costs)
+6. Click **Process Selected** -- geocoding and route optimization run for the selected drivers only
+7. Routes appear on the map
+8. Click **Print QR Sheet** -- print and hand QR codes to drivers
 
 ### Option B: CLI / API
 
@@ -438,7 +441,7 @@ docker compose ps osrm-init
 # Check Docker healthcheck status
 docker inspect --format='{{.State.Health.Status}}' osrm-kerala
 
-# Test with a real routing query (depot coordinates in Kochi)
+# Test with a real routing query (a test coordinate in Kerala)
 curl -sf http://localhost:5000/nearest/v1/driving/76.2846,9.9716
 ```
 

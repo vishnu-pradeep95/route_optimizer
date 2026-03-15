@@ -50,7 +50,8 @@ routing_opt/
 │   │   └── osrm_adapter.py        ← OSRM implementation
 │   ├── optimizer/                 ← Route optimization engine adapters
 │   │   ├── interfaces.py          ← RouteOptimizer protocol
-│   │   └── vroom_adapter.py       ← VROOM implementation
+│   │   ├── vroom_adapter.py       ← VROOM implementation
+│   │   └── tsp_orchestrator.py    ← TSP optimization orchestration
 │   ├── geocoding/                 ← Geocoding adapters
 │   │   ├── interfaces.py          ← Geocoder + AsyncGeocoder protocols
 │   │   ├── google_adapter.py      ← Google Maps + SHA256 file cache
@@ -75,11 +76,11 @@ routing_opt/
 │       │   └── qr_helpers.py      ← QR code generation + Google Maps URL builder
 │       ├── driver_app/            ← PWA (index.html, sw.js, manifest.json)
 │       └── dashboard/             ← Ops dashboard (React + Vite + MapLibre GL JS)
-│           ├── src/pages/         ← UploadRoutes, LiveMap, RunHistory, FleetManagement
-│           ├── src/components/    ← RouteMap, VehicleList, StatsBar
+│           ├── src/pages/         ← UploadRoutes, LiveMap, RunHistory, DriverManagement, Settings
+│           ├── src/components/    ← RouteMap, RouteList, StatsBar
 │           └── src/lib/api.ts     ← Typed fetch client for all API endpoints
 │
-├── tests/                         ← Mirrors source structure (420 tests)
+├── tests/                         ← Mirrors source structure (736 tests)
 │   ├── conftest.py                ← Shared fixtures (Kerala coordinates)
 │   ├── core/                      ← Unit tests for all core modules
 │   │   ├── database/              ← 35 DB tests (models, repository, connection)
@@ -93,7 +94,7 @@ routing_opt/
 │   ├── postgres/init.sql          ← PostGIS schema + extensions + seed data
 │   ├── alembic/                   ← Database migrations (async SQLAlchemy)
 │   │   ├── env.py                 ← Async migration runner + PostGIS filter
-│   │   └── versions/              ← Migration scripts (3 so far)
+│   │   └── versions/              ← Migration scripts (12 so far)
 │   └── vroom-conf/                ← VROOM service configuration
 ├── docker-compose.yml             ← PostgreSQL + OSRM + VROOM + API stack
 ├── scripts/
@@ -121,7 +122,12 @@ routing_opt/
 ├── LICENSE                        ← Proprietary software license
 └── .github/
     ├── copilot-instructions.md    ← Always-on AI context
-    └── agents/                    ← Copilot agent definitions
+    ├── AGENTS-GUIDE.md            ← Agent usage guide
+    ├── agents/                    ← Copilot agent definitions (10 agents)
+    ├── instructions/              ← Copilot instruction sets (5 files)
+    ├── prompts/                   ← Reusable prompt templates (5 files)
+    ├── skills/                    ← Copilot skill definitions (3 skills)
+    └── workflows/                 ← GitHub Actions CI (ci.yml)
 ```
 
 ### Architecture Principle: Core vs Apps
@@ -161,6 +167,23 @@ Base URL: `http://localhost:8000`
 | `POST` | `/api/vehicles` | Register a new vehicle |
 | `PUT` | `/api/vehicles/{vehicle_id}` | Update vehicle details |
 | `DELETE` | `/api/vehicles/{vehicle_id}` | Remove a vehicle from the fleet |
+| `POST` | `/api/parse-upload` | Parse CSV/XLSX and return driver preview |
+| `GET` | `/api/drivers` | List all drivers |
+| `POST` | `/api/drivers` | Create new driver |
+| `PUT` | `/api/drivers/{id}` | Update driver name |
+| `DELETE` | `/api/drivers/{id}` | Deactivate driver |
+| `GET` | `/api/drivers/check-name` | Check name availability |
+| `GET` | `/api/settings` | Get app settings |
+| `PUT` | `/api/settings/api-key` | Update Google Maps API key |
+| `GET` | `/api/geocode-cache/stats` | Cache statistics |
+| `GET` | `/api/geocode-cache/export` | Export cache as JSON |
+| `POST` | `/api/geocode-cache/import` | Import cache from JSON |
+| `DELETE` | `/api/geocode-cache` | Clear cache |
+| `POST` | `/api/routes/{vehicle_id}/validate` | Google Routes validation |
+| `GET` | `/api/validations/cached` | Cached validation results |
+| `GET` | `/api/validation-stats` | Validation statistics |
+| `GET` | `/api/validation-stats/recent` | Recent validations |
+| `GET` | `/api/config` | App configuration (depot, multiplier, phone) |
 | `GET` | `/driver/` | Serves the driver PWA |
 
 ### Input Data: CDCMS Export Format
@@ -292,7 +315,7 @@ These are enforced by the system and cannot be bypassed:
 | **Data models** | Pydantic v2 + SQLAlchemy ORM | Validation, serialization, persistence |
 | **Geocoding** | Google Maps API (PostGIS cache + CachedGeocoder) | Address → GPS coordinates |
 | **Driver app** | PWA (HTML/JS/Service Worker) | Mobile-friendly, offline-capable |
-| **Migrations** | Alembic (async) | Database schema versioning (3 migrations applied) |
+| **Migrations** | Alembic (async) | Database schema versioning (12 migrations applied) |
 | **Ops Dashboard** | React 19 + Vite 7 + MapLibre GL JS 5 | Upload & routes, live tracking, route visualization, run history, fleet management |
 | **QR Codes** | qrcode 8.2 + Pillow 12.1.1 | Google Maps navigation URLs encoded as scannable QR codes |
 | **Infrastructure** | Docker Compose | Single-command deployment |
@@ -306,24 +329,15 @@ source .venv/bin/activate
 pytest tests/ -v
 ```
 
-**420 tests** covering:
-- Core models (16 tests: location, order, vehicle, route validation)
-- OSRM adapter (8 tests: travel time, distance matrix, safety multiplier)
-- VROOM adapter (15 tests: route optimization, priority, unassigned handling)
-- Google geocoder (10 tests: API calls, caching, geocode cache hits)
-- PostGIS geocode cache (16 tests: CachedGeocoder -- cache-first strategy, hit/miss, confidence)
-- Geocode normalization (15 tests: address normalization and deduplication)
-- Duplicate detector (21 tests: geocoded location duplicate detection)
-- CSV importer (22 tests: standard/custom columns, coordinate passthrough, error recovery)
-- CDCMS preprocessor (33 tests: TSV reading, address cleaning, filtering, abbreviation handling)
-- Database layer (35 tests: ORM models, repository CRUD, connection lifecycle, telemetry)
-- Licensing (25 tests: hardware-bound license keys, offline validation, expiry, tampering)
-- API endpoints (107 tests: health, routes, status updates, upload pipeline, optimization runs, telemetry, fleet CRUD, rate limiting, QR codes, XSS prevention)
-- QR helpers (24 tests: Google Maps URL building, QR SVG/PNG generation, route splitting)
-- Kerala config (22 tests: vehicle specs, safety constraints, routing config, depot location)
-- Batch scripts (31 tests: import_orders.py, geocode_batch.py -- parsing, geocoding, dry-run, stats)
-- E2E pipelines (11 tests: CSV->Order, Order->VROOM, Route->QR, full upload->optimize, QR sheet)
-- Integration (9 tests: end-to-end CSV -> geocode -> optimize -> persist pipeline)
+**736 tests** covering:
+
+| Category | Count | Includes |
+|----------|-------|----------|
+| Core modules | 370 | Models, routing, optimizer, geocoding, database, data import, licensing |
+| App endpoints | 306 | API endpoints, config, QR helpers, driver/vehicle/settings CRUD |
+| Scripts | 31 | import_orders.py, geocode_batch.py -- parsing, geocoding, dry-run, stats |
+| E2E pipelines | 11 | CSV->Order, Order->VROOM, Route->QR, full upload->optimize, QR sheet |
+| Integration | 18 | End-to-end CSV -> geocode -> optimize -> persist pipeline |
 
 All external services (OSRM, VROOM, Google Maps, PostgreSQL) are mocked in tests — no Docker required to run the test suite.
 
@@ -358,7 +372,7 @@ docker compose up -d --build api
 | VROOM | `vroom-solver` | 3000 | `curl -sf http://localhost:3000/health` |
 | API | `lpg-api` | 8000 | `curl http://localhost:8000/health` |
 
-> **Note:** OSRM has no `/health` endpoint. You verify readiness by querying a real coordinate -- the command above queries the nearest road segment to the depot location in Kochi. OSRM requires preprocessed Kerala map data in `data/osrm/`. This is downloaded automatically on first `docker compose up`. See [SETUP.md](docs/SETUP.md) for manual download steps if running OSRM outside Docker.
+> **Note:** OSRM has no `/health` endpoint. You verify readiness by querying a real coordinate -- the command above queries the nearest road segment to a test coordinate in Kerala. OSRM requires preprocessed Kerala map data in `data/osrm/`. This is downloaded automatically on first `docker compose up`. See [SETUP.md](docs/SETUP.md) for manual download steps if running OSRM outside Docker.
 
 ---
 
@@ -394,6 +408,8 @@ Copy `.env.example` → `.env` and configure:
 | **4B: UI Redesign** | ✅ Complete | Dashboard sidebar nav, stone/amber design system, driver PWA overhaul, responsive layout |
 | **4C: Licensing** | ✅ Complete | Hardware-bound license key generation, offline validation, expiry checks |
 | **4D: Easy Install** | ✅ Complete | Init containers, installer script, Caddy reverse proxy, simplified deployment |
+
+> **Post-v1.0 milestones:** 9 milestones shipped (v1.0 through v3.0), spanning 46 phases and 103 plans. Major additions include live GPS tracking, driver management, geocode cache management, Google Routes validation, app settings, OSRM Docker image pinning, and documentation improvements.
 
 ---
 

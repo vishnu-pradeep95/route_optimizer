@@ -240,7 +240,7 @@ routing_opt/
 │   ├── driver_app/            ← What drivers see on their phones
 │   └── dashboard/             ← What the ops manager sees on their computer
 │
-├── tests/                     ← Automated tests (560+ of them!)
+├── tests/                     ← Automated tests (736 of them!)
 │   ├── core/                  ← Tests for each core module
 │   ├── apps/                  ← Tests for API endpoints
 │   └── integration/           ← End-to-end tests (whole pipeline)
@@ -431,33 +431,36 @@ Now see how the interfaces are fulfilled by real services:
 9. [core/geocoding/google_adapter.py](core/geocoding/google_adapter.py) — Calls Google Maps API with caching
 10. [core/routing/osrm_adapter.py](core/routing/osrm_adapter.py) — Calls OSRM for travel times
 11. [core/optimizer/vroom_adapter.py](core/optimizer/vroom_adapter.py) — Calls VROOM for route optimization
-12. [core/data_import/csv_importer.py](core/data_import/csv_importer.py) — Reads CSV spreadsheets
+12. [core/optimizer/tsp_orchestrator.py](core/optimizer/tsp_orchestrator.py) — Orchestrates TSP solving for single-vehicle route reoptimization
+13. [core/data_import/csv_importer.py](core/data_import/csv_importer.py) — Reads CSV spreadsheets
 
 ### Level 4: Database Layer
 How data is persisted:
 
-13. [core/database/connection.py](core/database/connection.py) — Database connection setup
-14. [core/database/models.py](core/database/models.py) — ORM models (database table definitions)
-15. [core/database/repository.py](core/database/repository.py) — CRUD operations (save/load data)
+14. [core/database/connection.py](core/database/connection.py) — Database connection setup
+15. [core/database/models.py](core/database/models.py) — ORM models (database table definitions)
+16. [core/database/repository.py](core/database/repository.py) — CRUD operations (save/load data)
 
 ### Level 5: API & Business Logic
 How it all comes together:
 
-16. [apps/kerala_delivery/config.py](apps/kerala_delivery/config.py) — All Kerala-specific constants
-17. [apps/kerala_delivery/api/main.py](apps/kerala_delivery/api/main.py) — The full API (read top to bottom)
+17. [apps/kerala_delivery/config.py](apps/kerala_delivery/config.py) — All Kerala-specific constants
+18. [apps/kerala_delivery/api/main.py](apps/kerala_delivery/api/main.py) — The full API (read top to bottom)
 
 ### Level 6: Frontend
 The visual layer:
 
-18. [apps/kerala_delivery/dashboard/src/types.ts](apps/kerala_delivery/dashboard/src/types.ts) — TypeScript data types
-19. [apps/kerala_delivery/dashboard/src/lib/api.ts](apps/kerala_delivery/dashboard/src/lib/api.ts) — Frontend API client
-20. [apps/kerala_delivery/dashboard/src/pages/LiveMap.tsx](apps/kerala_delivery/dashboard/src/pages/LiveMap.tsx) — The main dashboard page
+19. [apps/kerala_delivery/dashboard/src/types.ts](apps/kerala_delivery/dashboard/src/types.ts) — TypeScript data types
+20. [apps/kerala_delivery/dashboard/src/lib/api.ts](apps/kerala_delivery/dashboard/src/lib/api.ts) — Frontend API client
+21. [apps/kerala_delivery/dashboard/src/pages/LiveMap.tsx](apps/kerala_delivery/dashboard/src/pages/LiveMap.tsx) — The main dashboard page
+22. [apps/kerala_delivery/dashboard/src/pages/DriverManagement.tsx](apps/kerala_delivery/dashboard/src/pages/DriverManagement.tsx) — Driver CRUD management page
+23. [apps/kerala_delivery/dashboard/src/pages/Settings.tsx](apps/kerala_delivery/dashboard/src/pages/Settings.tsx) — Application settings page
 
 ### Level 7: Tests
 Tests are documentation. Read them to see how each module is meant to be used:
 
-21. [tests/core/models/test_models.py](tests/core/models/test_models.py) — How models validate data
-22. [tests/integration/test_osrm_vroom_pipeline.py](tests/integration/test_osrm_vroom_pipeline.py) — The full pipeline end-to-end
+24. [tests/core/models/test_models.py](tests/core/models/test_models.py) — How models validate data
+25. [tests/integration/test_osrm_vroom_pipeline.py](tests/integration/test_osrm_vroom_pipeline.py) — The full pipeline end-to-end
 
 ### Tips for Reading the Code
 
@@ -512,9 +515,9 @@ quality, test coverage, and design-doc alignment.
 
 ## 12. Project Status
 
-The platform is fully functional through 35 development phases across milestones v1.0 through v2.2. All core features are complete: CDCMS/CSV upload, geocoding with PostGIS caching, VROOM+OSRM route optimization, driver PWA, operations dashboard, GPS telemetry, fleet management, hardware-bound licensing, address preprocessing pipeline, and production deployment with Caddy reverse proxy.
+The platform is fully functional through 46+ development phases across milestones v1.0 through v3.0. All core features are complete: CDCMS/CSV upload, geocoding with PostGIS caching, VROOM+OSRM route optimization, driver PWA, operations dashboard, GPS telemetry, fleet management, driver management, settings management, route validation, hardware-bound licensing, address preprocessing pipeline, and production deployment with Caddy reverse proxy.
 
-For current project status and future plans, see `.planning/PROJECT.md` and `.planning/ROADMAP.md`.
+For current project status and future plans, see `.planning/PROJECT.md` and `.planning/MILESTONES.md`.
 
 ---
 

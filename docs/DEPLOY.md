@@ -128,14 +128,16 @@ Wait for the message showing the dashboard URL. This usually takes less than a m
 1. Open Chrome and go to: **http://localhost:8000/dashboard/**
 2. You'll see the **Upload & Routes** page (it's the first tab)
 3. **Drag and drop** the CDCMS file onto the upload area -- or click "Browse" to select it
-4. Click **Upload & Optimize**
-5. Wait for the progress bar to finish (usually 5--15 seconds)
+4. The system detects the file format and shows a **driver preview** -- a list of drivers found in the file with the number of orders for each
+5. **Select which drivers** to process -- deselect any drivers you don't need routes for (their orders won't be geocoded, saving API costs)
+6. Click **Process Selected**
+7. Wait for the progress bar to finish (usually 5--15 seconds)
 
 The system will automatically:
 - Detect that it's a CDCMS file (tab-separated format)
 - Clean up the messy addresses (phone numbers, abbreviations, etc.)
-- Look up GPS coordinates (cached after first use -- free and instant)
-- Calculate the best route for each vehicle
+- Look up GPS coordinates for the selected drivers' orders only (cached after first use -- free and instant)
+- Calculate the best route for each selected vehicle
 - Save everything to the database
 
 #### Step 3.4: Print QR Codes for Drivers
@@ -331,9 +333,12 @@ Print this and keep it near the computer.
 |  4. UPLOAD the CDCMS file               |
 |     (drag & drop onto the page)         |
 |                                         |
-|  5. PRINT QR codes for drivers          |
+|  5. SELECT drivers to process           |
+|     then click "Process Selected"       |
 |                                         |
-|  6. END OF DAY (optional):              |
+|  6. PRINT QR codes for drivers          |
+|                                         |
+|  7. END OF DAY (optional):              |
 |     ./scripts/stop.sh                   |
 |                                         |
 +-----------------------------------------+
