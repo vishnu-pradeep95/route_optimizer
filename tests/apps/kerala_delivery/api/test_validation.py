@@ -222,3 +222,361 @@ class TestValidationRepository:
 
         assert stats["count"] == 12
         assert stats["total_cost_usd"] == 0.12
+
+
+# =============================================================================
+# API Endpoint Tests: POST /api/routes/{vehicle_id}/validate
+# =============================================================================
+
+
+class TestValidateRouteEndpoint:
+    """Test POST /api/routes/{vehicle_id}/validate endpoint."""
+
+    def test_validate_returns_400_when_no_api_key_configured(self, client, api_key):
+        """Returns 400 with helpful message when no Google API key is set."""
+        with patch.dict(os.environ, {"API_KEY": api_key}):
+            with patch("apps.kerala_delivery.api.main._cached_api_key", None):
+                with patch.dict(os.environ, {"GOOGLE_MAPS_API_KEY": ""}, clear=False):
+                    resp = client.post(
+                        "/api/routes/DRIVER-01/validate",
+                        headers={"X-API-Key": api_key},
+                    )
+
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["error"] == "google_api_key_required"
+
+    def test_validate_returns_404_when_route_not_found(self, client, api_key):
+        """Returns 404 when route or run not found."""
+        with patch.dict(os.environ, {"API_KEY": api_key}):
+            with patch("apps.kerala_delivery.api.main._cached_api_key", "fake-key"):
+                with patch("apps.kerala_delivery.api.main.repo.get_latest_run",
+                           new_callable=AsyncMock, return_value=None):
+                    resp = client.post(
+                        "/api/routes/NONEXISTENT/validate",
+                        headers={"X-API-Key": api_key},
+                    )
+
+        assert resp.status_code == 404
+
+    def test_validate_returns_cached_result(self, client, api_key):
+        """Returns cached validation result when route was previously validated."""
+        mock_run = MagicMock()
+        mock_run.id = uuid.uuid4()
+
+        mock_route = MagicMock()
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "DRIVER-01"
+        mock_route.total_distance_km = 45.2
+        mock_route.total_duration_minutes = 67.5
+
+        mock_validation = MagicMock()
+        mock_validation.route_id = mock_route.id
+        mock_validation.osrm_distance_km = 45.2
+        mock_validation.osrm_duration_minutes = 67.5
+        mock_validation.google_distance_km = 48.1
+        mock_validation.google_duration_minutes = 62.0
+        mock_validation.distance_delta_pct = 6.4
+        mock_validation.duration_delta_pct = 8.1
+        mock_validation.google_waypoint_order = "[2, 0, 1, 3]"
+        mock_validation.estimated_cost_usd = 0.01
+        mock_validation.validated_at = datetime(2026, 3, 14, 12, 0, 0, tzinfo=timezone.utc)
+
+        with patch.dict(os.environ, {"API_KEY": api_key}):
+            with patch("apps.kerala_delivery.api.main._cached_api_key", "fake-key"):
+                with patch("apps.kerala_delivery.api.main.repo.get_latest_run",
+                           new_callable=AsyncMock, return_value=mock_run):
+                    with patch("apps.kerala_delivery.api.main.repo.get_route_for_vehicle",
+                               new_callable=AsyncMock, return_value=mock_route):
+                        with patch("apps.kerala_delivery.api.main.repo.get_route_validation",
+                                   new_callable=AsyncMock, return_value=mock_validation):
+                            resp = client.post(
+                                "/api/routes/DRIVER-01/validate",
+                                headers={"X-API-Key": api_key},
+                            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["cached"] is True
+        assert data["confidence"] == "green"
+        assert data["distance_delta_pct"] == 6.4
+
+    def test_validate_calls_google_api_and_returns_comparison(self, client, api_key):
+        """Calls Google Routes API and returns OSRM vs Google comparison."""
+        mock_run = MagicMock()
+        mock_run.id = uuid.uuid4()
+
+        mock_route = MagicMock()
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "DRIVER-01"
+        mock_route.total_distance_km = 50.0
+        mock_route.total_duration_minutes = 60.0
+
+        # Mock stops with locations
+        mock_stop1 = MagicMock()
+        mock_stop1.location = MagicMock()
+        mock_stop2 = MagicMock()
+        mock_stop2.location = MagicMock()
+        mock_route.stops = [mock_stop1, mock_stop2]
+
+        # Mock shapely point conversion
+        mock_point1 = MagicMock()
+        mock_point1.y = 11.60  # lat
+        mock_point1.x = 75.58  # lng
+        mock_point2 = MagicMock()
+        mock_point2.y = 11.65
+        mock_point2.x = 75.62
+
+        # Mock Google Routes API response
+        google_response = MagicMock()
+        google_response.status_code = 200
+        google_response.raise_for_status = MagicMock()
+        google_response.json.return_value = {
+            "routes": [{
+                "distanceMeters": 55000,  # 55 km
+                "duration": "3300s",  # 55 minutes
+                "optimizedIntermediateWaypointIndex": [1, 0],
+            }]
+        }
+
+        # Mock saved validation result
+        mock_saved = MagicMock()
+        mock_saved.route_id = mock_route.id
+        mock_saved.osrm_distance_km = 50.0
+        mock_saved.osrm_duration_minutes = 60.0
+        mock_saved.google_distance_km = 55.0
+        mock_saved.google_duration_minutes = 55.0
+        mock_saved.distance_delta_pct = 10.0
+        mock_saved.duration_delta_pct = 8.3
+        mock_saved.google_waypoint_order = "[1, 0]"
+        mock_saved.estimated_cost_usd = 0.01
+        mock_saved.validated_at = datetime(2026, 3, 14, 12, 0, 0, tzinfo=timezone.utc)
+
+        with patch.dict(os.environ, {"API_KEY": api_key}):
+            with patch("apps.kerala_delivery.api.main._cached_api_key", "fake-key"):
+                with patch("apps.kerala_delivery.api.main.repo.get_latest_run",
+                           new_callable=AsyncMock, return_value=mock_run):
+                    with patch("apps.kerala_delivery.api.main.repo.get_route_for_vehicle",
+                               new_callable=AsyncMock, return_value=mock_route):
+                        with patch("apps.kerala_delivery.api.main.repo.get_route_validation",
+                                   new_callable=AsyncMock, return_value=None):
+                            with patch("apps.kerala_delivery.api.main.to_shape",
+                                       side_effect=[mock_point1, mock_point2]):
+                                with patch("apps.kerala_delivery.api.main.httpx.AsyncClient") as mock_client_cls:
+                                    mock_client = AsyncMock()
+                                    mock_client.post = AsyncMock(return_value=google_response)
+                                    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+                                    mock_client.__aexit__ = AsyncMock(return_value=False)
+                                    mock_client_cls.return_value = mock_client
+
+                                    with patch("apps.kerala_delivery.api.main.repo.save_route_validation",
+                                               new_callable=AsyncMock, return_value=mock_saved):
+                                        with patch("apps.kerala_delivery.api.main.repo.increment_validation_stats",
+                                                   new_callable=AsyncMock):
+                                            resp = client.post(
+                                                "/api/routes/DRIVER-01/validate",
+                                                headers={"X-API-Key": api_key},
+                                            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["cached"] is False
+        assert data["vehicle_id"] == "DRIVER-01"
+        assert "confidence" in data
+        assert "distance_delta_pct" in data
+
+    def test_validate_handles_google_api_timeout(self, client, api_key):
+        """Returns 502 when Google API request times out."""
+        import httpx
+
+        mock_run = MagicMock()
+        mock_run.id = uuid.uuid4()
+
+        mock_route = MagicMock()
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "DRIVER-01"
+        mock_route.total_distance_km = 50.0
+        mock_route.total_duration_minutes = 60.0
+
+        mock_stop = MagicMock()
+        mock_stop.location = MagicMock()
+        mock_route.stops = [mock_stop]
+
+        mock_point = MagicMock()
+        mock_point.y = 11.60
+        mock_point.x = 75.58
+
+        with patch.dict(os.environ, {"API_KEY": api_key}):
+            with patch("apps.kerala_delivery.api.main._cached_api_key", "fake-key"):
+                with patch("apps.kerala_delivery.api.main.repo.get_latest_run",
+                           new_callable=AsyncMock, return_value=mock_run):
+                    with patch("apps.kerala_delivery.api.main.repo.get_route_for_vehicle",
+                               new_callable=AsyncMock, return_value=mock_route):
+                        with patch("apps.kerala_delivery.api.main.repo.get_route_validation",
+                                   new_callable=AsyncMock, return_value=None):
+                            with patch("apps.kerala_delivery.api.main.to_shape",
+                                       return_value=mock_point):
+                                with patch("apps.kerala_delivery.api.main.httpx.AsyncClient") as mock_client_cls:
+                                    mock_client = AsyncMock()
+                                    mock_client.post = AsyncMock(
+                                        side_effect=httpx.TimeoutException("Connection timed out")
+                                    )
+                                    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+                                    mock_client.__aexit__ = AsyncMock(return_value=False)
+                                    mock_client_cls.return_value = mock_client
+
+                                    resp = client.post(
+                                        "/api/routes/DRIVER-01/validate",
+                                        headers={"X-API-Key": api_key},
+                                    )
+
+        assert resp.status_code == 502
+        data = resp.json()
+        assert "timed out" in data["message"].lower()
+
+    def test_validate_handles_google_api_http_error(self, client, api_key):
+        """Returns 502 when Google API returns HTTP error."""
+        import httpx
+
+        mock_run = MagicMock()
+        mock_run.id = uuid.uuid4()
+
+        mock_route = MagicMock()
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "DRIVER-01"
+        mock_route.total_distance_km = 50.0
+        mock_route.total_duration_minutes = 60.0
+
+        mock_stop = MagicMock()
+        mock_stop.location = MagicMock()
+        mock_route.stops = [mock_stop]
+
+        mock_point = MagicMock()
+        mock_point.y = 11.60
+        mock_point.x = 75.58
+
+        # Build a real httpx.Response for HTTPStatusError
+        mock_request = httpx.Request("POST", "https://routes.googleapis.com/directions/v2:computeRoutes")
+        error_response = httpx.Response(
+            status_code=403,
+            json={"error": {"message": "The caller does not have permission"}},
+            request=mock_request,
+        )
+
+        with patch.dict(os.environ, {"API_KEY": api_key}):
+            with patch("apps.kerala_delivery.api.main._cached_api_key", "fake-key"):
+                with patch("apps.kerala_delivery.api.main.repo.get_latest_run",
+                           new_callable=AsyncMock, return_value=mock_run):
+                    with patch("apps.kerala_delivery.api.main.repo.get_route_for_vehicle",
+                               new_callable=AsyncMock, return_value=mock_route):
+                        with patch("apps.kerala_delivery.api.main.repo.get_route_validation",
+                                   new_callable=AsyncMock, return_value=None):
+                            with patch("apps.kerala_delivery.api.main.to_shape",
+                                       return_value=mock_point):
+                                with patch("apps.kerala_delivery.api.main.httpx.AsyncClient") as mock_client_cls:
+                                    mock_client = AsyncMock()
+                                    mock_client.post = AsyncMock(
+                                        side_effect=httpx.HTTPStatusError(
+                                            "403 Forbidden",
+                                            request=mock_request,
+                                            response=error_response,
+                                        )
+                                    )
+                                    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+                                    mock_client.__aexit__ = AsyncMock(return_value=False)
+                                    mock_client_cls.return_value = mock_client
+
+                                    resp = client.post(
+                                        "/api/routes/DRIVER-01/validate",
+                                        headers={"X-API-Key": api_key},
+                                    )
+
+        assert resp.status_code == 502
+
+    def test_validate_handles_too_many_stops(self, client, api_key):
+        """Returns 400 when route has more than 98 stops."""
+        mock_run = MagicMock()
+        mock_run.id = uuid.uuid4()
+
+        mock_route = MagicMock()
+        mock_route.id = uuid.uuid4()
+        mock_route.vehicle_id = "DRIVER-01"
+        mock_route.total_distance_km = 50.0
+        mock_route.total_duration_minutes = 60.0
+
+        # Create 99 stops (exceeds 98 limit)
+        mock_route.stops = [MagicMock() for _ in range(99)]
+
+        with patch.dict(os.environ, {"API_KEY": api_key}):
+            with patch("apps.kerala_delivery.api.main._cached_api_key", "fake-key"):
+                with patch("apps.kerala_delivery.api.main.repo.get_latest_run",
+                           new_callable=AsyncMock, return_value=mock_run):
+                    with patch("apps.kerala_delivery.api.main.repo.get_route_for_vehicle",
+                               new_callable=AsyncMock, return_value=mock_route):
+                        with patch("apps.kerala_delivery.api.main.repo.get_route_validation",
+                                   new_callable=AsyncMock, return_value=None):
+                            resp = client.post(
+                                "/api/routes/DRIVER-01/validate",
+                                headers={"X-API-Key": api_key},
+                            )
+
+        assert resp.status_code == 400
+        data = resp.json()
+        assert "too many stops" in data["message"].lower()
+
+
+# =============================================================================
+# API Endpoint Tests: GET /api/validation-stats
+# =============================================================================
+
+
+class TestValidationStatsEndpoint:
+    """Test GET /api/validation-stats and GET /api/validation-stats/recent."""
+
+    def test_get_validation_stats(self, client, api_key):
+        """GET /api/validation-stats returns count and cost."""
+        stats = {"count": 12, "total_cost_usd": 0.12}
+
+        with patch.dict(os.environ, {"API_KEY": api_key}):
+            with patch("apps.kerala_delivery.api.main.repo.get_validation_stats",
+                       new_callable=AsyncMock, return_value=stats):
+                resp = client.get(
+                    "/api/validation-stats",
+                    headers={"X-API-Key": api_key},
+                )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] == 12
+        assert data["total_cost_usd"] == 0.12
+        assert "estimated_cost_inr" in data
+
+    def test_get_recent_validations(self, client, api_key):
+        """GET /api/validation-stats/recent returns recent validation list."""
+        mock_validation = MagicMock()
+        mock_validation.id = uuid.uuid4()
+        mock_validation.route_id = uuid.uuid4()
+        mock_validation.osrm_distance_km = 45.2
+        mock_validation.osrm_duration_minutes = 67.5
+        mock_validation.google_distance_km = 48.1
+        mock_validation.google_duration_minutes = 62.0
+        mock_validation.distance_delta_pct = 6.4
+        mock_validation.duration_delta_pct = 8.1
+        mock_validation.estimated_cost_usd = 0.01
+        mock_validation.validated_at = datetime(2026, 3, 14, 12, 0, 0, tzinfo=timezone.utc)
+        mock_validation.route = MagicMock()
+        mock_validation.route.vehicle_id = "DRIVER-01"
+
+        with patch.dict(os.environ, {"API_KEY": api_key}):
+            with patch("apps.kerala_delivery.api.main.repo.get_recent_validations",
+                       new_callable=AsyncMock, return_value=[mock_validation]):
+                resp = client.get(
+                    "/api/validation-stats/recent",
+                    headers={"X-API-Key": api_key},
+                )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["validations"]) == 1
+        assert data["validations"][0]["vehicle_id"] == "DRIVER-01"
+        assert data["validations"][0]["distance_delta_pct"] == 6.4

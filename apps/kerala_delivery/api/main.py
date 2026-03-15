@@ -3673,3 +3673,263 @@ async def clear_cache(
         "message": "Cache cleared",
         "deleted": count,
     }
+
+
+# =============================================================================
+# Route Validation (Phase 22: Google Routes API comparison)
+# =============================================================================
+
+
+@app.post("/api/routes/{vehicle_id}/validate", dependencies=[Depends(verify_api_key)])
+@limiter.limit("10/minute")
+async def validate_route(
+    request: Request,
+    vehicle_id: str,
+    force: bool = Query(False, description="Bypass cache and re-validate"),
+    session: AsyncSession = SessionDep,
+):
+    """Validate a route by comparing OSRM/VROOM results against Google Routes API.
+
+    Calls Google Routes API computeRoutes with the route's stops as lat/lng
+    waypoints, requesting Google to re-optimize stop order. Compares the
+    Google distance/duration against the OSRM/VROOM values stored in the DB.
+
+    This endpoint is NEVER called automatically — only responds to explicit
+    POST requests from the dashboard "Validate with Google" button (VAL-04).
+
+    Args:
+        vehicle_id: Vehicle/driver identifier for the route.
+        force: If True, bypass cache and re-validate even if a cached result exists.
+
+    Returns:
+        JSON with OSRM vs Google comparison, confidence level, and cost info.
+    """
+    # Step 1: Check API key
+    api_key = _cached_api_key or os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+    if not api_key:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "google_api_key_required",
+                "message": "Google Maps API key is not configured. Add one in Settings.",
+            },
+        )
+
+    # Step 2: Find route
+    run = await repo.get_latest_run(session)
+    if run is None:
+        raise HTTPException(status_code=404, detail="No optimization runs found")
+
+    route = await repo.get_route_for_vehicle(session, run.id, vehicle_id)
+    if route is None:
+        raise HTTPException(status_code=404, detail=f"No route found for vehicle '{vehicle_id}'")
+
+    # Step 3: Check cache (unless force=true)
+    if not force:
+        cached = await repo.get_route_validation(session, route.id)
+        if cached is not None:
+            return {
+                "route_id": str(cached.route_id),
+                "vehicle_id": vehicle_id,
+                "osrm_distance_km": cached.osrm_distance_km,
+                "osrm_duration_minutes": cached.osrm_duration_minutes,
+                "google_distance_km": cached.google_distance_km,
+                "google_duration_minutes": cached.google_duration_minutes,
+                "distance_delta_pct": cached.distance_delta_pct,
+                "duration_delta_pct": cached.duration_delta_pct,
+                "confidence": repo.confidence_level(cached.distance_delta_pct),
+                "google_waypoint_order": json.loads(cached.google_waypoint_order) if cached.google_waypoint_order else None,
+                "estimated_cost_usd": cached.estimated_cost_usd,
+                "validated_at": cached.validated_at.isoformat() if cached.validated_at else None,
+                "cached": True,
+            }
+
+    # Step 4: Guard waypoint count
+    if len(route.stops) > 98:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "too_many_stops",
+                "message": f"Route has too many stops for Google validation ({len(route.stops)} stops, max 98).",
+            },
+        )
+
+    # Step 5: Build Google Routes API request
+    depot_lat = config.DEPOT_LOCATION.latitude
+    depot_lng = config.DEPOT_LOCATION.longitude
+
+    intermediates = []
+    for stop in route.stops:
+        if stop.location is not None:
+            point = to_shape(stop.location)
+            intermediates.append({
+                "location": {
+                    "latLng": {
+                        "latitude": point.y,
+                        "longitude": point.x,
+                    }
+                }
+            })
+
+    body = {
+        "origin": {"location": {"latLng": {"latitude": depot_lat, "longitude": depot_lng}}},
+        "destination": {"location": {"latLng": {"latitude": depot_lat, "longitude": depot_lng}}},
+        "intermediates": intermediates,
+        "travelMode": "DRIVE",
+        "optimizeWaypointOrder": True,
+        "routingPreference": "TRAFFIC_UNAWARE",
+    }
+
+    # Step 6: Call Google Routes API
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as http_client:
+            google_resp = await http_client.post(
+                "https://routes.googleapis.com/directions/v2:computeRoutes",
+                json=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Goog-Api-Key": api_key,
+                    "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.optimizedIntermediateWaypointIndex",
+                },
+            )
+            google_resp.raise_for_status()
+            google_data = google_resp.json()
+
+    except httpx.TimeoutException:
+        logger.warning("Google Routes API request timed out for vehicle %s", vehicle_id)
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": "google_api_timeout",
+                "message": "Google Routes API request timed out. Try again.",
+            },
+        )
+    except httpx.HTTPStatusError as e:
+        # Parse Google error message from response body if available
+        try:
+            error_body = e.response.json()
+            google_msg = error_body.get("error", {}).get("message", str(e))
+        except Exception:
+            google_msg = str(e)
+
+        logger.warning(
+            "Google Routes API error for vehicle %s: %s (status %s)",
+            vehicle_id, google_msg, e.response.status_code,
+        )
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": "google_api_error",
+                "message": f"Google Routes API error: {google_msg}",
+            },
+        )
+    except Exception as e:
+        logger.error("Unexpected error calling Google Routes API: %s", e)
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": "google_api_error",
+                "message": "An unexpected error occurred while calling Google Routes API.",
+            },
+        )
+
+    # Step 7: Parse response
+    try:
+        google_route = google_data["routes"][0]
+        google_distance_km = google_route["distanceMeters"] / 1000.0
+        duration_str = google_route["duration"]
+        google_duration_minutes = int(duration_str.rstrip("s")) / 60.0
+        waypoint_order = google_route.get("optimizedIntermediateWaypointIndex", [])
+    except (KeyError, IndexError, ValueError) as e:
+        logger.error("Failed to parse Google Routes API response: %s", e)
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": "google_api_parse_error",
+                "message": "Could not parse Google Routes API response.",
+            },
+        )
+
+    # Step 8: Save validation and increment stats
+    estimated_cost = 0.01
+    validation = await repo.save_route_validation(
+        session,
+        route_id=route.id,
+        osrm_distance_km=route.total_distance_km,
+        osrm_duration_minutes=route.total_duration_minutes,
+        google_distance_km=google_distance_km,
+        google_duration_minutes=google_duration_minutes,
+        google_waypoint_order=json.dumps(waypoint_order) if waypoint_order else None,
+        estimated_cost_usd=estimated_cost,
+    )
+    await repo.increment_validation_stats(session, estimated_cost)
+    await session.commit()
+
+    # Step 9: Return comparison result
+    return {
+        "route_id": str(validation.route_id),
+        "vehicle_id": vehicle_id,
+        "osrm_distance_km": validation.osrm_distance_km,
+        "osrm_duration_minutes": validation.osrm_duration_minutes,
+        "google_distance_km": validation.google_distance_km,
+        "google_duration_minutes": validation.google_duration_minutes,
+        "distance_delta_pct": validation.distance_delta_pct,
+        "duration_delta_pct": validation.duration_delta_pct,
+        "confidence": repo.confidence_level(validation.distance_delta_pct),
+        "google_waypoint_order": waypoint_order if waypoint_order else None,
+        "estimated_cost_usd": validation.estimated_cost_usd,
+        "validated_at": validation.validated_at.isoformat() if validation.validated_at else None,
+        "cached": False,
+    }
+
+
+@app.get("/api/validation-stats", dependencies=[Depends(verify_read_key)])
+async def get_validation_stats(
+    session: AsyncSession = SessionDep,
+):
+    """Get cumulative validation statistics.
+
+    Returns the total number of validations performed and the total
+    estimated cost in USD and INR. Used by the dashboard Settings page
+    for budgeting visibility.
+    """
+    stats = await repo.get_validation_stats(session)
+    # Approximate exchange rate (1 USD = 92.5 INR)
+    estimated_cost_inr = round(stats["total_cost_usd"] * 92.5, 2)
+
+    return {
+        "count": stats["count"],
+        "total_cost_usd": stats["total_cost_usd"],
+        "estimated_cost_inr": estimated_cost_inr,
+    }
+
+
+@app.get("/api/validation-stats/recent", dependencies=[Depends(verify_read_key)])
+async def get_recent_validations(
+    session: AsyncSession = SessionDep,
+):
+    """Get the most recent validation results.
+
+    Returns the last 10 validation results with vehicle IDs, delta
+    percentages, confidence levels, and costs. Used by the dashboard
+    Settings page to show validation history.
+    """
+    validations = await repo.get_recent_validations(session)
+
+    results = []
+    for v in validations:
+        results.append({
+            "route_id": str(v.route_id),
+            "vehicle_id": v.route.vehicle_id if v.route else "Unknown",
+            "osrm_distance_km": v.osrm_distance_km,
+            "google_distance_km": v.google_distance_km,
+            "distance_delta_pct": v.distance_delta_pct,
+            "osrm_duration_minutes": v.osrm_duration_minutes,
+            "google_duration_minutes": v.google_duration_minutes,
+            "duration_delta_pct": v.duration_delta_pct,
+            "confidence": repo.confidence_level(v.distance_delta_pct),
+            "estimated_cost_usd": v.estimated_cost_usd,
+            "validated_at": v.validated_at.isoformat() if v.validated_at else None,
+        })
+
+    return {"validations": results}
