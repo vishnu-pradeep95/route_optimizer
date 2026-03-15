@@ -1,9 +1,14 @@
 /**
- * RouteList — Sidebar panel listing all routes and their stats.
+ * RouteList -- Sidebar panel listing all routes and their stats.
  *
  * Each route row shows: driver name, stops remaining, distance, and ETA range.
  * Clicking a route selects it, which the parent uses to highlight that route
  * on the map and zoom to it.
+ *
+ * Phase 22: Added "Validate with Google" button on each route card,
+ * DaisyUI cost warning modal before API call, inline OSRM vs Google
+ * comparison with confidence badge, cached result display with Re-validate,
+ * and no-API-key message with Settings link.
  *
  * Why ETAs are shown as time ranges instead of countdowns:
  * Kerala MVD directive prohibits countdown timers in any delivery UI.
@@ -11,9 +16,11 @@
  * that accounts for the 1.3x safety multiplier on travel times.
  */
 
-import { Package, Ruler, Scale, AlertTriangle } from "lucide-react";
-import type { RouteSummary, RouteDetail, TelemetryPing } from "../types";
+import { useState, useEffect, useCallback } from "react";
+import { Package, Ruler, Scale, AlertTriangle, ShieldCheck } from "lucide-react";
+import type { RouteSummary, RouteDetail, TelemetryPing, ValidationResult, ValidationStats } from "../types";
 import { getVehicleColor } from "../types";
+import { validateRoute, fetchValidationStats } from "../lib/api";
 import "./RouteList.css";
 
 interface RouteListProps {
@@ -55,7 +62,32 @@ function formatETARange(remainingMinutes: number): string {
   const fmt = (d: Date) =>
     d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 
-  return `${fmt(optimistic)} – ${fmt(pessimistic)}`;
+  return `${fmt(optimistic)} \u2013 ${fmt(pessimistic)}`;
+}
+
+/**
+ * Format a validation timestamp as a human-readable relative or absolute date.
+ * Shows "Validated X min ago" for recent, or "Validated Mar 14, 10:30 AM" for older.
+ */
+function formatValidatedDate(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60_000);
+
+  if (diffMin < 1) return "Validated just now";
+  if (diffMin < 60) return `Validated ${diffMin} min ago`;
+  if (diffMin < 1440) {
+    const hours = Math.floor(diffMin / 60);
+    return `Validated ${hours} hour${hours > 1 ? "s" : ""} ago`;
+  }
+  return `Validated ${date.toLocaleString("en-IN", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })}`;
 }
 
 export function RouteList({
@@ -66,6 +98,76 @@ export function RouteList({
   onSelectVehicle,
   vehicleIndexMap,
 }: RouteListProps) {
+  // --- Validation state ---
+  const [validationResults, setValidationResults] = useState<Map<string, ValidationResult>>(new Map());
+  const [validatingVehicle, setValidatingVehicle] = useState<string | null>(null);
+  const [showCostModal, setShowCostModal] = useState<string | null>(null);
+  const [validationStats, setValidationStats] = useState<ValidationStats | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [noApiKeyVehicle, setNoApiKeyVehicle] = useState<string | null>(null);
+
+  // Fetch validation stats on mount (for the cost modal cumulative display)
+  useEffect(() => {
+    fetchValidationStats()
+      .then(setValidationStats)
+      .catch(() => {
+        // Stats are non-critical -- modal still works without them
+      });
+  }, []);
+
+  // Clear validation error after 5 seconds
+  useEffect(() => {
+    if (!validationError) return;
+    const timer = setTimeout(() => setValidationError(null), 5000);
+    return () => clearTimeout(timer);
+  }, [validationError]);
+
+  /**
+   * Handle the validate button click -- opens the cost modal.
+   * Does NOT trigger the API call directly (VAL-04 compliance).
+   */
+  const handleValidateClick = useCallback((vehicleId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Don't select the route card
+    setNoApiKeyVehicle(null);
+    setValidationError(null);
+    setShowCostModal(vehicleId);
+  }, []);
+
+  /**
+   * Confirm validation after cost modal -- calls the Google Routes API.
+   * For re-validation, force=true bypasses cached results.
+   */
+  const handleValidateConfirm = useCallback(async () => {
+    const vehicleId = showCostModal;
+    if (!vehicleId) return;
+
+    const isRevalidate = validationResults.has(vehicleId);
+    setShowCostModal(null);
+    setValidatingVehicle(vehicleId);
+    setValidationError(null);
+    setNoApiKeyVehicle(null);
+
+    try {
+      const result = await validateRoute(vehicleId, isRevalidate);
+      setValidationResults((prev) => {
+        const next = new Map(prev);
+        next.set(vehicleId, result);
+        return next;
+      });
+      // Refresh stats after successful validation
+      fetchValidationStats().then(setValidationStats).catch(() => {});
+    } catch (err) {
+      if (err instanceof Error && (err as Error & { noApiKey?: boolean }).noApiKey) {
+        setNoApiKeyVehicle(vehicleId);
+      } else {
+        const message = err instanceof Error ? err.message : "Validation failed";
+        setValidationError(message);
+      }
+    } finally {
+      setValidatingVehicle(null);
+    }
+  }, [showCostModal, validationResults]);
+
   return (
     <div className="route-list">
       <div className="route-list-header">
@@ -87,6 +189,9 @@ export function RouteList({
           const ping = latestPings.get(route.vehicle_id);
           const isSelected = selectedVehicleId === route.vehicle_id;
           const colorIndex = vehicleIndexMap.get(route.vehicle_id) ?? 0;
+          const validation = validationResults.get(route.vehicle_id);
+          const isValidating = validatingVehicle === route.vehicle_id;
+          const showNoApiKey = noApiKeyVehicle === route.vehicle_id;
 
           // Count stops by status from detail data
           const stopsRemaining = detail
@@ -155,7 +260,7 @@ export function RouteList({
                 </div>
               </div>
 
-              {/* Efficiency indicator — km per delivery helps ops spot outliers */}
+              {/* Efficiency indicator -- km per delivery helps ops spot outliers */}
               {route.total_stops > 0 && (
                 <div className="route-efficiency numeric">
                   {(route.total_distance_km / route.total_stops).toFixed(1)} km/delivery
@@ -181,6 +286,96 @@ export function RouteList({
                   }}
                 />
               </div>
+
+              {/* ── Validation section (Phase 22) ── */}
+
+              {/* No API key message */}
+              {showNoApiKey && (
+                <div
+                  className="no-api-key-message"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Google API key required.{" "}
+                  <a
+                    href="#settings"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      // Navigate to settings page via the sidebar nav
+                      const settingsBtn = document.querySelector<HTMLButtonElement>(
+                        '.sidebar-nav-item[title="Settings"]'
+                      );
+                      if (settingsBtn) settingsBtn.click();
+                    }}
+                  >
+                    Configure in Settings
+                  </a>
+                </div>
+              )}
+
+              {/* Inline validation results */}
+              {validation && (
+                <div
+                  className="route-validation"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="validation-comparison">
+                    <div className="validation-header" />
+                    <div className="validation-header">OSRM</div>
+                    <div className="validation-header">Google</div>
+                    <div className="validation-header">Delta</div>
+
+                    <div className="validation-row">Distance</div>
+                    <div className="validation-row numeric">{validation.osrm_distance_km.toFixed(1)} km</div>
+                    <div className="validation-row numeric">{validation.google_distance_km.toFixed(1)} km</div>
+                    <div className="validation-row numeric">
+                      <span className={`tw:badge tw:badge-sm ${
+                        validation.confidence === "green"
+                          ? "tw:badge-success"
+                          : validation.confidence === "amber"
+                            ? "tw:badge-warning"
+                            : "tw:badge-error"
+                      }`}>
+                        {validation.distance_delta_pct >= 0 ? "+" : ""}{validation.distance_delta_pct.toFixed(1)}%
+                      </span>
+                    </div>
+
+                    <div className="validation-row">Time</div>
+                    <div className="validation-row numeric">{validation.osrm_duration_minutes.toFixed(0)} min</div>
+                    <div className="validation-row numeric">{validation.google_duration_minutes.toFixed(0)} min</div>
+                    <div className="validation-row numeric">
+                      {validation.duration_delta_pct >= 0 ? "+" : ""}{validation.duration_delta_pct.toFixed(1)}%
+                    </div>
+                  </div>
+
+                  <div className="validation-meta">
+                    {formatValidatedDate(validation.validated_at)}
+                  </div>
+                </div>
+              )}
+
+              {/* Validate / Re-validate button */}
+              <div className="route-validate-row" onClick={(e) => e.stopPropagation()}>
+                <button
+                  className="tw:btn tw:btn-xs tw:btn-outline"
+                  onClick={(e) => handleValidateClick(route.vehicle_id, e)}
+                  disabled={isValidating}
+                >
+                  {isValidating ? (
+                    <span className="tw:loading tw:loading-spinner tw:loading-xs" />
+                  ) : (
+                    <ShieldCheck size={12} />
+                  )}
+                  {validation ? "Re-validate" : "Validate with Google"}
+                </button>
+              </div>
+
+              {/* Validation error (inline, auto-clears after 5s) */}
+              {validationError && validatingVehicle === null && (
+                <div className="validation-error" onClick={(e) => e.stopPropagation()}>
+                  Validation failed: {validationError}
+                </div>
+              )}
             </div>
           );
         })}
@@ -191,6 +386,43 @@ export function RouteList({
           </div>
         )}
       </div>
+
+      {/* ── Cost Warning Modal (DaisyUI) ── */}
+      {showCostModal && (
+        <div className="tw:modal tw:modal-open">
+          <div className="tw:modal-box">
+            <h3 className="tw:font-bold tw:text-lg">Validate Route with Google?</h3>
+            <p className="tw:py-4">
+              This will call the Google Routes API.
+              Estimated cost: <strong>~INR 0.93</strong> per validation.
+            </p>
+            {validationStats && validationStats.count > 0 && (
+              <p className="tw:text-sm tw:opacity-70">
+                {validationStats.count} validation{validationStats.count !== 1 ? "s" : ""} so far
+                (~INR {validationStats.estimated_cost_inr.toFixed(2)} total)
+              </p>
+            )}
+            <div className="tw:modal-action">
+              <button
+                className="tw:btn"
+                onClick={() => setShowCostModal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="tw:btn tw:btn-primary"
+                onClick={handleValidateConfirm}
+              >
+                Validate
+              </button>
+            </div>
+          </div>
+          <div
+            className="tw:modal-backdrop"
+            onClick={() => setShowCostModal(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }

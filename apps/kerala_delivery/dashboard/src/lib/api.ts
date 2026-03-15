@@ -35,6 +35,9 @@ import type {
   GeocodeStats,
   CacheImportResult,
   CacheClearResult,
+  ValidationResult,
+  ValidationStats,
+  RecentValidation,
 } from "../types";
 import { isApiError, type ApiError } from "./errors";
 
@@ -628,4 +631,71 @@ export async function importGeocodeCache(file: File): Promise<CacheImportResult>
 /** Clear all entries from the geocode cache. */
 export async function clearGeocodeCache(): Promise<CacheClearResult> {
   return apiWrite<CacheClearResult>("/api/geocode-cache", "DELETE");
+}
+
+// --- Validation endpoints (Phase 22: Google Routes comparison) ---
+
+/**
+ * Validate a route against Google Routes API.
+ *
+ * Calls POST /api/routes/{vehicleId}/validate. Returns cached result
+ * unless force=true, which triggers a fresh Google API call.
+ *
+ * Special error handling: if the backend returns a 400 with
+ * error="google_api_key_required", this function throws with a
+ * `noApiKey` property so callers can show a helpful message
+ * instead of the cost modal.
+ */
+export async function validateRoute(
+  vehicleId: string,
+  force?: boolean
+): Promise<ValidationResult> {
+  const qs = force ? "?force=true" : "";
+  const url = `${BASE_URL}/api/routes/${encodeURIComponent(vehicleId)}/validate${qs}`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  const apiKey = import.meta.env.VITE_API_KEY;
+  if (apiKey) {
+    headers["X-API-Key"] = apiKey;
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    try {
+      const parsed = JSON.parse(errorBody);
+      // Check for the special "no API key" error from the backend
+      if (parsed.error === "google_api_key_required") {
+        const err = new Error(parsed.message || "Google Maps API key is not configured.") as Error & { noApiKey: boolean };
+        err.noApiKey = true;
+        throw err;
+      }
+      if (isApiError(parsed)) {
+        throw parsed;
+      }
+    } catch (parseErr) {
+      // Re-throw our noApiKey error or ApiError
+      if (parseErr instanceof Error && (parseErr as Error & { noApiKey?: boolean }).noApiKey) throw parseErr;
+      if (isApiError(parseErr)) throw parseErr;
+    }
+    throw new Error(`Validation failed (${response.status}): ${errorBody || response.statusText}`);
+  }
+
+  return (await response.json()) as ValidationResult;
+}
+
+/** Fetch cumulative validation statistics (count, total cost). */
+export async function fetchValidationStats(): Promise<ValidationStats> {
+  return apiFetch<ValidationStats>("/api/validation-stats");
+}
+
+/** Fetch recent validation results for the history table. */
+export async function fetchRecentValidations(): Promise<{ validations: RecentValidation[] }> {
+  return apiFetch<{ validations: RecentValidation[] }>("/api/validation-stats/recent");
 }

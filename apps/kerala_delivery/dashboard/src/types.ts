@@ -279,6 +279,42 @@ export interface CacheClearResult {
   deleted: number;
 }
 
+// --- Validation types (Phase 22: Google Routes comparison) ---
+
+/** Result from POST /api/routes/{vehicle_id}/validate */
+export interface ValidationResult {
+  route_id: string;
+  vehicle_id: string;
+  osrm_distance_km: number;
+  osrm_duration_minutes: number;
+  google_distance_km: number;
+  google_duration_minutes: number;
+  distance_delta_pct: number;
+  duration_delta_pct: number;
+  confidence: "green" | "amber" | "red";
+  google_waypoint_order: number[];
+  estimated_cost_usd: number;
+  validated_at: string;
+  cached: boolean;
+}
+
+/** Response from GET /api/validation-stats */
+export interface ValidationStats {
+  count: number;
+  total_cost_usd: number;
+  estimated_cost_inr: number;
+}
+
+/** A single recent validation entry from GET /api/validation-stats/recent */
+export interface RecentValidation {
+  vehicle_id: string;
+  distance_delta_pct: number;
+  duration_delta_pct: number;
+  confidence: "green" | "amber" | "red";
+  validated_at: string;
+  estimated_cost_usd: number;
+}
+
 // --- UI constants ---
 
 /**
