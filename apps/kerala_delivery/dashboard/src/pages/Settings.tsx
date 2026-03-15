@@ -348,7 +348,7 @@ export function Settings() {
                 </div>
                 <div className="settings-stat">
                   <span className="settings-stat-value">
-                    ${cacheStats.estimated_savings_usd.toFixed(2)}
+                    ~INR {(cacheStats.estimated_savings_usd * 92.5).toFixed(2)}
                   </span>
                   <span className="settings-stat-label">Est. Savings</span>
                 </div>
@@ -356,7 +356,7 @@ export function Settings() {
             )}
 
             <p className="tw:text-xs tw:opacity-50">
-              Based on Google Maps Geocoding API rate of $5.00 per 1,000 requests
+              Based on Google Maps Geocoding API rate of ~INR 0.46 per request
             </p>
 
             {/* Action buttons */}
