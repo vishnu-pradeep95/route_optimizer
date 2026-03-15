@@ -107,21 +107,17 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - ✓ Pre-geocoding driver filter (only selected drivers' orders geocoded) — v3.0
 - ✓ Zero-start driver management with fuzzy matching auto-creation from CSV — v3.0
 
+- ✓ Per-driver TSP optimization replacing fleet-wide CVRP — v3.0
+- ✓ Enhanced CSV upload flow with XLSX support, driver preview, selective processing — v3.0
+- ✓ Address preprocessing fixes (trailing-letter garbling, (H)/(PO) expansion) — v3.0
+- ✓ 20km geocode zone radius with Vatakara depot centroid — v3.0
+- ✓ Dashboard Settings page (API key, cache stats/export/import, upload history) — v3.0
+- ✓ Google Routes validation with cost tracking and confidence indicator — v3.0
+- ✓ Vehicle → Driver terminology rename across dashboard — v3.0
+
 ### Active
 
-## Current Milestone: v3.0 Driver-Centric Model
-
-**Goal:** Replace the vehicle-fleet model with a driver-centric model where drivers are created from CDCMS CSV uploads, optimization runs per-driver (TSP), and the dashboard becomes the primary interface for office staff.
-
-**Target features:**
-- Vehicle → Driver conceptual rename across DB, API, dashboard
-- Zero-start driver management (auto-create from CSV DeliveryMan column, manual add)
-- Per-driver route optimization (TSP within each driver's assigned orders)
-- Improved CSV upload flow with driver selection and multi-format support
-- CDCMS preprocessing fixes (address garbling, .xlsx detection)
-- Geocode validation tightening (20km radius, Vatakara depot centroid)
-- Google Maps route validation as confidence comparison
-- Dashboard settings (API key input, cache stats, upload history)
+(Next milestone — use `/gsd:new-milestone` to define)
 
 ### Out of Scope
 
@@ -145,7 +141,7 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 - **Fleet**: 13 Piaggio Ape Xtra LDX vehicles, 446 kg max / 30 cylinders each
 - **Data source**: CDCMS (Centralized Distribution Customer Management System) CSV exports
 - **Infrastructure**: Docker Compose with OSRM (Kerala OSM data), VROOM solver, PostgreSQL/PostGIS
-- **Current state**: v2.2 shipped (2026-03-12). ~20k Python LOC, ~6k TypeScript LOC, ~3k Shell LOC. 38 E2E tests + 435+ unit tests. 9 milestones shipped (v1.0-v1.4, v2.0-v2.2), 39 phases, 90 plans.
+- **Current state**: v3.0 shipped (2026-03-15). ~29.7k Python LOC, ~7.4k TypeScript LOC, ~1.8k JS (Driver PWA). 10 milestones shipped (v1.0-v1.4, v2.0-v2.2, v3.0), 46 phases, 110 plans.
 - **Known tech debt**: Physical Android device testing for outdoor contrast; 8 GB laptop testing for install script OSRM OOM validation; 6 ErrorCode enum values reserved for future use; NER model upgrade path documented but not triggered (centroid fallback < 5%).
 - **Codebase map**: `.planning/codebase/` (7 documents, 2047 lines of analysis)
 
@@ -221,6 +217,12 @@ Every delivery address uploaded must appear on the map and be assigned to an opt
 | Placeholder filtering at preprocessor level | Both parse-upload and upload-and-optimize benefit from single filter | ✓ Good — Allocation Pending never reaches driver preview or geocoding |
 | Pre-geocoding driver filter | Filter orders by selected drivers before geocoding loop, not after | ✓ Good — saves Google Maps API costs by not geocoding deselected drivers |
 | DaisyUI btn for Process Selected | Replace custom upload-btn class with tw:btn tw:btn-warning | ✓ Good — consistent component styling, native disabled state |
+| Per-driver TSP replacing fleet CVRP | Each driver's orders optimized independently via VROOM with 1 vehicle | ✓ Good — simpler, matches business model where drivers have pre-assigned orders |
+| Snapshot pattern for driver isolation | Process CSV against pre-existing DB drivers, not newly created ones | ✓ Good — prevents cross-matching within same CSV upload |
+| Google Routes API with segment splitting | Split routes >25 waypoints into chunks, aggregate distance/duration | ✓ Good — handles ANVAR's 69 stops without hitting Google's 25-waypoint limit |
+| Validation stats from route_validations table | Derive count/cost from actual records, not separate counter | ✓ Good — self-healing after counter bugs |
+| SettingsDB key-value schema | Generic key-value store instead of typed columns for settings | ✓ Good — flexible, no migration needed for new settings |
+| QR-only Driver PWA access | Removed vehicle selector, QR codes are the only access method | ✓ Good — clean break, simpler for drivers |
 
 ---
-*Last updated: 2026-03-13 after Phase 17 (CSV Upload and XLSX Detection)*
+*Last updated: 2026-03-15 after v3.0 milestone (Driver-Centric Model)*

@@ -1,5 +1,22 @@
 # Milestones
 
+## v3.0 Driver-Centric Model (Shipped: 2026-03-15)
+
+**Phases completed:** 7 phases (16-22), 20 plans, 40 tasks
+**Timeline:** 3 days (2026-03-12 → 2026-03-15)
+**Requirements:** 35/35 satisfied (DRV, OPT, CSV, ADDR, VAL, SET, UI)
+
+**Key accomplishments:**
+- Driver-centric data model: zero-start driver management with RapidFuzz fuzzy matching (threshold 85), auto-creation from CSV uploads, dashboard CRUD
+- Per-driver TSP optimization replacing fleet-wide CVRP: each driver's orders optimized independently via VROOM, all routes under single optimization_run
+- Enhanced CSV upload flow: XLSX detection fix, driver preview with selection, pre-geocoding driver filter saving API costs, Allocation Pending placeholder filtering
+- Address preprocessing hardening: fixed (H)/(PO)/(HO) expansion garbling, protected MUTTUNGAL-type words, tightened geocode zone radius from 30km to 20km
+- Dashboard Settings page: API key management with validation, geocode cache stats/export/import, upload history, Google Routes validation history
+- Google Routes validation: user-triggered OSRM vs Google comparison with segment splitting (>25 waypoints), cost tracking, confidence badges, persistent results with re-validate
+- Vehicle → Driver terminology rename across all dashboard labels while maintaining backward-compatible API field names for Driver PWA
+
+---
+
 ## v2.1 Licensing & Distribution Security (Shipped: 2026-03-11)
 
 **Phases completed:** 6 phases (5-10), 13 plans
