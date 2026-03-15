@@ -8,7 +8,7 @@
  * Data flow:
  * 1. On mount: fetch /api/routes?include_stops=true for all routes with stops
  * 2. Every 15s: fetch /api/telemetry/fleet for live positions
- * 3. Pass data down to StatsBar, VehicleList, RouteMap components
+ * 3. Pass data down to StatsBar, RouteList, RouteMap components
  *
  * Why 15-second polling instead of WebSockets:
  * - Simpler to implement and debug
@@ -38,7 +38,12 @@ import "./LiveMap.css";
 /** How often to refresh telemetry data (milliseconds). */
 const TELEMETRY_REFRESH_INTERVAL_MS = 15_000;
 
-export function LiveMap() {
+interface LiveMapProps {
+  /** Callback to navigate to Settings page. */
+  onNavigateToSettings?: () => void;
+}
+
+export function LiveMap({ onNavigateToSettings }: LiveMapProps = {}) {
   // --- State ---
   const [routes, setRoutes] = useState<RouteSummary[]>([]);
   const [routeDetailsMap, setRouteDetailsMap] = useState<Map<string, RouteDetail>>(new Map());
@@ -287,6 +292,7 @@ export function LiveMap() {
             selectedVehicleId={selectedVehicleId}
             onSelectVehicle={handleSelectVehicle}
             vehicleIndexMap={vehicleIndexMap}
+            onNavigateToSettings={onNavigateToSettings}
           />
         </div>
         <div className="live-map-canvas">

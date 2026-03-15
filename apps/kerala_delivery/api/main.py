@@ -1054,8 +1054,8 @@ async def auto_create_drivers_from_csv(
     existing_drivers: list[str] = []
 
     for csv_name in unique_names:
-        # Find fuzzy matches against the pre-existing snapshot only
-        matches = await repo.find_similar_drivers(session, csv_name)
+        # Find fuzzy matches against the pre-existing snapshot only (avoids N+1 queries)
+        matches = await repo.find_similar_drivers(session, csv_name, drivers=existing_drivers_snapshot)
 
         if matches:
             best_match, score = matches[0]
@@ -3212,6 +3212,15 @@ async def delete_vehicle(
 # =============================================================================
 
 
+class ApiKeyBody(BaseModel):
+    """Request body for API key operations (update, validate)."""
+
+    api_key: str = Field(
+        ..., min_length=1,
+        description="Google Maps API key",
+    )
+
+
 class DriverCreate(BaseModel):
     """Request body for creating a new driver."""
 
@@ -3529,7 +3538,7 @@ async def get_settings(
 @limiter.limit("10/minute")
 async def update_api_key(
     request: Request,
-    body: dict,
+    body: ApiKeyBody,
     session: AsyncSession = SessionDep,
 ):
     """Update the Google Maps API key.
@@ -3538,12 +3547,10 @@ async def update_api_key(
     If validation fails, returns 400 and does NOT save the key.
     On success, updates the DB setting and invalidates the cached geocoder
     instance so the next geocode request uses the new key.
-
-    Body: {"api_key": "AIza..."}
     """
     global _cached_api_key, _geocoder_instance
 
-    api_key_value = body.get("api_key", "").strip()
+    api_key_value = body.api_key.strip()
     if not api_key_value:
         raise HTTPException(status_code=400, detail="api_key is required")
 
@@ -3571,17 +3578,15 @@ async def update_api_key(
 @limiter.limit("10/minute")
 async def validate_api_key_endpoint(
     request: Request,
-    body: dict,
+    body: ApiKeyBody,
     session: AsyncSession = SessionDep,
 ):
     """Validate a Google Maps API key without saving it.
 
     Makes a test geocode request to verify the key works. Allows
     "test before save" UX in the dashboard Settings page.
-
-    Body: {"api_key": "AIza..."}
     """
-    api_key_value = body.get("api_key", "").strip()
+    api_key_value = body.api_key.strip()
     if not api_key_value:
         raise HTTPException(status_code=400, detail="api_key is required")
 
@@ -3863,7 +3868,6 @@ async def validate_route(
         google_waypoint_order=json.dumps(waypoint_order) if waypoint_order else None,
         estimated_cost_usd=estimated_cost,
     )
-    await repo.increment_validation_stats(session, estimated_cost)
     await session.commit()
 
     # Step 9: Return comparison result

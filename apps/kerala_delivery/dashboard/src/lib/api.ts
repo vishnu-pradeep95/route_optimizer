@@ -31,7 +31,6 @@ import type {
   ParsePreviewResponse,
   SettingsResponse,
   ApiKeyUpdateResponse,
-  ApiKeyValidateResponse,
   GeocodeStats,
   CacheImportResult,
   CacheClearResult,
@@ -571,11 +570,6 @@ export async function fetchSettings(): Promise<SettingsResponse> {
 /** Save a new Google Maps API key (validates before storing). */
 export async function updateApiKey(apiKey: string): Promise<ApiKeyUpdateResponse> {
   return apiWrite<ApiKeyUpdateResponse>("/api/settings/api-key", "PUT", { api_key: apiKey });
-}
-
-/** Validate a Google Maps API key without saving it. */
-export async function validateApiKey(apiKey: string): Promise<ApiKeyValidateResponse> {
-  return apiWrite<ApiKeyValidateResponse>("/api/settings/api-key/validate", "POST", { api_key: apiKey });
 }
 
 // --- Geocode cache endpoints ---

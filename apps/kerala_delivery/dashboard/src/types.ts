@@ -252,12 +252,6 @@ export interface ApiKeyUpdateResponse {
   valid: boolean;
 }
 
-/** Response from POST /api/settings/api-key/validate. */
-export interface ApiKeyValidateResponse {
-  valid: boolean;
-  message: string;
-}
-
 /** Response from GET /api/geocode-cache/stats. */
 export interface GeocodeStats {
   total_entries: number;

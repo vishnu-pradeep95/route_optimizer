@@ -36,6 +36,8 @@ interface RouteListProps {
   onSelectVehicle: (vehicleId: string | null) => void;
   /** Map from vehicle_id to its color index (for the color dot). */
   vehicleIndexMap: Map<string, number>;
+  /** Callback to navigate to Settings page (for no-API-key message). */
+  onNavigateToSettings?: () => void;
 }
 
 /**
@@ -97,6 +99,7 @@ export function RouteList({
   selectedVehicleId,
   onSelectVehicle,
   vehicleIndexMap,
+  onNavigateToSettings,
 }: RouteListProps) {
   // --- Validation state ---
   const [validationResults, setValidationResults] = useState<Map<string, ValidationResult>>(new Map());
@@ -122,7 +125,7 @@ export function RouteList({
       .catch(() => {});
   }, []);
 
-  // Clear validation error after 5 seconds
+  // Clear validation error after 15 seconds
   useEffect(() => {
     if (!validationError) return;
     const timer = setTimeout(() => setValidationError(null), 15000);
@@ -308,11 +311,7 @@ export function RouteList({
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      // Navigate to settings page via the sidebar nav
-                      const settingsBtn = document.querySelector<HTMLButtonElement>(
-                        '.sidebar-nav-item[title="Settings"]'
-                      );
-                      if (settingsBtn) settingsBtn.click();
+                      if (onNavigateToSettings) onNavigateToSettings();
                     }}
                   >
                     Configure in Settings

@@ -201,7 +201,7 @@ function App() {
         {/* Main content -- fills remaining space to the right of sidebar */}
         <main className="app-main">
           {activePage === "upload" && <UploadRoutes />}
-          {activePage === "live-map" && <LiveMap />}
+          {activePage === "live-map" && <LiveMap onNavigateToSettings={() => setActivePage("settings")} />}
           {activePage === "run-history" && <RunHistory />}
           {activePage === "drivers" && <DriverManagement />}
           {activePage === "settings" && <Settings />}

@@ -187,38 +187,37 @@ class TestValidationRepository:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_get_validation_stats_defaults_when_no_settings(self):
-        """get_validation_stats returns count=0, total_cost=0 when no settings."""
+    async def test_get_validation_stats_defaults_when_empty(self):
+        """get_validation_stats returns count=0, total_cost=0 when no validations."""
         from core.database.repository import get_validation_stats
 
         session = AsyncMock()
-        # Mock get_setting to return None for both keys
+        mock_row = MagicMock()
+        mock_row.count = 0
+        mock_row.total_cost = 0.0
         mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
+        mock_result.one.return_value = mock_row
         session.execute = AsyncMock(return_value=mock_result)
 
-        with patch("core.database.repository.get_setting", new_callable=AsyncMock, return_value=None):
-            stats = await get_validation_stats(session)
+        stats = await get_validation_stats(session)
 
         assert stats["count"] == 0
         assert stats["total_cost_usd"] == 0.0
 
     @pytest.mark.asyncio
     async def test_get_validation_stats_returns_correct_values(self):
-        """get_validation_stats returns correct count and cost from SettingsDB."""
+        """get_validation_stats returns correct count and cost from route_validations table."""
         from core.database.repository import get_validation_stats
 
         session = AsyncMock()
+        mock_row = MagicMock()
+        mock_row.count = 12
+        mock_row.total_cost = 0.12
+        mock_result = MagicMock()
+        mock_result.one.return_value = mock_row
+        session.execute = AsyncMock(return_value=mock_result)
 
-        async def mock_get_setting(sess, key):
-            if key == "validation_count":
-                return "12"
-            elif key == "validation_total_cost_usd":
-                return "0.12"
-            return None
-
-        with patch("core.database.repository.get_setting", side_effect=mock_get_setting):
-            stats = await get_validation_stats(session)
+        stats = await get_validation_stats(session)
 
         assert stats["count"] == 12
         assert stats["total_cost_usd"] == 0.12
@@ -371,12 +370,10 @@ class TestValidateRouteEndpoint:
 
                                     with patch("apps.kerala_delivery.api.main.repo.save_route_validation",
                                                new_callable=AsyncMock, return_value=mock_saved):
-                                        with patch("apps.kerala_delivery.api.main.repo.increment_validation_stats",
-                                                   new_callable=AsyncMock):
-                                            resp = client.post(
-                                                "/api/routes/DRIVER-01/validate",
-                                                headers={"X-API-Key": api_key},
-                                            )
+                                        resp = client.post(
+                                            "/api/routes/DRIVER-01/validate",
+                                            headers={"X-API-Key": api_key},
+                                        )
 
         assert resp.status_code == 200
         data = resp.json()
@@ -493,8 +490,8 @@ class TestValidateRouteEndpoint:
 
         assert resp.status_code == 502
 
-    def test_validate_handles_too_many_stops(self, client, api_key):
-        """Returns 400 when route has more than 98 stops."""
+    def test_validate_segments_large_routes(self, client, api_key):
+        """Routes with >25 stops are split into segments of 25 waypoints each."""
         mock_run = MagicMock()
         mock_run.id = uuid.uuid4()
 
@@ -504,8 +501,37 @@ class TestValidateRouteEndpoint:
         mock_route.total_distance_km = 50.0
         mock_route.total_duration_minutes = 60.0
 
-        # Create 99 stops (exceeds 98 limit)
-        mock_route.stops = [MagicMock() for _ in range(99)]
+        # Create 30 stops (will need 2 segments: 25 + 5)
+        mock_stops = []
+        for i in range(30):
+            stop = MagicMock()
+            mock_point = MagicMock()
+            mock_point.y = 11.6 + i * 0.001
+            mock_point.x = 75.5 + i * 0.001
+            stop.location = MagicMock()
+            mock_stops.append(stop)
+        mock_route.stops = mock_stops
+
+        google_response = {
+            "routes": [{
+                "distanceMeters": 25000,
+                "duration": "1800s",
+                "optimizedIntermediateWaypointIndex": list(range(25)),
+            }]
+        }
+
+        mock_validation = MagicMock()
+        mock_validation.id = uuid.uuid4()
+        mock_validation.route_id = mock_route.id
+        mock_validation.osrm_distance_km = 50.0
+        mock_validation.osrm_duration_minutes = 60.0
+        mock_validation.google_distance_km = 50.0
+        mock_validation.google_duration_minutes = 60.0
+        mock_validation.distance_delta_pct = 0.0
+        mock_validation.duration_delta_pct = 0.0
+        mock_validation.google_waypoint_order = None
+        mock_validation.estimated_cost_usd = 0.02
+        mock_validation.validated_at = datetime(2026, 3, 14, 12, 0, 0, tzinfo=timezone.utc)
 
         with patch.dict(os.environ, {"API_KEY": api_key}):
             with patch("apps.kerala_delivery.api.main._cached_api_key", "fake-key"):
@@ -515,14 +541,28 @@ class TestValidateRouteEndpoint:
                                new_callable=AsyncMock, return_value=mock_route):
                         with patch("apps.kerala_delivery.api.main.repo.get_route_validation",
                                    new_callable=AsyncMock, return_value=None):
-                            resp = client.post(
-                                "/api/routes/DRIVER-01/validate",
-                                headers={"X-API-Key": api_key},
-                            )
+                            with patch("apps.kerala_delivery.api.main.to_shape") as mock_to_shape:
+                                mock_to_shape.side_effect = lambda loc: MagicMock(y=11.6, x=75.5)
+                                with patch("httpx.AsyncClient") as mock_http:
+                                    mock_resp = MagicMock()
+                                    mock_resp.status_code = 200
+                                    mock_resp.json.return_value = google_response
+                                    mock_resp.raise_for_status = MagicMock()
+                                    mock_client = MagicMock()
+                                    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+                                    mock_client.__aexit__ = AsyncMock(return_value=False)
+                                    mock_client.post = AsyncMock(return_value=mock_resp)
+                                    mock_http.return_value = mock_client
+                                    with patch("apps.kerala_delivery.api.main.repo.save_route_validation",
+                                               new_callable=AsyncMock, return_value=mock_validation):
+                                        resp = client.post(
+                                            "/api/routes/DRIVER-01/validate",
+                                            headers={"X-API-Key": api_key},
+                                        )
 
-        assert resp.status_code == 400
-        data = resp.json()
-        assert "too many stops" in data["message"].lower()
+        assert resp.status_code == 200
+        # 30 stops should trigger 2 API calls (25 + 5)
+        assert mock_client.post.call_count == 2
 
 
 # =============================================================================

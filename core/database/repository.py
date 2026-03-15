@@ -889,6 +889,7 @@ async def find_similar_drivers(
     session: AsyncSession,
     name: str,
     exclude_id: uuid.UUID | None = None,
+    drivers: list[DriverDB] | None = None,
 ) -> list[tuple[DriverDB, float]]:
     """Find existing drivers with similar names using fuzzy matching.
 
@@ -900,6 +901,8 @@ async def find_similar_drivers(
         session: Async DB session.
         name: Name to match against (will be normalized before comparison).
         exclude_id: If provided, skip this driver (used when editing a driver's name).
+        drivers: Pre-loaded driver list to match against. If None, queries the DB.
+            Pass a snapshot for batch operations to avoid N+1 queries.
 
     Returns:
         List of (DriverDB, score) tuples sorted by score descending.
@@ -909,9 +912,11 @@ async def find_similar_drivers(
 
     normalized = normalize_driver_name(name)
 
-    # Fetch all drivers for fuzzy comparison
-    result = await session.execute(select(DriverDB))
-    all_drivers = list(result.scalars().all())
+    if drivers is None:
+        result = await session.execute(select(DriverDB))
+        all_drivers = list(result.scalars().all())
+    else:
+        all_drivers = drivers
 
     matches: list[tuple[DriverDB, float]] = []
     for driver in all_drivers:
@@ -1359,27 +1364,6 @@ async def get_validation_stats(session: AsyncSession) -> dict:
         "total_cost_usd": float(row.total_cost),
     }
 
-
-async def increment_validation_stats(
-    session: AsyncSession, cost_usd: float
-) -> None:
-    """Increment cumulative validation count and cost in SettingsDB.
-
-    Reads current values, increments by 1 (count) and cost_usd (cost),
-    then writes back via set_setting.
-
-    Args:
-        session: Async DB session (caller commits).
-        cost_usd: Cost of this validation in USD.
-    """
-    count_str = await get_setting(session, "validation_count")
-    cost_str = await get_setting(session, "validation_total_cost_usd")
-
-    new_count = int(count_str or "0") + 1
-    new_cost = float(cost_str or "0") + cost_usd
-
-    await set_setting(session, "validation_count", str(new_count))
-    await set_setting(session, "validation_total_cost_usd", str(round(new_cost, 4)))
 
 
 async def get_recent_validations(
