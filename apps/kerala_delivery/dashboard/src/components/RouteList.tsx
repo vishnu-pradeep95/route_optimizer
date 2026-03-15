@@ -20,7 +20,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Package, Ruler, Scale, AlertTriangle, ShieldCheck } from "lucide-react";
 import type { RouteSummary, RouteDetail, TelemetryPing, ValidationResult, ValidationStats } from "../types";
 import { getVehicleColor } from "../types";
-import { validateRoute, fetchValidationStats } from "../lib/api";
+import { validateRoute, fetchValidationStats, fetchCachedValidations } from "../lib/api";
 import "./RouteList.css";
 
 interface RouteListProps {
@@ -106,13 +106,20 @@ export function RouteList({
   const [validationError, setValidationError] = useState<{ vehicleId: string; message: string } | null>(null);
   const [noApiKeyVehicle, setNoApiKeyVehicle] = useState<string | null>(null);
 
-  // Fetch validation stats on mount (for the cost modal cumulative display)
+  // Fetch validation stats and cached results on mount
   useEffect(() => {
     fetchValidationStats()
       .then(setValidationStats)
-      .catch(() => {
-        // Stats are non-critical -- modal still works without them
-      });
+      .catch(() => {});
+    fetchCachedValidations()
+      .then((cached) => {
+        const map = new Map<string, ValidationResult>();
+        for (const [vid, result] of Object.entries(cached)) {
+          map.set(vid, result);
+        }
+        setValidationResults(map);
+      })
+      .catch(() => {});
   }, []);
 
   // Clear validation error after 5 seconds

@@ -704,3 +704,8 @@ export async function fetchValidationStats(): Promise<ValidationStats> {
 export async function fetchRecentValidations(): Promise<{ validations: RecentValidation[] }> {
   return apiFetch<{ validations: RecentValidation[] }>("/api/validation-stats/recent");
 }
+
+/** Fetch cached validation results for all previously-validated routes. */
+export async function fetchCachedValidations(): Promise<Record<string, ValidationResult>> {
+  return apiFetch<Record<string, ValidationResult>>("/api/validations/cached");
+}

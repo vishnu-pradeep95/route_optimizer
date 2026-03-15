@@ -90,7 +90,8 @@ Users can manually compare a generated route against Google Routes API to assess
 <deferred>
 ## Deferred Ideas
 
-None — discussion stayed within phase scope
+- **Google route polyline on map** — When a route is validated, draw the Google-optimized route as a second polyline on the map (different color/style) so users can visually compare OSRM vs Google routing. Show/hide when the validated route card is selected.
+- **Expose geocode confidence to users** — Show the geocode confidence score (1.0/0.7/0.3/0.0) from cache entries in the dashboard, so users can see which addresses had approximate vs precise geocoding.
 
 </deferred>
 

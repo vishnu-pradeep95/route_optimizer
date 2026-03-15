@@ -1335,10 +1335,10 @@ async def get_route_validation(
 
 
 async def get_validation_stats(session: AsyncSession) -> dict:
-    """Get cumulative validation statistics from SettingsDB.
+    """Get cumulative validation statistics from the route_validations table.
 
-    Reads "validation_count" and "validation_total_cost_usd" from the
-    settings key-value store. Returns defaults (0) if not set.
+    Derives count and total cost directly from the validation records
+    rather than a separate counter. Self-healing if counters get out of sync.
 
     Args:
         session: Async DB session.
@@ -1346,12 +1346,17 @@ async def get_validation_stats(session: AsyncSession) -> dict:
     Returns:
         Dict with count (int) and total_cost_usd (float).
     """
-    count_str = await get_setting(session, "validation_count")
-    cost_str = await get_setting(session, "validation_total_cost_usd")
+    result = await session.execute(
+        select(
+            func.count(RouteValidationDB.id).label("count"),
+            func.coalesce(func.sum(RouteValidationDB.estimated_cost_usd), 0.0).label("total_cost"),
+        )
+    )
+    row = result.one()
 
     return {
-        "count": int(count_str) if count_str else 0,
-        "total_cost_usd": float(cost_str) if cost_str else 0.0,
+        "count": row.count,
+        "total_cost_usd": float(row.total_cost),
     }
 
 

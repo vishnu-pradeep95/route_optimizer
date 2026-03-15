@@ -3884,6 +3884,41 @@ async def validate_route(
     }
 
 
+@app.get("/api/validations/cached", dependencies=[Depends(verify_read_key)])
+async def get_cached_validations(
+    session: AsyncSession = SessionDep,
+):
+    """Get cached validation results for all routes that have been validated.
+
+    Returns a dict keyed by vehicle_id with the latest validation result
+    for each. Used by the dashboard to pre-populate validation results
+    on page load without re-calling Google.
+    """
+    validations = await repo.get_recent_validations(session, limit=100)
+
+    results: dict[str, dict] = {}
+    for v in validations:
+        vid = v.route.vehicle_id if v.route else None
+        if vid and vid not in results:  # Only keep latest per vehicle
+            results[vid] = {
+                "route_id": str(v.route_id),
+                "vehicle_id": vid,
+                "osrm_distance_km": v.osrm_distance_km,
+                "osrm_duration_minutes": v.osrm_duration_minutes,
+                "google_distance_km": v.google_distance_km,
+                "google_duration_minutes": v.google_duration_minutes,
+                "distance_delta_pct": v.distance_delta_pct,
+                "duration_delta_pct": v.duration_delta_pct,
+                "confidence": repo.confidence_level(v.distance_delta_pct),
+                "google_waypoint_order": json.loads(v.google_waypoint_order) if v.google_waypoint_order else None,
+                "estimated_cost_usd": v.estimated_cost_usd,
+                "validated_at": v.validated_at.isoformat() if v.validated_at else None,
+                "cached": True,
+            }
+
+    return results
+
+
 @app.get("/api/validation-stats", dependencies=[Depends(verify_read_key)])
 async def get_validation_stats(
     session: AsyncSession = SessionDep,
