@@ -151,6 +151,7 @@ class OptimizationRunDB(Base):
     source_filename: Mapped[str | None] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(20), default="completed")
     notes: Mapped[str | None] = mapped_column(Text)
+    timing_json: Mapped[str | None] = mapped_column(Text)
 
     # Relationships — cascade delete: if a run is deleted, its orders/routes go too
     orders: Mapped[list["OrderDB"]] = relationship(

@@ -93,6 +93,7 @@ async def save_optimization_run(
     orders: list[Order],
     source_filename: str | None = None,
     safety_multiplier: float = 1.3,
+    timing_json: str | None = None,
 ) -> uuid.UUID:
     """Persist a complete optimization run: run metadata + orders + routes + stops.
 
@@ -109,6 +110,7 @@ async def save_optimization_run(
         orders: The full list of input orders (including unassigned).
         source_filename: Name of the uploaded CSV file (for audit trail).
         safety_multiplier: The travel time multiplier used for this run.
+        timing_json: JSON string with per-stage pipeline timing breakdown.
 
     Returns:
         UUID of the created optimization_run row.
@@ -126,6 +128,7 @@ async def save_optimization_run(
         safety_multiplier=safety_multiplier,
         source_filename=source_filename,
         status="completed",
+        timing_json=timing_json,
     )
     session.add(run_db)
 

@@ -30,7 +30,7 @@ import { isApiError } from "../lib/errors";
 import { StatusBadge, deriveRouteStatus } from "../components/StatusBadge";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ErrorTable } from "../components/ErrorTable";
-import { FileText, Printer, CheckCircle, ArrowLeft, ArrowRight } from "lucide-react";
+import { FileText, Printer, CheckCircle, ArrowLeft, ArrowRight, Timer } from "lucide-react";
 import "./UploadRoutes.css";
 
 // --- Import Summary Component ---
@@ -848,6 +848,55 @@ export function UploadRoutes() {
 
           {/* Geocoding cost summary — shows cache hits vs API calls (GEO-04) */}
           {uploadResult && <CostSummary uploadResult={uploadResult} />}
+
+          {/* Pipeline timing breakdown */}
+          {uploadResult?.timing && (
+            <div className="tw:card tw:bg-base-100 tw:shadow-sm tw:border tw:border-base-300 tw:mt-3">
+              <div className="tw:card-body tw:p-4">
+                <h3 className="tw:card-title tw:text-sm tw:gap-2">
+                  <Timer size={16} /> Pipeline Timing
+                  <span className="tw:badge tw:badge-sm tw:badge-ghost numeric">
+                    {((uploadResult.timing.total_ms ?? 0) / 1000).toFixed(1)}s total
+                  </span>
+                </h3>
+                <div className="tw:overflow-x-auto tw:mt-2">
+                  <table className="tw:table tw:table-xs">
+                    <thead>
+                      <tr>
+                        <th>Stage</th>
+                        <th className="tw:text-right">Time</th>
+                        <th className="tw:text-right">Details</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Import & Preprocess</td>
+                        <td className="tw:text-right numeric">{(uploadResult.timing.preprocess_ms ?? 0).toFixed(0)} ms</td>
+                        <td className="tw:text-right tw:text-xs tw:opacity-60">CSV parse, address cleaning</td>
+                      </tr>
+                      <tr>
+                        <td>Geocoding</td>
+                        <td className="tw:text-right numeric">{((uploadResult.timing.geocode_ms ?? 0) / 1000).toFixed(1)}s</td>
+                        <td className="tw:text-right tw:text-xs tw:opacity-60">
+                          {uploadResult.timing.geocode_cache_hits ?? 0} cached, {uploadResult.timing.geocode_api_calls ?? 0} API
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Route Optimization</td>
+                        <td className="tw:text-right numeric">{(uploadResult.timing.optimize_ms ?? 0).toFixed(0)} ms</td>
+                        <td className="tw:text-right tw:text-xs tw:opacity-60">VROOM per-driver TSP</td>
+                      </tr>
+                      <tr>
+                        <td>Save to Database</td>
+                        <td className="tw:text-right numeric">{(uploadResult.timing.persist_ms ?? 0).toFixed(0)} ms</td>
+                        <td className="tw:text-right tw:text-xs tw:opacity-60">Routes + stops</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Duplicate location warnings — non-blocking alerts for suspicious clusters (GEO-03) */}
           {uploadResult && (() => {

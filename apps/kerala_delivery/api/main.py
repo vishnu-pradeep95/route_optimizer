@@ -13,6 +13,7 @@ The driver app (PWA) calls this API to get today's route.
 
 import hmac  # For timing-safe API key comparison (prevents timing attacks)
 import json
+import time
 import html as html_module  # For escaping user data in server-rendered HTML (XSS prevention)
 from urllib.parse import quote_plus  # For URL-encoding driver names in QR codes
 import logging
@@ -847,6 +848,14 @@ class OptimizationSummary(BaseModel):
         "None for non-CDCMS uploads.",
     )
 
+    # Pipeline timing breakdown (preprocess, geocode, optimize, persist, total)
+    timing: dict | None = Field(
+        default=None,
+        description="Per-stage pipeline timing in milliseconds. "
+        "Shape: {preprocess_ms, geocode_ms, geocode_cache_hits, geocode_api_calls, "
+        "optimize_ms, persist_ms, total_ms}.",
+    )
+
 
 # =============================================================================
 # Phase 17: Parse-upload models and upload token store
@@ -1497,6 +1506,9 @@ async def upload_and_optimize(
             request_id=request_id_var.get(""),
         )
 
+    pipeline_start = time.monotonic()
+    timing: dict = {}
+
     try:
         # Step 1: Import orders from CSV/Excel
         # Auto-detect CDCMS format: if the file is tab-separated with CDCMS
@@ -1571,6 +1583,8 @@ async def upload_and_optimize(
                     preprocessed_df["area_name"].str.strip(),
                 )
             )
+
+        timing["preprocess_ms"] = round((time.monotonic() - pipeline_start) * 1000, 1)
 
         # Phase 16: Auto-create drivers from CDCMS DeliveryMan column.
         # This runs early in the pipeline (before geocoding) so drivers are
@@ -1703,6 +1717,7 @@ async def upload_and_optimize(
                 len(orders), before_filter, len(selected_set),
             )
 
+        geocode_start = time.monotonic()
         # Step 2: Geocode orders that don't have coordinates
         # CachedGeocoder handles DB cache lookup + API fallback in one call.
         geocoder = _get_geocoder()
@@ -1934,6 +1949,11 @@ async def upload_and_optimize(
                 drivers=driver_summary,
             )
 
+        timing["geocode_ms"] = round((time.monotonic() - geocode_start) * 1000, 1)
+        timing["geocode_cache_hits"] = geo_cache_hits
+        timing["geocode_api_calls"] = geo_api_calls
+
+        optimize_start = time.monotonic()
         # Step 3: Per-driver TSP optimization (Phase 19)
         # No vehicle fleet needed -- each driver gets 1 virtual vehicle with uncapped capacity.
         # The DeliveryMan column from the CSV determines grouping.
@@ -2022,15 +2042,22 @@ async def upload_and_optimize(
                 stage="optimization",
             ))
 
+        timing["optimize_ms"] = round((time.monotonic() - optimize_start) * 1000, 1)
+
         # Step 4: Persist to database
+        persist_start = time.monotonic()
+        timing["total_ms"] = round((time.monotonic() - pipeline_start) * 1000, 1)
         run_id = await repo.save_optimization_run(
             session=session,
             assignment=assignment,
             orders=orders,
             source_filename=filename,
             safety_multiplier=effective_multiplier,
+            timing_json=json.dumps(timing),
         )
         await session.commit()
+        timing["persist_ms"] = round((time.monotonic() - persist_start) * 1000, 1)
+        timing["total_ms"] = round((time.monotonic() - pipeline_start) * 1000, 1)
 
         return OptimizationSummary(
             success=True,
@@ -2061,6 +2088,8 @@ async def upload_and_optimize(
             duplicate_warnings=duplicate_warnings_list,
             # Phase 16: Driver auto-creation summary
             drivers=driver_summary,
+            # Pipeline timing breakdown
+            timing=timing,
         )
 
     except ValueError as e:

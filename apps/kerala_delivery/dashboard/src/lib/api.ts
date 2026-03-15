@@ -375,6 +375,17 @@ export interface UploadResponse {
 
   // GEO-03: Duplicate location warnings (Phase 5)
   duplicate_warnings?: DuplicateLocationWarning[];
+
+  // Pipeline timing breakdown
+  timing?: {
+    preprocess_ms?: number;
+    geocode_ms?: number;
+    geocode_cache_hits?: number;
+    geocode_api_calls?: number;
+    optimize_ms?: number;
+    persist_ms?: number;
+    total_ms?: number;
+  };
 }
 
 /**
